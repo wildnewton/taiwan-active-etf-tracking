@@ -34,12 +34,12 @@ def test_get_etf_config_returns_matching_config_by_code():
     assert config["code"] == "00980A"
     assert config["issuer"] == "Nomura"
     assert config["name"] == "主動野村臺灣優選"
-    assert config["official_method"] == "browser"
+    assert config["official_method"] == "stealth_api"
     assert config["official_url"] == (
         "https://www.nomurafunds.com.tw/ETFWEB/product-description"
         "?fundNo=00980A&tab=Shareholding"
     )
-    assert config["official_logic"] == "fundNo=00980A"
+    assert config["official_logic"] == "fundNo=00980A;api=GetFundAssets"
 
 
 def test_get_etf_config_unknown_code_raises_key_error():

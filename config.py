@@ -35,7 +35,7 @@ TRACKED_ETFS = [
         "name": "主動統一升級50",
         "moneydj_url": get_moneydj_url("00403A"),
         "official_url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=63YTW",
-        "official_method": "browser",
+        "official_method": "playwright",
         "official_logic": "internal_fundcode=63YTW",
     },
     {
@@ -77,8 +77,8 @@ TRACKED_ETFS = [
             "https://www.nomurafunds.com.tw/ETFWEB/product-description"
             "?fundNo=00980A&tab=Shareholding"
         ),
-        "official_method": "browser",
-        "official_logic": "fundNo=00980A",
+        "official_method": "stealth_api",
+        "official_logic": "fundNo=00980A;api=GetFundAssets",
     },
     {
         "code": "00981A",
@@ -86,7 +86,7 @@ TRACKED_ETFS = [
         "name": "主動統一台股增長",
         "moneydj_url": get_moneydj_url("00981A"),
         "official_url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=49YTW",
-        "official_method": "browser",
+        "official_method": "playwright",
         "official_logic": "internal_fundcode=49YTW",
     },
     {
@@ -95,8 +95,8 @@ TRACKED_ETFS = [
         "name": "主動群益台灣強棒",
         "moneydj_url": get_moneydj_url("00982A"),
         "official_url": "https://www.capitalfund.com.tw/etf/product/detail/399/buyback",
-        "official_method": "static",
-        "official_logic": "product_id=399",
+        "official_method": "api",
+        "official_logic": "product_id=399;api=/CFWeb/api/etf/buyback;field=stocks",
     },
     {
         "code": "00984A",
@@ -104,8 +104,8 @@ TRACKED_ETFS = [
         "name": "主動安聯台灣高息",
         "moneydj_url": get_moneydj_url("00984A"),
         "official_url": "https://etf.allianzgi.com.tw/list-trade",
-        "official_method": "browser",
-        "official_logic": "shared_page=true",
+        "official_method": "playwright",
+        "official_logic": "shared_page=true;note=partial_default_view",
     },
     {
         "code": "00985A",
@@ -116,8 +116,8 @@ TRACKED_ETFS = [
             "https://www.nomurafunds.com.tw/ETFWEB/product-description"
             "?fundNo=00985A&tab=Shareholding"
         ),
-        "official_method": "browser",
-        "official_logic": "fundNo=00985A",
+        "official_method": "stealth_api",
+        "official_logic": "fundNo=00985A;api=GetFundAssets",
     },
     {
         "code": "00987A",
@@ -134,7 +134,7 @@ TRACKED_ETFS = [
         "name": "主動復華未來50",
         "moneydj_url": get_moneydj_url("00991A"),
         "official_url": "https://www.fhtrust.com.tw/ETF/trade_list",
-        "official_method": "browser",
+        "official_method": "playwright",
         "official_logic": "shared_page=true",
     },
     {
@@ -143,8 +143,8 @@ TRACKED_ETFS = [
         "name": "主動群益科技創新",
         "moneydj_url": get_moneydj_url("00992A"),
         "official_url": "https://www.capitalfund.com.tw/etf/product/detail/500/portfolio",
-        "official_method": "static",
-        "official_logic": "product_id=500",
+        "official_method": "api",
+        "official_logic": "product_id=500;api=/CFWeb/api/etf/buyback;field=stocks",
     },
     {
         "code": "00993A",
@@ -152,8 +152,8 @@ TRACKED_ETFS = [
         "name": "主動安聯台灣",
         "moneydj_url": get_moneydj_url("00993A"),
         "official_url": "https://etf.allianzgi.com.tw/list-trade",
-        "official_method": "browser",
-        "official_logic": "shared_page=true",
+        "official_method": "playwright",
+        "official_logic": "shared_page=true;note=partial_default_view",
     },
     {
         "code": "00994A",
@@ -179,8 +179,8 @@ TRACKED_ETFS = [
         "name": "主動兆豐台灣豐收",
         "moneydj_url": get_moneydj_url("00996A"),
         "official_url": "https://www.megafunds.com.tw/MEGA/etf/etf_product.aspx?id=23",
-        "official_method": "static",
-        "official_logic": "product_id=23",
+        "official_method": "playwright",
+        "official_logic": "product_id=23;method=text_parse",
     },
     {
         "code": "00999A",
@@ -191,8 +191,8 @@ TRACKED_ETFS = [
             "https://www.nomurafunds.com.tw/ETFWEB/product-description"
             "?fundNo=00999A&tab=Shareholding"
         ),
-        "official_method": "browser",
-        "official_logic": "fundNo=00999A",
+        "official_method": "stealth_api",
+        "official_logic": "fundNo=00999A;api=GetFundAssets",
     },
 ]
 
