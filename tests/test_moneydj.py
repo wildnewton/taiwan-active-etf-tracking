@@ -139,6 +139,14 @@ def test_split_rows():
     assert non_stock_rows == [rows[1]]
 
 
+def test_classify_futures_with_chinese():
+    """Futures names with Chinese characters should classify as futures, not unknown."""
+    assert classify_asset("台幣黃金期貨07/26 49200 買權")["asset_type"] == "futures"
+    assert classify_asset("歐元期貨07/26")["asset_type"] == "futures"
+    assert classify_asset("台幣黃金期貨第二類第三類契約")["asset_type"] == "futures"
+    assert classify_asset("台幣黃金期貨第一類第二類契約")["asset_type"] == "futures"
+
+
 def test_zero_weight_floored():
     """Stocks with 0% weight should be stored as 0.004% to avoid calculation issues."""
     html = '<table class="datalist"><tbody><tr><td>台積電(2330.TW)</td><td>0.00</td><td>100,000</td></tr><tr><td>鴻海(2317.TW)</td><td>5.50</td><td>50,000</td></tr></tbody></table>'
