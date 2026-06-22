@@ -1,0 +1,178 @@
+import sqlite3
+from dataclasses import asdict
+from datetime import date, datetime
+from pathlib import Path
+
+
+DEFAULT_DB_PATH = Path("data/etf_holdings.sqlite3")
+_DB_PATH = DEFAULT_DB_PATH
+
+
+def _serialize(value):
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, bool):
+        return int(value)
+    return value
+
+
+def _row_dict(row):
+    return {key: _serialize(value) for key, value in asdict(row).items()}
+
+
+def _connect():
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    return sqlite3.connect(_DB_PATH)
+
+
+def init_db(db_path):
+    global _DB_PATH
+    _DB_PATH = Path(db_path)
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    with sqlite3.connect(_DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_daily_holdings (
+                date TEXT NOT NULL,
+                etf_code TEXT NOT NULL,
+                asset_name TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                stock_code TEXT NOT NULL,
+                stock_name TEXT,
+                shares REAL,
+                weight_pct REAL NOT NULL,
+                market_value_twd REAL,
+                source_url TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                extraction_method TEXT NOT NULL,
+                scraped_at TEXT NOT NULL,
+                PRIMARY KEY (date, etf_code, stock_code, source_type)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_daily_non_stock_assets (
+                date TEXT NOT NULL,
+                etf_code TEXT NOT NULL,
+                asset_name TEXT NOT NULL,
+                asset_type TEXT NOT NULL,
+                stock_code TEXT,
+                stock_name TEXT,
+                shares REAL,
+                weight_pct REAL NOT NULL,
+                market_value_twd REAL,
+                source_url TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                extraction_method TEXT NOT NULL,
+                scraped_at TEXT NOT NULL,
+                PRIMARY KEY (date, etf_code, asset_name, source_type)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_scrape_runs (
+                run_id TEXT PRIMARY KEY,
+                date TEXT NOT NULL,
+                etf_code TEXT NOT NULL,
+                status TEXT NOT NULL,
+                primary_source TEXT NOT NULL,
+                primary_success INTEGER NOT NULL,
+                moneydj_browser_used INTEGER NOT NULL,
+                official_fallback_used INTEGER NOT NULL,
+                official_success INTEGER NOT NULL,
+                rows_extracted INTEGER NOT NULL,
+                stock_rows_extracted INTEGER NOT NULL,
+                non_stock_rows_extracted INTEGER NOT NULL,
+                total_weight_all_rows REAL NOT NULL,
+                total_weight_stock_rows REAL NOT NULL,
+                source_url TEXT,
+                error TEXT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT
+            )
+            """
+        )
+
+
+def insert_holdings(rows):
+    rows = [_row_dict(row) for row in rows]
+    if not rows:
+        return
+
+    with _connect() as conn:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO etf_daily_holdings (
+                date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                shares, weight_pct, market_value_twd, source_url, source_type,
+                extraction_method, scraped_at
+            ) VALUES (
+                :date, :etf_code, :asset_name, :asset_type, :stock_code,
+                :stock_name, :shares, :weight_pct, :market_value_twd,
+                :source_url, :source_type, :extraction_method, :scraped_at
+            )
+            """,
+            rows,
+        )
+
+
+def insert_non_stock_assets(rows):
+    rows = [_row_dict(row) for row in rows]
+    if not rows:
+        return
+
+    with _connect() as conn:
+        conn.executemany(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                shares, weight_pct, market_value_twd, source_url, source_type,
+                extraction_method, scraped_at
+            ) VALUES (
+                :date, :etf_code, :asset_name, :asset_type, :stock_code,
+                :stock_name, :shares, :weight_pct, :market_value_twd,
+                :source_url, :source_type, :extraction_method, :scraped_at
+            )
+            """,
+            rows,
+        )
+
+
+def insert_scrape_run(run):
+    row = _row_dict(run)
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_scrape_runs (
+                run_id, date, etf_code, status, primary_source, primary_success,
+                moneydj_browser_used, official_fallback_used, official_success,
+                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                total_weight_all_rows, total_weight_stock_rows, source_url,
+                error, started_at, finished_at
+            ) VALUES (
+                :run_id, :date, :etf_code, :status, :primary_source,
+                :primary_success, :moneydj_browser_used,
+                :official_fallback_used, :official_success, :rows_extracted,
+                :stock_rows_extracted, :non_stock_rows_extracted,
+                :total_weight_all_rows, :total_weight_stock_rows, :source_url,
+                :error, :started_at, :finished_at
+            )
+            """,
+            row,
+        )
+
+
+def get_last_scrape_date(etf_code):
+    with _connect() as conn:
+        row = conn.execute(
+            """
+            SELECT MAX(date)
+            FROM etf_scrape_runs
+            WHERE etf_code = ? AND status = 'success'
+            """,
+            (etf_code,),
+        ).fetchone()
+    return row[0] if row and row[0] else None
