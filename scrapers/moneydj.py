@@ -30,6 +30,9 @@ def fetch_html(url: str, timeout: int = 30) -> str:
     }
     response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
+    # MoneyDJ returns Content-Type without charset; requests defaults to
+    # ISO-8859-1 which garbles Chinese characters.  Force UTF-8.
+    response.encoding = "utf-8"
     return response.text
 
 

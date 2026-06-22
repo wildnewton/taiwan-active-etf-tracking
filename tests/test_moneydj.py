@@ -5,6 +5,7 @@ from scrapers.moneydj import (
     build_moneydj_url,
     classify_asset,
     dedupe_rows,
+    fetch_html,
     parse_date,
     parse_moneydj_rows,
     scrape_moneydj,
@@ -139,12 +140,6 @@ def test_split_rows():
     assert non_stock_rows == [rows[1]]
 
 
-def test_classify_futures_with_chinese():
-    """Futures names with Chinese characters should classify as futures, not unknown."""
-    assert classify_asset("台幣黃金期貨07/26 49200 買權")["asset_type"] == "futures"
-    assert classify_asset("歐元期貨07/26")["asset_type"] == "futures"
-    assert classify_asset("台幣黃金期貨第二類第三類契約")["asset_type"] == "futures"
-    assert classify_asset("台幣黃金期貨第一類第二類契約")["asset_type"] == "futures"
 
 
 def test_zero_weight_floored():
@@ -154,6 +149,30 @@ def test_zero_weight_floored():
     # The 0.00 weight should become 0.004
     assert rows[0]["weight_pct"] == 0.004
     assert rows[1]["weight_pct"] == 5.5
+
+
+def test_fetch_html_forces_utf8():
+    """MoneyDJ returns Content-Type without charset; must force UTF-8."""
+    chinese_html = "<html><body>臺股期貨07/26</body></html>"
+    response = Mock()
+    response.text = chinese_html
+    response.encoding = "ISO-8859-1"  # Simulate wrong auto-detection
+    response.raise_for_status.return_value = None
+
+    with patch("scrapers.moneydj.requests.get", return_value=response):
+        result = fetch_html("https://example.com")
+
+    # After fetch_html, encoding should be forced to utf-8
+    assert response.encoding == "utf-8"
+    assert "期貨" in result
+
+
+def test_classify_futures_with_chinese():
+    """Futures names with Chinese characters should classify as futures, not unknown."""
+    assert classify_asset("臺股期貨07/26")["asset_type"] == "futures"
+    assert classify_asset("臺指選擇權08/26 51000 買權")["asset_type"] == "options"
+    assert classify_asset("臺指選擇權第四週週五到期契約")["asset_type"] == "options"
+    assert classify_asset("臺股期貨")["asset_type"] == "futures"
 
 
 def test_scrape_moneydj_with_fixture():
