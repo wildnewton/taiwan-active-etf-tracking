@@ -1,4 +1,5 @@
 import json
+import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
 from scrapers.official import (
@@ -10,6 +11,11 @@ from scrapers.official import (
     parse_nomura_api,
     parse_taishin,
     parse_uni_president_table,
+    scrape_capital_playwright,
+    scrape_nomura_stealth,
+    scrape_mega_playwright,
+    scrape_uni_president_playwright,
+    scrape_official_with_browser,
     scrape_official_static,
 )
 
@@ -133,6 +139,37 @@ CAPITAL_API_JSON = json.dumps({
     },
 })
 
+# Rich fixture for async tests — passes validate_rows (total weight >= 80%)
+_CAPITAL_STOCKS = [
+    {"stocNo": "2330", "stocName": "台積電", "share": 800000.0, "weight": 12.30, "weightRound": 12.30},
+    {"stocNo": "2317", "stocName": "鴻海", "share": 500000.0, "weight": 8.20, "weightRound": 8.20},
+    {"stocNo": "2382", "stocName": "廣達", "share": 210000.0, "weight": 6.10, "weightRound": 6.10},
+    {"stocNo": "2308", "stocName": "台達電", "share": 300000.0, "weight": 5.50, "weightRound": 5.50},
+    {"stocNo": "2454", "stocName": "聯發科", "share": 180000.0, "weight": 4.80, "weightRound": 4.80},
+    {"stocNo": "2881", "stocName": "富邦金", "share": 400000.0, "weight": 4.50, "weightRound": 4.50},
+    {"stocNo": "2882", "stocName": "國泰金", "share": 350000.0, "weight": 4.20, "weightRound": 4.20},
+    {"stocNo": "2891", "stocName": "中信金", "share": 500000.0, "weight": 4.00, "weightRound": 4.00},
+    {"stocNo": "3711", "stocName": "日月光投控", "share": 200000.0, "weight": 3.80, "weightRound": 3.80},
+    {"stocNo": "2412", "stocName": "中華電", "share": 250000.0, "weight": 3.50, "weightRound": 3.50},
+    {"stocNo": "3034", "stocName": "聯詠", "share": 150000.0, "weight": 3.20, "weightRound": 3.20},
+    {"stocNo": "2395", "stocName": "研華", "share": 120000.0, "weight": 3.00, "weightRound": 3.00},
+    {"stocNo": "3008", "stocName": "大立光", "share": 50000.0, "weight": 2.80, "weightRound": 2.80},
+    {"stocNo": "2002", "stocName": "中鋼", "share": 600000.0, "weight": 2.60, "weightRound": 2.60},
+    {"stocNo": "1301", "stocName": "台塑", "share": 300000.0, "weight": 2.50, "weightRound": 2.50},
+    {"stocNo": "1303", "stocName": "南亞", "share": 280000.0, "weight": 2.40, "weightRound": 2.40},
+    {"stocNo": "3045", "stocName": "台灣大", "share": 200000.0, "weight": 2.30, "weightRound": 2.30},
+    {"stocNo": "6505", "stocName": "台塑化", "share": 250000.0, "weight": 2.20, "weightRound": 2.20},
+    {"stocNo": "5880", "stocName": "合庫金", "share": 400000.0, "weight": 2.10, "weightRound": 2.10},
+    {"stocNo": "5871", "stocName": "中租-KY", "share": 100000.0, "weight": 2.00, "weightRound": 2.00},
+]
+CAPITAL_API_JSON_RICH = json.dumps({
+    "code": 200,
+    "data": {
+        "pcf": {"date2": "2026-06-18"},
+        "stocks": _CAPITAL_STOCKS,
+    },
+})
+
 
 NOMURA_API_JSON = json.dumps({
     "TotalPages": -1,
@@ -162,6 +199,58 @@ NOMURA_API_JSON = json.dumps({
     },
 })
 
+# Rich Nomura fixture for async tests — total weight >= 80%
+_NOMURA_ROWS = [
+    ["2330", "台灣積體電路製造", "704000", "9.58"],
+    ["2308", "台達電子工業", "475000", "5.54"],
+    ["2454", "聯發科技", "188000", "4.55"],
+    ["2317", "鴻海精密工業", "500000", "5.20"],
+    ["2382", "廣達電腦", "300000", "4.80"],
+    ["2881", "富邦金融控股", "400000", "4.30"],
+    ["2882", "國泰金融控股", "350000", "4.10"],
+    ["2891", "中國信託金融控股", "500000", "3.90"],
+    ["3711", "日月光投控", "200000", "3.50"],
+    ["2412", "中華電信", "250000", "3.30"],
+    ["3034", "聯詠科技", "150000", "3.10"],
+    ["2395", "研華科技", "120000", "2.90"],
+    ["3008", "大立光電", "50000", "2.70"],
+    ["2002", "中國鋼鐵", "600000", "2.50"],
+    ["1301", "台灣塑膠工業", "300000", "2.40"],
+    ["1303", "南亞塑膠工業", "280000", "2.30"],
+    ["3045", "台灣大哥大", "200000", "2.20"],
+    ["6505", "台塑石化", "250000", "2.10"],
+    ["5880", "合作金庫金融控股", "400000", "2.00"],
+    ["5871", "中租-KY", "100000", "1.90"],
+    ["2345", "智邦科技", "80000", "1.80"],
+    ["6669", "緯穎科技", "60000", "1.70"],
+    ["3661", "世芯-KY", "40000", "1.60"],
+    ["2603", "長榮海運", "300000", "1.50"],
+    ["2609", "陽明海運", "200000", "1.40"],
+]
+NOMURA_API_JSON_RICH = json.dumps({
+    "TotalPages": -1,
+    "TotalItems": 0,
+    "Entries": {
+        "FundID": "00980A",
+        "Data": {
+            "FundAsset": {"Aum": "18450205183", "Nav": "25.72", "NavDate": "2026-06-22"},
+            "Table": [
+                {
+                    "TableTitle": "股票",
+                    "Columns": [
+                        {"Name": "股票代號", "TextAlign": "center"},
+                        {"Name": "股票名稱", "TextAlign": "center"},
+                        {"Name": "股數", "TextAlign": "center"},
+                        {"Name": "權重(%)", "TextAlign": "center"},
+                    ],
+                    "Rows": _NOMURA_ROWS,
+                },
+                {"TableTitle": "期貨", "Columns": [], "Rows": []},
+            ],
+        },
+    },
+})
+
 # Mega text fixture — mimics Playwright inner_text output
 MEGA_TEXT = """
 持股比重
@@ -184,6 +273,97 @@ TWD$ 5,005,569,200
 聯發科
 81,000
 6.85
+"""
+
+# Rich Mega fixture for async tests — total weight >= 80%
+MEGA_TEXT_RICH = """持股比重
+資料來源：兆豐投信，2026/06/18
+基金資產
+淨資產價值
+項目 金額
+股票 ( 96.46% )
+TWD$ 5,005,569,200
+現金/存款
+2330
+台積電
+179,000
+12.31
+2327
+國巨
+405,000
+8.43
+2454
+聯發科
+81,000
+6.85
+2317
+鴻海
+300,000
+6.20
+2382
+廣達
+200,000
+5.50
+2881
+富邦金
+350,000
+4.80
+2882
+國泰金
+300,000
+4.30
+2891
+中信金
+400,000
+4.00
+3711
+日月光投控
+180,000
+3.50
+2412
+中華電
+200,000
+3.30
+3034
+聯詠
+120,000
+3.10
+2395
+研華
+100,000
+2.90
+3008
+大立光
+40,000
+2.70
+2002
+中鋼
+500,000
+2.50
+1301
+台塑
+250,000
+2.40
+1303
+南亞
+230,000
+2.30
+3045
+台灣大
+160,000
+2.20
+6505
+台塑化
+200,000
+2.10
+5880
+合庫金
+320,000
+2.00
+5871
+中租-KY
+80,000
+1.90
 """
 
 
@@ -374,3 +554,371 @@ def test_scrape_official_static_falls_back_to_twse():
     assert result["source_type"] == "official_fallback"
     assert len(result["stock_rows"]) == 5
     mock_get.assert_called_once()
+
+
+# ── Async browser scraper tests ──
+# These test the Playwright-based scrapers using mock page objects.
+# Each mock simulates: page.goto(), page.on('response'), page.wait_for_timeout(),
+# page.remove_listener(), page.locator(), page.query_selector_all().
+
+
+def _make_mock_response(url: str, body: str):
+    """Create a mock Playwright Response with async .text()."""
+    resp = AsyncMock()
+    resp.url = url
+    resp.text.return_value = body
+    return resp
+
+
+def _make_mock_page(responses=None, body_text=None, tables=None):
+    """Create a mock Playwright Page.
+
+    Args:
+        responses: list of (url, body) tuples to fire as 'response' events.
+        body_text: inner_text for <body> (Mega text parser).
+        tables: list of table mock objects (Uni-President).
+    """
+    page = AsyncMock()
+    page.goto = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    page.remove_listener = AsyncMock()
+
+    # Capture the 'response' callback so we can fire it
+    _callbacks = {}
+
+    def _on(event, callback):
+        _callbacks[event] = callback
+
+    page.on = _on
+
+    # After page is returned, caller can fire events via _fire_responses
+    page._callbacks = _callbacks
+    page._responses_to_fire = responses or []
+    page._body_text = body_text
+    page._tables = tables or []
+
+    # Mock locator('body').inner_text() — locator() is SYNC in Playwright
+    body_locator = AsyncMock()
+    body_locator.inner_text.return_value = body_text or ""
+    page.locator = Mock(return_value=body_locator)
+
+    # Mock query_selector_all('table')
+    page.query_selector_all = AsyncMock(return_value=tables or [])
+
+    return page
+
+
+async def _fire_response_events(page):
+    """Fire queued response events through the page's callback."""
+    callback = page._callbacks.get("response")
+    if not callback:
+        return
+    for url, body in page._responses_to_fire:
+        mock_resp = _make_mock_response(url, body)
+        await callback(mock_resp)
+
+
+# -- scrape_capital_playwright --
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_capital_playwright_intercepts_api(mock_config):
+    mock_config.return_value = {
+        "url": CAPITAL_URL, "method": "api",
+        "issuer": "Capital", "internal_id": "399", "official_logic": "buyback",
+    }
+    page = _make_mock_page(
+        responses=[("https://www.capitalfund.com.tw/CFWeb/api/etf/buyback", CAPITAL_API_JSON_RICH)]
+    )
+
+    # Fire response events after goto is called
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_capital_playwright("00982A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
+    assert result["stock_rows"][0]["stock_code"] == "2330"
+    assert result["source_type"] == "official_fallback"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_capital_playwright_no_api_intercepted(mock_config):
+    mock_config.return_value = {
+        "url": CAPITAL_URL, "method": "api",
+        "issuer": "Capital", "internal_id": "399", "official_logic": "buyback",
+    }
+    page = _make_mock_page(responses=[])  # No responses fired
+
+    result = await scrape_capital_playwright("00982A", page)
+
+    assert result["ok"] is False
+    assert "not intercepted" in result["reason"]
+
+
+# -- scrape_nomura_stealth --
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_nomura_stealth_intercepts_api(mock_config):
+    mock_config.return_value = {
+        "url": NOMURA_URL, "method": "stealth_api",
+        "issuer": "Nomura", "internal_id": "00980A", "official_logic": "GetFundAssets",
+    }
+    page = _make_mock_page(
+        responses=[("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", NOMURA_API_JSON_RICH)]
+    )
+
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_nomura_stealth("00980A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 25
+    assert result["stock_rows"][0]["stock_code"] == "2330"
+    assert result["stock_rows"][0]["stock_name"] == "台灣積體電路製造"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_nomura_stealth_no_api_intercepted(mock_config):
+    mock_config.return_value = {
+        "url": NOMURA_URL, "method": "stealth_api",
+        "issuer": "Nomura", "internal_id": "00980A", "official_logic": "GetFundAssets",
+    }
+    page = _make_mock_page(responses=[])
+
+    result = await scrape_nomura_stealth("00980A", page)
+
+    assert result["ok"] is False
+    assert "not intercepted" in result["reason"]
+
+
+# -- scrape_mega_playwright --
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_mega_playwright_extracts_text(mock_config):
+    mock_config.return_value = {
+        "url": MEGA_URL, "method": "playwright",
+        "issuer": "Mega", "internal_id": "23", "official_logic": "text",
+    }
+    page = _make_mock_page(body_text=MEGA_TEXT_RICH)
+
+    result = await scrape_mega_playwright("00996A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
+    assert result["stock_rows"][0]["stock_code"] == "2330"
+    assert result["stock_rows"][1]["stock_code"] == "2327"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_mega_playwright_empty_page(mock_config):
+    mock_config.return_value = {
+        "url": MEGA_URL, "method": "playwright",
+        "issuer": "Mega", "internal_id": "23", "official_logic": "text",
+    }
+    page = _make_mock_page(body_text="no holdings here")
+
+    result = await scrape_mega_playwright("00996A", page)
+
+    assert result["ok"] is False
+
+
+# -- scrape_uni_president_playwright --
+
+def _make_mock_table(rows_data):
+    """Create a mock table with rows containing cells."""
+    table = AsyncMock()
+    mock_rows = []
+    for i, row_cells in enumerate(rows_data):
+        row = AsyncMock()
+        if i == 0:
+            # Header row — inner_text must be a string containing '股票'
+            row.inner_text = AsyncMock(return_value=" ".join(row_cells))
+            row.query_selector_all = AsyncMock(return_value=[])
+        else:
+            cells = []
+            for cell_text in row_cells:
+                cell = AsyncMock()
+                cell.inner_text = AsyncMock(return_value=cell_text)
+                cells.append(cell)
+            row.inner_text = AsyncMock(return_value=" ".join(row_cells))
+            row.query_selector_all = AsyncMock(return_value=cells)
+        mock_rows.append(row)
+    table.query_selector_all = AsyncMock(return_value=mock_rows)
+    return table
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_uni_president_playwright_extracts_table(mock_config):
+    mock_config.return_value = {
+        "url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=00403A",
+        "method": "playwright",
+        "issuer": "Uni-President", "internal_id": "00403A", "official_logic": "table",
+    }
+
+    # Build a table with 25 rows (passes the len(rows) >= 20 check)
+    # Weights must sum to 80-150% to pass validation
+    header = ["股票代號", "名稱", "持股數", "佔基金淨資產比例(%)"]
+    weights = [
+        "18.29", "8.50", "6.12", "5.80", "5.45", "5.10", "4.80", "4.50",
+        "4.20", "3.90", "3.60", "3.30", "3.00", "2.70", "2.50", "2.30",
+        "2.10", "1.90", "1.70", "1.50", "1.30", "1.10", "0.90", "0.70",
+    ]
+    data_rows = [["2330", "台積電", "13,300,000", w] for w in weights]
+    rows_data = [header] + data_rows
+
+    mock_table = _make_mock_table(rows_data)
+    page = _make_mock_page(tables=[mock_table], body_text="2026/06/18 fund info page")
+
+    result = await scrape_uni_president_playwright("00403A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 24
+    assert result["stock_rows"][0]["stock_code"] == "2330"
+    assert result["stock_rows"][0]["date"] == "2026/06/18"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_uni_president_playwright_no_table_found(mock_config):
+    mock_config.return_value = {
+        "url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=00403A",
+        "method": "playwright",
+        "issuer": "Uni-President", "internal_id": "00403A", "official_logic": "table",
+    }
+    page = _make_mock_page(tables=[], body_text="no tables here")
+
+    result = await scrape_uni_president_playwright("00403A", page)
+
+    assert result["ok"] is False
+    assert "not found" in result["reason"]
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_uni_president_skips_small_tables(mock_config):
+    mock_config.return_value = {
+        "url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=00403A",
+        "method": "playwright",
+        "issuer": "Uni-President", "internal_id": "00403A", "official_logic": "table",
+    }
+
+    # Small table (only 5 rows) — should be skipped
+    small_table = _make_mock_table([["header1", "header2"]] + [["a", "b"] for _ in range(4)])
+    page = _make_mock_page(tables=[small_table], body_text="2026/06/18")
+
+    result = await scrape_uni_president_playwright("00403A", page)
+
+    assert result["ok"] is False
+
+
+# -- scrape_official_with_browser (dispatcher) --
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_official_with_browser_dispatches_capital(mock_config):
+    mock_config.return_value = {
+        "url": CAPITAL_URL, "method": "api",
+        "issuer": "Capital", "internal_id": "399", "official_logic": "buyback",
+    }
+    page = _make_mock_page(
+        responses=[("https://www.capitalfund.com.tw/CFWeb/api/etf/buyback", CAPITAL_API_JSON_RICH)]
+    )
+
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_official_with_browser("00982A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_official_with_browser_dispatches_nomura(mock_config):
+    mock_config.return_value = {
+        "url": NOMURA_URL, "method": "stealth_api",
+        "issuer": "Nomura", "internal_id": "00980A", "official_logic": "GetFundAssets",
+    }
+    page = _make_mock_page(
+        responses=[("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", NOMURA_API_JSON_RICH)]
+    )
+
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_official_with_browser("00980A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 25
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_official_with_browser_dispatches_mega(mock_config):
+    mock_config.return_value = {
+        "url": MEGA_URL, "method": "playwright",
+        "issuer": "Mega", "internal_id": "23", "official_logic": "text",
+    }
+    page = _make_mock_page(body_text=MEGA_TEXT_RICH)
+
+    result = await scrape_official_with_browser("00996A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_official_with_browser_dispatches_uni_president(mock_config):
+    mock_config.return_value = {
+        "url": "https://www.ezmoney.com.tw/ETF/Fund/Info?fundCode=00403A",
+        "method": "playwright",
+        "issuer": "Uni-President", "internal_id": "00403A", "official_logic": "table",
+    }
+    header = ["股票代號", "名稱", "持股數", "佔基金淨資產比例(%)"]
+    weights = [
+        "18.29", "8.50", "6.12", "5.80", "5.45", "5.10", "4.80", "4.50",
+        "4.20", "3.90", "3.60", "3.30", "3.00", "2.70", "2.50", "2.30",
+        "2.10", "1.90", "1.70", "1.50", "1.30", "1.10", "0.90", "0.70",
+    ]
+    data_rows = [["2330", "台積電", "13,300,000", w] for w in weights]
+    mock_table = _make_mock_table([header] + data_rows)
+    page = _make_mock_page(tables=[mock_table], body_text="2026/06/18")
+
+    result = await scrape_official_with_browser("00403A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 24
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_official_with_browser_unsupported_issuer(mock_config):
+    mock_config.return_value = {
+        "url": "https://example.com", "method": "unknown_method",
+        "issuer": "Unknown", "internal_id": "X", "official_logic": "none",
+    }
+    page = _make_mock_page()
+
+    result = await scrape_official_with_browser("9999A", page)
+
+    assert result["ok"] is False
+    assert "No browser official scraper" in result["reason"]

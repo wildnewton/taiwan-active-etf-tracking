@@ -187,10 +187,20 @@ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[d
 # Playwright table parser (Mega, Uni-President, Allianz)
 # ──────────────────────────────────────────────────────────────
 
-def parse_mega_text(body_text: str, etf_code: str, source_url: str) -> list[dict]:
+def parse_mega_text(body_text: str, etf_code: str, source_url: str,
+                    date: str | None = None) -> list[dict]:
     """Parse Mega's product page text. Holdings are in multi-line blocks:
     code\\nname\\nshares\\nweight
     """
+    # Auto-extract date if not provided
+    if not date:
+        date_match = re.search(r'(資料來源[：:].*?(\d{4}/\d{2}/\d{2}))', body_text)
+        if date_match:
+            date = date_match.group(2)
+        else:
+            date_match = re.search(r'(\d{4}/\d{2}/\d{2})', body_text)
+            date = date_match.group(1) if date_match else None
+
     pattern = re.findall(
         r'(\d{4})\s*\n\s*(\S+)\s*\n\s*([\d,]+)\s*\n\s*([\d.]+%?)',
         body_text,
@@ -203,7 +213,7 @@ def parse_mega_text(body_text: str, etf_code: str, source_url: str) -> list[dict
         classification = classify_asset(asset_name)
 
         rows.append({
-            "date": None,
+            "date": date,
             "etf_code": etf_code.upper(),
             "asset_name": asset_name,
             "asset_type": classification["asset_type"],
