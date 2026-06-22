@@ -35,7 +35,6 @@ class ScrapeResult:
 
 @dataclass
 class ScrapeRun:
-    run_id: str
     date: date
     etf_code: str
     status: str

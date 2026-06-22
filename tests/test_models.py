@@ -80,7 +80,6 @@ def test_scrape_result_can_be_created():
 def test_scrape_run_is_dataclass_with_required_fields():
     assert is_dataclass(ScrapeRun)
     assert [field.name for field in fields(ScrapeRun)] == [
-        "run_id",
         "date",
         "etf_code",
         "status",
@@ -105,7 +104,6 @@ def test_scrape_run_can_be_created():
     started = datetime(2026, 6, 22, 9, 0)
     finished = datetime(2026, 6, 22, 9, 1)
     run = ScrapeRun(
-        run_id="20260622-00980A",
         date=date(2026, 6, 22),
         etf_code="00980A",
         status="success",
@@ -125,6 +123,6 @@ def test_scrape_run_can_be_created():
         finished_at=finished,
     )
 
-    assert run.run_id == "20260622-00980A"
+    assert run.date == date(2026, 6, 22)
     assert run.primary_success is True
     assert run.finished_at == finished

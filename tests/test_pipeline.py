@@ -137,3 +137,51 @@ def test_run_daily_scrape_logs_scrape_runs():
     assert {row[1] for row in rows} == {"success"}
     assert {row[2] for row in rows} == {"moneydj_primary"}
     assert {row[3] for row in rows} == {1}
+
+
+def test_scrape_run_no_run_id():
+    """ScrapeRun dataclass should no longer have a run_id field."""
+    from dataclasses import fields
+    from models import ScrapeRun
+
+    field_names = [f.name for f in fields(ScrapeRun)]
+    assert "run_id" not in field_names
+    assert field_names[0] == "date"
+    assert field_names[1] == "etf_code"
+
+
+def test_insert_scrape_run_uses_insert_or_ignore():
+    """Inserting the same (date, etf_code) twice should not create duplicates."""
+    from datetime import date, datetime
+    from models import ScrapeRun
+
+    db.init_db(":memory:")
+    run = ScrapeRun(
+        date=date(2026, 6, 22),
+        etf_code="00980A",
+        status="success",
+        primary_source="moneydj_primary",
+        primary_success=True,
+        moneydj_browser_used=False,
+        official_fallback_used=False,
+        official_success=False,
+        rows_extracted=10,
+        stock_rows_extracted=8,
+        non_stock_rows_extracted=2,
+        total_weight_all_rows=100.0,
+        total_weight_stock_rows=95.0,
+        source_url="https://example.test",
+        error=None,
+        started_at=datetime(2026, 6, 22, 9, 0),
+        finished_at=datetime(2026, 6, 22, 9, 1),
+    )
+
+    db.insert_scrape_run(run)
+    db.insert_scrape_run(run)  # second insert should be ignored
+
+    with db._connect() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM etf_scrape_runs WHERE etf_code = '00980A'"
+        ).fetchone()[0]
+
+    assert count == 1

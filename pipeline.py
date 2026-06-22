@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from uuid import uuid4
 
 from config import TRACKED_ETFS, get_etf_config
 from db import init_db, insert_holdings, insert_non_stock_assets, insert_scrape_run
@@ -83,7 +82,6 @@ def _build_scrape_run(
 ) -> ScrapeRun:
     source_type = result.get("source_type", "")
     return ScrapeRun(
-        run_id=f"{scrape_date.isoformat()}-{etf_code}-{uuid4()}",
         date=scrape_date,
         etf_code=etf_code,
         status="success" if result["ok"] else "failed",

@@ -91,7 +91,6 @@ def init_db(db_path):
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS etf_scrape_runs (
-                run_id TEXT PRIMARY KEY,
                 date TEXT NOT NULL,
                 etf_code TEXT NOT NULL,
                 status TEXT NOT NULL,
@@ -108,7 +107,8 @@ def init_db(db_path):
                 source_url TEXT,
                 error TEXT,
                 started_at TEXT NOT NULL,
-                finished_at TEXT
+                finished_at TEXT,
+                PRIMARY KEY (date, etf_code)
             )
             """
         )
@@ -163,14 +163,14 @@ def insert_scrape_run(run):
     with _connect() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO etf_scrape_runs (
-                run_id, date, etf_code, status, primary_source, primary_success,
+            INSERT OR IGNORE INTO etf_scrape_runs (
+                date, etf_code, status, primary_source, primary_success,
                 moneydj_browser_used, official_fallback_used, official_success,
                 rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
                 total_weight_all_rows, total_weight_stock_rows, source_url,
                 error, started_at, finished_at
             ) VALUES (
-                :run_id, :date, :etf_code, :status, :primary_source,
+                :date, :etf_code, :status, :primary_source,
                 :primary_success, :moneydj_browser_used,
                 :official_fallback_used, :official_success, :rows_extracted,
                 :stock_rows_extracted, :non_stock_rows_extracted,
