@@ -13,7 +13,19 @@ class HoldingRow:
     stock_name: Optional[str]
     shares: Optional[float]
     weight_pct: float
-    market_value_twd: Optional[float]
+    source_url: str
+    source_type: str
+    extraction_method: str
+    scraped_at: datetime
+
+
+@dataclass
+class NonStockAssetRow:
+    date: date
+    etf_code: str
+    asset_name: str
+    asset_type: str
+    weight_pct: float
     source_url: str
     source_type: str
     extraction_method: str

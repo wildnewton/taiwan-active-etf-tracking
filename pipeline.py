@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from config import TRACKED_ETFS, get_etf_config
 from db import init_db, insert_holdings, insert_non_stock_assets, insert_scrape_run
-from models import HoldingRow, ScrapeRun
+from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings
 
 
@@ -31,7 +31,7 @@ def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
         if result["ok"] is True:
             stock_rows = [_to_holding_row(row, today) for row in result["stock_rows"]]
             non_stock_rows = [
-                _to_holding_row(row, today) for row in result["non_stock_rows"]
+                _to_non_stock_asset_row(row, today) for row in result["non_stock_rows"]
             ]
             insert_holdings(stock_rows)
             insert_non_stock_assets(non_stock_rows)
@@ -65,7 +65,20 @@ def _to_holding_row(row: dict, default_date: date) -> HoldingRow:
         stock_name=row.get("stock_name"),
         shares=row.get("shares"),
         weight_pct=row["weight_pct"],
-        market_value_twd=row.get("market_value_twd"),
+        source_url=row["source_url"],
+        source_type=row["source_type"],
+        extraction_method=row["extraction_method"],
+        scraped_at=datetime.now(),
+    )
+
+
+def _to_non_stock_asset_row(row: dict, default_date: date) -> NonStockAssetRow:
+    return NonStockAssetRow(
+        date=_parse_row_date(row.get("date"), default_date),
+        etf_code=row["etf_code"],
+        asset_name=row["asset_name"],
+        asset_type=row["asset_type"],
+        weight_pct=row["weight_pct"],
         source_url=row["source_url"],
         source_type=row["source_type"],
         extraction_method=row["extraction_method"],

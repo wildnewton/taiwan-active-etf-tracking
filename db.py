@@ -59,7 +59,6 @@ def init_db(db_path):
                 stock_name TEXT,
                 shares REAL,
                 weight_pct REAL NOT NULL,
-                market_value_twd REAL,
                 source_url TEXT NOT NULL,
                 source_type TEXT NOT NULL,
                 extraction_method TEXT NOT NULL,
@@ -75,11 +74,7 @@ def init_db(db_path):
                 etf_code TEXT NOT NULL,
                 asset_name TEXT NOT NULL,
                 asset_type TEXT NOT NULL,
-                stock_code TEXT,
-                stock_name TEXT,
-                shares REAL,
                 weight_pct REAL NOT NULL,
-                market_value_twd REAL,
                 source_url TEXT NOT NULL,
                 source_type TEXT NOT NULL,
                 extraction_method TEXT NOT NULL,
@@ -124,11 +119,11 @@ def insert_holdings(rows):
             """
             INSERT OR REPLACE INTO etf_daily_holdings (
                 date, etf_code, asset_name, asset_type, stock_code, stock_name,
-                shares, weight_pct, market_value_twd, source_url, source_type,
+                shares, weight_pct, source_url, source_type,
                 extraction_method, scraped_at
             ) VALUES (
                 :date, :etf_code, :asset_name, :asset_type, :stock_code,
-                :stock_name, :shares, :weight_pct, :market_value_twd,
+                :stock_name, :shares, :weight_pct,
                 :source_url, :source_type, :extraction_method, :scraped_at
             )
             """,
@@ -145,13 +140,13 @@ def insert_non_stock_assets(rows):
         conn.executemany(
             """
             INSERT OR REPLACE INTO etf_daily_non_stock_assets (
-                date, etf_code, asset_name, asset_type, stock_code, stock_name,
-                shares, weight_pct, market_value_twd, source_url, source_type,
+                date, etf_code, asset_name, asset_type,
+                weight_pct, source_url, source_type,
                 extraction_method, scraped_at
             ) VALUES (
-                :date, :etf_code, :asset_name, :asset_type, :stock_code,
-                :stock_name, :shares, :weight_pct, :market_value_twd,
-                :source_url, :source_type, :extraction_method, :scraped_at
+                :date, :etf_code, :asset_name, :asset_type,
+                :weight_pct, :source_url, :source_type,
+                :extraction_method, :scraped_at
             )
             """,
             rows,

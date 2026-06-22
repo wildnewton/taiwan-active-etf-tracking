@@ -16,7 +16,19 @@ def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
         "stock_name": "台積電" if asset_type == "stock" else None,
         "shares": 1000,
         "weight_pct": 10.0,
-        "market_value_twd": None,
+        "source_url": "https://example.test",
+        "source_type": "moneydj_primary",
+        "extraction_method": "requests_bs4",
+    }
+
+
+def make_non_stock_row(etf_code, asset_type="cash", asset_name="現金"):
+    return {
+        "date": "2026/06/22",
+        "etf_code": etf_code,
+        "asset_name": asset_name,
+        "asset_type": asset_type,
+        "weight_pct": 10.0,
         "source_url": "https://example.test",
         "source_type": "moneydj_primary",
         "extraction_method": "requests_bs4",
@@ -25,10 +37,8 @@ def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
 
 def make_success(etf_code, source_type="moneydj_primary"):
     stock_row = make_row(etf_code)
-    non_stock_row = {
-        **make_row(etf_code, asset_type="cash", stock_code=None, asset_name="現金"),
-        "source_type": source_type,
-    }
+    non_stock_row = make_non_stock_row(etf_code)
+    non_stock_row["source_type"] = source_type
     stock_row["source_type"] = source_type
     return {
         "ok": True,
