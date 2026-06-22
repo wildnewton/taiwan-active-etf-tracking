@@ -6,6 +6,7 @@ from pathlib import Path
 
 DEFAULT_DB_PATH = Path("data/etf_holdings.sqlite3")
 _DB_PATH = DEFAULT_DB_PATH
+_MEMORY_CONN = None
 
 
 def _serialize(value):
@@ -21,16 +22,32 @@ def _row_dict(row):
 
 
 def _connect():
+    if _DB_PATH == ":memory:":
+        return _MEMORY_CONN
+
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(_DB_PATH)
 
 
 def init_db(db_path):
-    global _DB_PATH
-    _DB_PATH = Path(db_path)
-    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    global _DB_PATH, _MEMORY_CONN
 
-    with sqlite3.connect(_DB_PATH) as conn:
+    if _MEMORY_CONN is not None and db_path != ":memory:":
+        _MEMORY_CONN.close()
+        _MEMORY_CONN = None
+
+    if db_path == ":memory:":
+        _DB_PATH = db_path
+        if _MEMORY_CONN is not None:
+            _MEMORY_CONN.close()
+        _MEMORY_CONN = sqlite3.connect(db_path)
+        conn = _MEMORY_CONN
+    else:
+        _DB_PATH = Path(db_path)
+        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(_DB_PATH)
+
+    with conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS etf_daily_holdings (
