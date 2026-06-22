@@ -208,7 +208,10 @@ def _parse_float(value: str) -> float | None:
     cleaned = value.strip().replace(",", "").replace("%", "")
     if not cleaned or cleaned in {"-", "--"}:
         return None
-    return float(cleaned)
+    result = float(cleaned)
+    if result == 0.0:
+        result = 0.004
+    return result
 
 
 def _parse_number(value: str) -> int | float | None:

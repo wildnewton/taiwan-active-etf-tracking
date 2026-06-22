@@ -139,6 +139,15 @@ def test_split_rows():
     assert non_stock_rows == [rows[1]]
 
 
+def test_zero_weight_floored():
+    """Stocks with 0% weight should be stored as 0.004% to avoid calculation issues."""
+    html = '<table class="datalist"><tbody><tr><td>台積電(2330.TW)</td><td>0.00</td><td>100,000</td></tr><tr><td>鴻海(2317.TW)</td><td>5.50</td><td>50,000</td></tr></tbody></table>'
+    rows = parse_moneydj_rows("00981A", html, "https://example.com")
+    # The 0.00 weight should become 0.004
+    assert rows[0]["weight_pct"] == 0.004
+    assert rows[1]["weight_pct"] == 5.5
+
+
 def test_scrape_moneydj_with_fixture():
     response = Mock()
     response.text = load_fixture()
