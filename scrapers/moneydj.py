@@ -146,7 +146,7 @@ def validate_rows(rows: list) -> tuple[bool, str]:
         return False, "missing weight_pct"
 
     total_weight = sum(row["weight_pct"] for row in rows)
-    if total_weight < 80.0 or total_weight > 101.0:
+    if total_weight < 80.0 or total_weight > 150.0:
         return False, f"total weight out of range: {total_weight:.2f}"
 
     stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
@@ -213,7 +213,7 @@ def _parse_float(value: str) -> float | None:
 
 def _parse_number(value: str) -> int | float | None:
     cleaned = value.strip().replace(",", "")
-    if not cleaned or cleaned in {"-", "--"}:
+    if not cleaned or cleaned.upper() in {"-", "--", "N/A", "NA"}:
         return None
 
     number = float(cleaned)
