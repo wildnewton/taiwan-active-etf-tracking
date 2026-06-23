@@ -107,6 +107,65 @@ def init_db(db_path):
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_holding_changes (
+                date TEXT NOT NULL,
+                etf_code TEXT NOT NULL,
+                issuer TEXT NOT NULL,
+                stock_code TEXT NOT NULL,
+                stock_name TEXT,
+
+                prev_date TEXT,
+                prev_weight_pct REAL,
+                weight_pct REAL,
+                weight_delta_1d REAL,
+                weight_delta_pct_1d REAL,
+
+                prev_shares REAL,
+                shares REAL,
+                shares_delta_1d REAL,
+                shares_delta_pct_1d REAL,
+
+                prev_rank INTEGER,
+                rank INTEGER,
+                rank_delta_1d INTEGER,
+
+                is_new_position INTEGER DEFAULT 0,
+                is_removed_position INTEGER DEFAULT 0,
+
+                weight_delta_3d REAL,
+                weight_delta_5d REAL,
+                weight_delta_10d REAL,
+
+                consecutive_add_days INTEGER DEFAULT 0,
+                consecutive_reduce_days INTEGER DEFAULT 0,
+
+                source_type TEXT,
+                created_at TEXT NOT NULL,
+
+                PRIMARY KEY (date, etf_code, stock_code)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_holdings_date_etf
+            ON etf_daily_holdings(date, etf_code)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_holdings_stock_date
+            ON etf_daily_holdings(stock_code, date)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_changes_stock_date
+            ON etf_holding_changes(stock_code, date)
+            """
+        )
 
 
 def insert_holdings(rows):
