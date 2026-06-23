@@ -10,15 +10,15 @@ jobs:
     steps:
       - name: Clone repository
         run: |
-          git clone https://github.com/${GITHUB_REPOSITORY}.git repo
+          git clone --quiet https://github.com/${GITHUB_REPOSITORY}.git repo
           cd repo
-          git fetch origin ${GITHUB_SHA}
-          git checkout ${GITHUB_SHA}
+          git fetch --quiet origin ${GITHUB_SHA}
+          git checkout --quiet ${GITHUB_SHA}
       - name: Install dependencies
         run: |
           cd repo
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet -r requirements.txt
       - name: Run tests
         run: |
           cd repo
