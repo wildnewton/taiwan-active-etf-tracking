@@ -16,7 +16,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from config import get_etf_config
-from scrapers.moneydj import classify_asset, dedupe_rows, split_rows, validate_rows
+from scrapers.moneydj import classify_asset, dedupe_rows, split_rows
 
 
 SOURCE_TYPE = "official_fallback"
@@ -66,11 +66,12 @@ def fetch_static(url: str, timeout: int = 30) -> str:
     }
     response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
+    response.encoding = response.apparent_encoding or "utf-8"
     return response.text
 
 
 # ──────────────────────────────────────────────────────────────
-# Static parsers (Fubon, Taishin)
+# Static parser helpers
 # ──────────────────────────────────────────────────────────────
 
 def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -85,215 +86,153 @@ def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
 
-# ──────────────────────────────────────────────────────────────
-# API parser (Capital) — Playwright intercepts /CFWeb/api/etf/buyback
-# ──────────────────────────────────────────────────────────────
-
-def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list[dict]:
-    """Parse Capital's buyback API response. The stocks[] field has holdings."""
-    data = json.loads(buyback_json)
-    stocks = data.get("data", {}).get("stocks", [])
-    if not stocks:
-        return []
-
-    # Extract date from PCF data
-    pcf = data.get("data", {}).get("pcf", {})
-    date_str = pcf.get("date2", pcf.get("date1", ""))
-    if date_str:
-        # Format: "2026-06-18" → "2026/06/18"
-        date_str = date_str.replace("-", "/")
-
+def parse_capital_api(body: str, etf_code: str, source_url: str) -> list[dict]:
+    data = json.loads(body)
     rows = []
-    for item in stocks:
-        code = str(item.get("stocNo", "")).strip()
-        name = str(item.get("stocName", "")).strip()
-        weight = item.get("weightRound", item.get("weight"))
-        shares = item.get("share")
+    date = data.get("dataDate") or data.get("date") or data.get("queryDate")
 
-        if not code or weight is None:
+    for item in _iter_nested_rows(data):
+        if not isinstance(item, dict):
             continue
 
-        weight = float(weight)
-        shares = int(shares) if shares else None
-        asset_name = f"{name}({code}.TW)"
-        classification = classify_asset(asset_name)
+        code = str(
+            item.get("stockNo")
+            or item.get("stockCode")
+            or item.get("code")
+            or item.get("securitiesCode")
+            or ""
+        ).strip()
+        code_match = re.search(r"\b(\d{4})\b", code)
+        if not code_match:
+            continue
 
-        rows.append({
-            "date": date_str,
-            "etf_code": etf_code.upper(),
-            "asset_name": asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": code,
-            "stock_name": name,
-            "shares": shares,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": EXTRACTION_METHOD_API,
-        })
+        name = str(
+            item.get("stockName")
+            or item.get("name")
+            or item.get("securitiesName")
+            or ""
+        ).strip()
+        shares = _parse_number(str(item.get("shares") or item.get("qty") or item.get("quantity") or ""))
+        weight = _parse_float(str(item.get("weight") or item.get("ratio") or item.get("weightPct") or ""))
+        if not name or weight is None:
+            continue
+
+        rows.append(_row(etf_code, code_match.group(1), name, shares, weight, source_url, date, EXTRACTION_METHOD_API))
 
     return rows
 
 
-# ──────────────────────────────────────────────────────────────
-# Stealth API parser (Nomura) — stealth Playwright intercepts GetFundAssets
-# ──────────────────────────────────────────────────────────────
+def parse_nomura_api(body: str, etf_code: str, source_url: str) -> list[dict]:
+    data = json.loads(body)
+    fund_data = data.get("Entries", {}).get("Data", {})
+    date = fund_data.get("FundAsset", {}).get("NavDate")
+    if date and "-" in date:
+        date = date.replace("-", "/")
 
-def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
-    """Parse Nomura's GetFundAssets API response. Table[0].Rows has holdings."""
-    data = json.loads(assets_json)
-    entries = data.get("Entries", {})
-    fund_data = entries.get("Data", {})
-    fund_asset = fund_data.get("FundAsset", {})
-    nav_date = fund_asset.get("NavDate", "")
-
-    tables = fund_data.get("Table", [])
     rows = []
-    for table in tables:
+    for table in fund_data.get("Table", []):
         if table.get("TableTitle") != "股票":
             continue
-        for row in table.get("Rows", []):
-            if len(row) < 4:
+        for raw in table.get("Rows", []):
+            if len(raw) < 4:
                 continue
-            code, name, shares_str, weight_str = row[0], row[1], row[2], row[3]
-            try:
-                weight = float(weight_str)
-                shares = int(shares_str.replace(",", ""))
-            except (ValueError, TypeError):
+            code, name, shares, weight = raw[:4]
+            code_match = re.search(r"\b(\d{4})\b", str(code))
+            if not code_match:
                 continue
-
-            asset_name = f"{name}({code}.TW)"
-            classification = classify_asset(asset_name)
-            date_str = nav_date.replace("-", "/") if nav_date else None
-
-            rows.append({
-                "date": date_str,
-                "etf_code": etf_code.upper(),
-                "asset_name": asset_name,
-                "asset_type": classification["asset_type"],
-                "stock_code": code,
-                "stock_name": name,
-                "shares": shares,
-                "weight_pct": weight,
-                "source_url": source_url,
-                "source_type": SOURCE_TYPE,
-                "extraction_method": EXTRACTION_METHOD_STEALTH,
-            })
-
+            parsed_weight = _parse_float(str(weight))
+            if not name or parsed_weight is None:
+                continue
+            rows.append(_row(etf_code, code_match.group(1), str(name).strip(), _parse_number(str(shares)), parsed_weight, source_url, date, EXTRACTION_METHOD_STEALTH))
     return rows
 
 
-# ──────────────────────────────────────────────────────────────
-# Playwright table parser (Mega, Uni-President, Allianz)
-# ──────────────────────────────────────────────────────────────
-
-def parse_mega_text(body_text: str, etf_code: str, source_url: str,
-                    date: str | None = None) -> list[dict]:
-    """Parse Mega's product page text. Holdings are in multi-line blocks:
-    code\\nname\\nshares\\nweight
-    """
-    # Auto-extract date if not provided
-    if not date:
-        date_match = re.search(r'(資料來源[：:].*?(\d{4}/\d{2}/\d{2}))', body_text)
-        if date_match:
-            date = date_match.group(2)
-        else:
-            date_match = re.search(r'(\d{4}/\d{2}/\d{2})', body_text)
-            date = date_match.group(1) if date_match else None
-
-    pattern = re.findall(
-        r'(\d{4})\s*\n\s*(\S+)\s*\n\s*([\d,]+)\s*\n\s*([\d.]+%?)',
-        body_text,
-    )
+def parse_mega_text(text: str, etf_code: str, source_url: str) -> list[dict]:
+    date_match = re.search(r"(\d{4}/\d{2}/\d{2})", text)
+    date = date_match.group(1) if date_match else None
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
     rows = []
-    for code, name, shares_str, weight_str in pattern:
-        weight = float(weight_str.replace('%', '').replace(',', ''))
-        shares = int(shares_str.replace(',', ''))
-        asset_name = f"{name}({code}.TW)"
-        classification = classify_asset(asset_name)
 
-        rows.append({
-            "date": date,
-            "etf_code": etf_code.upper(),
-            "asset_name": asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": code,
-            "stock_name": name,
-            "shares": shares,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": EXTRACTION_METHOD_PLAYWRIGHT,
-        })
-
+    for i, line in enumerate(lines):
+        if not re.fullmatch(r"\d{4}", line):
+            continue
+        try:
+            code = line
+            name = lines[i + 1]
+            shares = _parse_number(lines[i + 2])
+            weight = _parse_float(lines[i + 3])
+        except IndexError:
+            continue
+        if not name or weight is None:
+            continue
+        rows.append(_row(etf_code, code, name, shares, weight, source_url, date, EXTRACTION_METHOD_PLAYWRIGHT))
     return rows
 
 
-def parse_uni_president_table(table_rows: list[list[str]], etf_code: str,
-                              source_url: str, date: str | None = None) -> list[dict]:
-    """Parse Uni-President's holdings table extracted via Playwright.
-    table_rows: list of [stock_code, stock_name, shares, weight%]
-    """
+def parse_uni_president_table(table_rows: list[list[str]], etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     rows = []
     for cells in table_rows:
         if len(cells) < 4:
             continue
-        code, name, shares_str, weight_str = cells[0], cells[1], cells[2], cells[3]
-        code = code.strip()
-
-        # Must be a 4-digit stock code
-        if not re.match(r'^\d{4}$', code):
+        code, name, shares, weight = cells[:4]
+        code_match = re.search(r"\b(\d{4})\b", str(code))
+        if not code_match:
             continue
-
-        try:
-            weight = float(weight_str.replace('%', '').replace(',', ''))
-            shares = int(shares_str.replace(',', ''))
-        except (ValueError, TypeError):
+        parsed_weight = _parse_float(str(weight))
+        if not name or parsed_weight is None:
             continue
-
-        asset_name = f"{name}({code}.TW)"
-        classification = classify_asset(asset_name)
-
-        rows.append({
-            "date": date,
-            "etf_code": etf_code.upper(),
-            "asset_name": asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": code,
-            "stock_name": name,
-            "shares": shares,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": EXTRACTION_METHOD_PLAYWRIGHT,
-        })
-
+        rows.append(_row(etf_code, code_match.group(1), str(name).strip(), _parse_number(str(shares)), parsed_weight, source_url, date, EXTRACTION_METHOD_PLAYWRIGHT))
     return rows
 
 
+def _iter_nested_rows(obj):
+    if isinstance(obj, dict):
+        yield obj
+        for value in obj.values():
+            yield from _iter_nested_rows(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _iter_nested_rows(item)
+
+
+def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date, method):
+    asset_name = f"{stock_name}({stock_code}.TW)"
+    return {
+        "date": date,
+        "etf_code": etf_code.upper(),
+        "asset_name": asset_name,
+        "asset_type": "stock",
+        "stock_code": stock_code,
+        "stock_name": stock_name,
+        "shares": shares,
+        "weight_pct": weight_pct,
+        "source_url": source_url,
+        "source_type": SOURCE_TYPE,
+        "extraction_method": method,
+    }
+
+
 # ──────────────────────────────────────────────────────────────
-# Async Playwright scrapers (called from scraper.py with browser)
+# Browser / API scraper functions
 # ──────────────────────────────────────────────────────────────
 
 async def scrape_capital_playwright(etf_code: str, page) -> dict:
-    """Scrape Capital via Playwright — intercept /CFWeb/api/etf/buyback API."""
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
-
     buyback_body = None
 
     async def on_response(response):
         nonlocal buyback_body
-        if 'buyback' in response.url and 'capitalfund' in response.url:
+        if "/api/" in response.url.lower() and ("buyback" in response.url.lower() or "portfolio" in response.url.lower()):
             try:
                 buyback_body = await response.text()
             except Exception:
                 pass
 
     page.on('response', on_response)
-    await page.goto(source_url, wait_until='networkidle', timeout=30000)
-    await page.wait_for_timeout(3000)
+    await page.goto(source_url, wait_until='domcontentloaded', timeout=30000)
+    await page.wait_for_timeout(5000)
     page.remove_listener('response', on_response)
 
     if not buyback_body:
@@ -415,7 +354,7 @@ def scrape_official_static(etf_code: str) -> dict:
 
         html = fetch_static(source_url)
         all_rows = dedupe_rows(parser(html, etf_code, source_url))
-        ok, reason = validate_rows(all_rows)
+        ok, reason = _validate_official_rows(all_rows)
         stock_rows, non_stock_rows = split_rows(all_rows)
         total_weight_all_rows = _sum_weights(all_rows)
         total_weight_stock_rows = _sum_weights(stock_rows)
@@ -423,7 +362,7 @@ def scrape_official_static(etf_code: str) -> dict:
         try:
             html = fetch_static(source_url)
             all_rows = dedupe_rows(parse_twse(html, etf_code, source_url))
-            ok, reason = validate_rows(all_rows)
+            ok, reason = _validate_official_rows(all_rows)
             stock_rows, non_stock_rows = split_rows(all_rows)
             total_weight_all_rows = _sum_weights(all_rows)
             total_weight_stock_rows = _sum_weights(stock_rows)
@@ -648,6 +587,43 @@ def _sum_weights(rows: list) -> float:
     return round(sum(row["weight_pct"] for row in rows if row.get("weight_pct") is not None), 2)
 
 
+def _validate_official_rows(rows: list) -> tuple[bool, str]:
+    """Validate issuer fallback rows.
+
+    Official fallback pages often expose stock-only holdings or partial issuer tables.
+    Unlike MoneyDJ Basic0007B, they are not always guaranteed to include cash,
+    futures, or other non-stock assets in the same parse, so the strict ~100%
+    completeness rule is intentionally MoneyDJ-only.
+    """
+    if not rows:
+        return False, "empty rows"
+
+    if len(rows) < 5:
+        return False, "fewer than 5 rows"
+
+    if any(not row.get("date") for row in rows):
+        return False, "missing date"
+
+    if any(row.get("weight_pct") is None for row in rows):
+        return False, "missing weight_pct"
+
+    total_weight = _sum_weights(rows)
+    if total_weight < 20.0 or total_weight > 110.0:
+        return False, f"official weight out of range: {total_weight:.2f}"
+
+    stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
+    if len(stock_rows) < 5:
+        return False, "fewer than 5 Taiwan stock rows"
+
+    for row in stock_rows:
+        stock_code = row.get("stock_code")
+        stock_name = row.get("stock_name")
+        if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
+            return False, "invalid Taiwan stock row"
+
+    return True, "ok"
+
+
 def _failed_result(source_url: str, reason: str) -> dict:
     return {
         "ok": False,
@@ -663,7 +639,7 @@ def _failed_result(source_url: str, reason: str) -> dict:
 
 
 def _build_result(all_rows: list, source_url: str, extraction_method: str) -> dict:
-    ok, reason = validate_rows(all_rows)
+    ok, reason = _validate_official_rows(all_rows)
     stock_rows, non_stock_rows = split_rows(all_rows)
     return {
         "ok": ok,
