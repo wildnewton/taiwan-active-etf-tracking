@@ -22,4 +22,4 @@ jobs:
       - name: Run tests
         run: |
           cd repo
-          pytest -q
+          PYTHONPATH=. pytest -q
