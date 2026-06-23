@@ -2,25 +2,41 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
+      - master
+      - "milestone-*"
+      - "ci-*"
   pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
 
 jobs:
   test:
+    name: Run tests
     runs-on: ubuntu-latest
+
     steps:
-      - name: Clone repository
-        run: |
-          git clone --quiet https://github.com/${GITHUB_REPOSITORY}.git repo
-          cd repo
-          git fetch --quiet origin ${GITHUB_SHA}
-          git checkout --quiet ${GITHUB_SHA}
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - name: Install dependencies
         run: |
-          cd repo
-          python -m pip install --quiet --upgrade pip
-          pip install --quiet -r requirements.txt
-          pip install --quiet pytest-asyncio
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
       - name: Run tests
-        run: |
-          cd repo
-          PYTHONPATH=. pytest -q
+        run: pytest -q
