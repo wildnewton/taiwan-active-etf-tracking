@@ -12,3 +12,6 @@ venv/
 *.sqlite-journal
 data/*.sqlite
 .env
+logs/
+reports/
+.DS_Store
