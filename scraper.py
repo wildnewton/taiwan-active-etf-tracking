@@ -44,8 +44,20 @@ def scrape_holdings(etf_code: str) -> dict:
 
 
 def scrape_holdings_with_browser(etf_code: str, page) -> dict:
-    """Scrape holdings with browser. Full decision tree:
-    MoneyDJ static → MoneyDJ browser → Official browser → Official static → Fail
+    """Sync wrapper for the full browser decision tree.
+
+    Use this from synchronous code when no event loop is running. Async callers
+    should call scrape_holdings_with_browser_async directly.
+    """
+    return _run_async(scrape_holdings_with_browser_async(etf_code, page))
+
+
+async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
+    """Async browser-enabled full decision tree.
+
+    MoneyDJ static → MoneyDJ browser → Official browser → Official static → Fail.
+    This is the production-safe path for an async Playwright pipeline because it
+    avoids nesting asyncio.run inside an already-running event loop.
     """
     # 1. MoneyDJ static (fastest)
     moneydj_result = scrape_moneydj(etf_code)
@@ -53,14 +65,14 @@ def scrape_holdings_with_browser(etf_code: str, page) -> dict:
         return _with_source_type(moneydj_result, "moneydj_primary")
 
     # 2. MoneyDJ browser
-    browser_result = _run_async(scrape_moneydj_browser(etf_code, page))
+    browser_result = await scrape_moneydj_browser(etf_code, page)
     if browser_result["ok"] is True:
         return _with_source_type(browser_result, "moneydj_browser")
 
     # 3. Official browser-based (Capital API, Nomura stealth, Mega, Uni-President)
     config = get_etf_config(etf_code)
     if config["official_method"] in ("api", "stealth_api", "playwright"):
-        official_browser = _run_async(scrape_official_with_browser(etf_code, page))
+        official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
             return _with_source_type(official_browser, "official_fallback")
 
@@ -77,7 +89,11 @@ def _with_source_type(result: dict, source_type: str) -> dict:
 
 
 def _run_async(coro) -> dict:
-    """Run an async coroutine, handling both sync and async contexts."""
+    """Run an async coroutine from sync code.
+
+    This helper intentionally refuses to run inside an active event loop. In that
+    case callers must use the native async API instead of nesting event loops.
+    """
     if not isawaitable(coro):
         return coro
 
@@ -88,5 +104,5 @@ def _run_async(coro) -> dict:
 
     raise RuntimeError(
         "scrape_holdings_with_browser cannot run an async browser scraper "
-        "inside an active event loop"
+        "inside an active event loop; use scrape_holdings_with_browser_async instead"
     )
