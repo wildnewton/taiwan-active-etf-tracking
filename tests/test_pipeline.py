@@ -1,9 +1,11 @@
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 import db
 from config import TRACKED_ETFS
-from pipeline import run_daily_scrape
+from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
 
 
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
@@ -84,6 +86,33 @@ def test_run_daily_scrape_all_success():
     assert summary["total_stock_rows"] == 19
     assert summary["total_non_stock_rows"] == 19
     assert summary["failures"] == []
+    init_db.assert_called_once_with(":memory:")
+    assert insert_holdings.call_count == 19
+    assert insert_non_stock_assets.call_count == 19
+    assert insert_scrape_run.call_count == 19
+
+
+@pytest.mark.asyncio
+async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
+    page = object()
+    scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, source_type="moneydj_browser"))
+
+    with patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+        patch("pipeline.init_db") as init_db, \
+        patch("pipeline.insert_holdings") as insert_holdings, \
+        patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
+        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
+
+    assert scraper.await_count == 19
+    assert [call.args[0] for call in scraper.await_args_list] == [etf["code"] for etf in TRACKED_ETFS]
+    assert {call.args[1] for call in scraper.await_args_list} == {page}
+    assert summary["total_etfs"] == 19
+    assert summary["moneydj_success"] == 19
+    assert summary["official_success"] == 0
+    assert summary["failed"] == 0
+    assert summary["total_stock_rows"] == 19
+    assert summary["total_non_stock_rows"] == 19
     init_db.assert_called_once_with(":memory:")
     assert insert_holdings.call_count == 19
     assert insert_non_stock_assets.call_count == 19
