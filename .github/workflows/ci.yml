@@ -19,6 +19,7 @@ jobs:
           cd repo
           python -m pip install --quiet --upgrade pip
           pip install --quiet -r requirements.txt
+          pip install --quiet pytest-asyncio
       - name: Run tests
         run: |
           cd repo
