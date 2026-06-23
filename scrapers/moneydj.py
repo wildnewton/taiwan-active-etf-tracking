@@ -10,6 +10,13 @@ MONEYDJ_URL_TEMPLATE = (
 SOURCE_TYPE = "moneydj_primary"
 EXTRACTION_METHOD = "requests_bs4"
 
+# Basic0007B is the full-holdings page. The completeness check must use all
+# parsed rows, including non-stock assets, and should be approximately 100%.
+PREFERRED_MIN_TOTAL_WEIGHT = 99.5
+PREFERRED_MAX_TOTAL_WEIGHT = 100.5
+REQUIRED_MIN_TOTAL_WEIGHT = 99.0
+REQUIRED_MAX_TOTAL_WEIGHT = 101.0
+
 
 def build_moneydj_url(etf_code: str) -> str:
     return MONEYDJ_URL_TEMPLATE.format(code=etf_code.upper())
@@ -148,9 +155,20 @@ def validate_rows(rows: list) -> tuple[bool, str]:
     if any(row.get("weight_pct") is None for row in rows):
         return False, "missing weight_pct"
 
-    total_weight = sum(row["weight_pct"] for row in rows)
-    if total_weight < 80.0 or total_weight > 150.0:
-        return False, f"total weight out of range: {total_weight:.2f}"
+    total_weight = _sum_weights(rows)
+    if total_weight < REQUIRED_MIN_TOTAL_WEIGHT:
+        return (
+            False,
+            "incomplete full holdings: "
+            f"total_weight_all_rows={total_weight:.2f}, expected about 100",
+        )
+
+    if total_weight > REQUIRED_MAX_TOTAL_WEIGHT:
+        return (
+            False,
+            "duplicated or overcounted rows: "
+            f"total_weight_all_rows={total_weight:.2f}, expected about 100",
+        )
 
     stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
     if len(stock_rows) < 5:

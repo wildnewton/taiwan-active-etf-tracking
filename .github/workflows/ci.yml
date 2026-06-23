@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        run: |
+          git clone --quiet https://github.com/${GITHUB_REPOSITORY}.git repo
+          cd repo
+          git fetch --quiet origin ${GITHUB_SHA}
+          git checkout --quiet ${GITHUB_SHA}
+      - name: Install dependencies
+        run: |
+          cd repo
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet -r requirements.txt
+          pip install --quiet pytest-asyncio
+      - name: Run tests
+        run: |
+          cd repo
+          PYTHONPATH=. pytest -q

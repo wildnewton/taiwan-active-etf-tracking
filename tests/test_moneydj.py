@@ -24,6 +24,32 @@ def load_fixture():
     return FIXTURE_PATH.read_text(encoding="utf-8")
 
 
+def load_incomplete_fixture_rows():
+    return parse_moneydj_rows("00980A", load_fixture(), SOURCE_URL)
+
+
+def make_complete_rows():
+    rows = load_incomplete_fixture_rows()
+    stock_total = round(sum(row["weight_pct"] for row in rows), 2)
+    cash_weight = round(100.0 - stock_total, 2)
+    rows.append(
+        {
+            "date": "2026/06/18",
+            "etf_code": "00980A",
+            "asset_name": "CASH",
+            "asset_type": "cash",
+            "stock_code": None,
+            "stock_name": None,
+            "shares": None,
+            "weight_pct": cash_weight,
+            "source_url": SOURCE_URL,
+            "source_type": "moneydj_primary",
+            "extraction_method": "requests_bs4",
+        }
+    )
+    return rows
+
+
 def test_build_moneydj_url():
     assert build_moneydj_url("00980A") == SOURCE_URL
 
@@ -93,13 +119,23 @@ def test_dedupe_rows():
     assert deduped[0] == rows[0]
 
 
-def test_validate_rows_pass():
-    rows = parse_moneydj_rows("00980A", load_fixture(), SOURCE_URL)
+def test_validate_rows_passes_when_all_rows_sum_to_100():
+    rows = make_complete_rows()
 
     ok, reason = validate_rows(rows)
 
     assert ok is True
     assert reason == "ok"
+
+
+def test_validate_rows_fails_when_full_holdings_total_is_incomplete():
+    rows = load_incomplete_fixture_rows()
+
+    ok, reason = validate_rows(rows)
+
+    assert ok is False
+    assert "incomplete full holdings" in reason
+    assert "89.07" in reason
 
 
 def test_validate_rows_empty_fails():
@@ -110,7 +146,7 @@ def test_validate_rows_empty_fails():
 
 
 def test_validate_rows_low_weight_fails():
-    rows = parse_moneydj_rows("00980A", load_fixture(), SOURCE_URL)
+    rows = make_complete_rows()
     low_weight_rows = [
         {**row, "weight_pct": row["weight_pct"] / 2}
         for row in rows
@@ -119,7 +155,17 @@ def test_validate_rows_low_weight_fails():
     ok, reason = validate_rows(low_weight_rows)
 
     assert ok is False
-    assert "total weight" in reason
+    assert "incomplete full holdings" in reason
+
+
+def test_validate_rows_overcounted_weight_fails():
+    rows = make_complete_rows()
+    duplicated_rows = rows + [{**rows[0], "shares": rows[0]["shares"] + 1}]
+
+    ok, reason = validate_rows(duplicated_rows)
+
+    assert ok is False
+    assert "duplicated or overcounted" in reason
 
 
 def test_split_rows():
@@ -138,8 +184,6 @@ def test_split_rows():
 
     assert stock_rows == [rows[0]]
     assert non_stock_rows == [rows[1]]
-
-
 
 
 def test_zero_weight_floored():
@@ -175,7 +219,7 @@ def test_classify_futures_with_chinese():
     assert classify_asset("臺股期貨")["asset_type"] == "futures"
 
 
-def test_scrape_moneydj_with_fixture():
+def test_scrape_moneydj_with_incomplete_fixture_fails_validation():
     response = Mock()
     response.text = load_fixture()
     response.raise_for_status.return_value = None
@@ -183,8 +227,8 @@ def test_scrape_moneydj_with_fixture():
     with patch("scrapers.moneydj.requests.get", return_value=response) as mock_get:
         result = scrape_moneydj("00980A")
 
-    assert result["ok"] is True
-    assert result["reason"] == "ok"
+    assert result["ok"] is False
+    assert "incomplete full holdings" in result["reason"]
     assert len(result["all_rows"]) == 44
     assert len(result["stock_rows"]) == 44
     assert result["non_stock_rows"] == []
