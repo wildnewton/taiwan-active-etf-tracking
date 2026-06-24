@@ -100,6 +100,7 @@ def detect_holding_changes(
 
     trading_dates = _holding_dates_through(current_date)
     weight_cache = {date_value: _load_weight_index(date_value) for date_value in trading_dates}
+    shares_cache = {date_value: _load_shares_index(date_value) for date_value in trading_dates}
 
     changes = []
     keys = sorted(set(current) | set(previous))
@@ -117,6 +118,7 @@ def detect_holding_changes(
                 previous=prev_row,
                 trading_dates=trading_dates,
                 weight_cache=weight_cache,
+                shares_cache=shares_cache,
             )
         )
 
@@ -205,6 +207,19 @@ def _load_weight_index(date_value: str) -> dict:
     return {(row[0], row[1]): row[2] for row in rows}
 
 
+def _load_shares_index(date_value: str) -> dict:
+    with db._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT etf_code, stock_code, shares
+            FROM etf_daily_holdings
+            WHERE date = ?
+            """,
+            (date_value,),
+        ).fetchall()
+    return {(row[0], row[1]): row[2] for row in rows}
+
+
 def _build_change_row(
     *,
     current_date: str,
@@ -215,6 +230,7 @@ def _build_change_row(
     previous: Optional[dict],
     trading_dates: list[str],
     weight_cache: dict[str, dict],
+    shares_cache: dict[str, dict],
 ) -> dict:
     today_weight = today["weight_pct"] if today else None
     previous_weight = previous["weight_pct"] if previous else None
@@ -224,6 +240,14 @@ def _build_change_row(
     previous_weight_for_delta = previous_weight if previous_weight is not None else 0.0
     weight_delta = current_weight_for_delta - previous_weight_for_delta
     shares_delta = _nullable_delta(today_shares, previous_shares)
+    is_new_position = 1 if today and not previous else 0
+    is_removed_position = 1 if previous and not today else 0
+    classification = _classify_position_change(
+        shares_delta=shares_delta,
+        weight_delta=weight_delta,
+        is_new_position=bool(is_new_position),
+        is_removed_position=bool(is_removed_position),
+    )
 
     today_rank = today["rank"] if today else None
     previous_rank = previous["rank"] if previous else None
@@ -261,8 +285,8 @@ def _build_change_row(
         "prev_rank": previous_rank,
         "rank": today_rank,
         "rank_delta_1d": rank_delta,
-        "is_new_position": 1 if today and not previous else 0,
-        "is_removed_position": 1 if previous and not today else 0,
+        "is_new_position": is_new_position,
+        "is_removed_position": is_removed_position,
         "weight_delta_3d": _rolling_weight_delta(
             etf_code,
             stock_code,
@@ -287,6 +311,30 @@ def _build_change_row(
             trading_dates,
             weight_cache,
         ),
+        "shares_delta_3d": _rolling_shares_delta(
+            etf_code,
+            stock_code,
+            current_date,
+            3,
+            trading_dates,
+            shares_cache,
+        ),
+        "shares_delta_5d": _rolling_shares_delta(
+            etf_code,
+            stock_code,
+            current_date,
+            5,
+            trading_dates,
+            shares_cache,
+        ),
+        "shares_delta_10d": _rolling_shares_delta(
+            etf_code,
+            stock_code,
+            current_date,
+            10,
+            trading_dates,
+            shares_cache,
+        ),
         "consecutive_add_days": _consecutive_direction_days(
             etf_code,
             stock_code,
@@ -303,8 +351,81 @@ def _build_change_row(
             weight_cache,
             direction="reduce",
         ),
+        "consecutive_active_add_days": _consecutive_active_direction_days(
+            etf_code,
+            stock_code,
+            current_date,
+            trading_dates,
+            shares_cache,
+            direction="add",
+        ),
+        "consecutive_active_reduce_days": _consecutive_active_direction_days(
+            etf_code,
+            stock_code,
+            current_date,
+            trading_dates,
+            shares_cache,
+            direction="reduce",
+        ),
+        **classification,
         "source_type": source_type,
         "created_at": datetime.now().isoformat(),
+    }
+
+
+def _classify_position_change(
+    *,
+    shares_delta,
+    weight_delta,
+    is_new_position: bool,
+    is_removed_position: bool,
+) -> dict:
+    if is_new_position:
+        return _classification("new_position", "add", 1, 0, 0, 0, "high")
+    if is_removed_position:
+        return _classification("removed_position", "reduce", 0, 1, 0, 0, "high")
+
+    if shares_delta is None:
+        if weight_delta > _EPSILON:
+            return _classification("weight_only_increase", "unknown", 0, 0, 0, 0, "low")
+        if weight_delta < -_EPSILON:
+            return _classification("weight_only_decrease", "unknown", 0, 0, 0, 0, "low")
+        return _classification("unchanged", "none", 0, 0, 0, 0, "low")
+
+    if shares_delta > _EPSILON and weight_delta >= -_EPSILON:
+        return _classification("confirmed_active_add", "add", 1, 0, 0, 0, "high")
+    if shares_delta > _EPSILON and weight_delta < -_EPSILON:
+        return _classification("mixed_add_but_weight_down", "add", 1, 0, 0, 1, "medium")
+    if shares_delta < -_EPSILON and weight_delta <= _EPSILON:
+        return _classification("confirmed_active_reduce", "reduce", 0, 1, 0, 0, "high")
+    if shares_delta < -_EPSILON and weight_delta > _EPSILON:
+        return _classification("mixed_reduce_but_weight_up", "reduce", 0, 1, 0, 1, "medium")
+
+    if weight_delta > _EPSILON:
+        return _classification("passive_weight_increase", "none", 0, 0, 1, 0, "low")
+    if weight_delta < -_EPSILON:
+        return _classification("passive_weight_decrease", "none", 0, 0, 1, 0, "low")
+    return _classification("unchanged", "none", 0, 0, 0, 0, "high")
+
+
+def _classification(
+    position_change_type,
+    active_direction,
+    is_active_add,
+    is_active_reduce,
+    is_passive_weight_change,
+    is_mixed_weight_share_signal,
+    confidence,
+) -> dict:
+    return {
+        "position_change_type": position_change_type,
+        "active_direction": active_direction,
+        "active_delta_source": "shares",
+        "is_active_add": is_active_add,
+        "is_active_reduce": is_active_reduce,
+        "is_passive_weight_change": is_passive_weight_change,
+        "is_mixed_weight_share_signal": is_mixed_weight_share_signal,
+        "confidence": confidence,
     }
 
 
@@ -345,6 +466,26 @@ def _rolling_weight_delta(
     return current_weight - start_weight
 
 
+def _rolling_shares_delta(
+    etf_code: str,
+    stock_code: str,
+    current_date: str,
+    window_size: int,
+    trading_dates: list[str],
+    shares_cache: dict[str, dict],
+):
+    dates = [date_value for date_value in trading_dates if date_value <= current_date]
+    if len(dates) < window_size:
+        return None
+
+    start_date = dates[-window_size]
+    current_shares = shares_cache.get(current_date, {}).get((etf_code, stock_code), 0.0)
+    start_shares = shares_cache.get(start_date, {}).get((etf_code, stock_code), 0.0)
+    if current_shares is None or start_shares is None:
+        return None
+    return current_shares - start_shares
+
+
 def _consecutive_direction_days(
     etf_code: str,
     stock_code: str,
@@ -371,6 +512,34 @@ def _consecutive_direction_days(
     return count
 
 
+def _consecutive_active_direction_days(
+    etf_code: str,
+    stock_code: str,
+    current_date: str,
+    trading_dates: list[str],
+    shares_cache: dict[str, dict],
+    direction: str,
+) -> int:
+    dates = [date_value for date_value in trading_dates if date_value <= current_date]
+    count = 0
+    key = (etf_code, stock_code)
+
+    for index in range(len(dates) - 1, 0, -1):
+        current_shares = shares_cache.get(dates[index], {}).get(key)
+        previous_shares = shares_cache.get(dates[index - 1], {}).get(key)
+        if current_shares is None or previous_shares is None:
+            break
+        if direction == "add" and current_shares > previous_shares + _EPSILON:
+            count += 1
+            continue
+        if direction == "reduce" and current_shares < previous_shares - _EPSILON:
+            count += 1
+            continue
+        break
+
+    return count
+
+
 def _persist_changes(current_date: str, changes: list[dict]) -> None:
     with db._connect() as conn:
         with conn:
@@ -388,8 +557,14 @@ def _persist_changes(current_date: str, changes: list[dict]) -> None:
                     weight_delta_pct_1d, prev_shares, shares, shares_delta_1d,
                     shares_delta_pct_1d, prev_rank, rank, rank_delta_1d,
                     is_new_position, is_removed_position, weight_delta_3d,
-                    weight_delta_5d, weight_delta_10d, consecutive_add_days,
-                    consecutive_reduce_days, source_type, created_at
+                    weight_delta_5d, weight_delta_10d, shares_delta_3d,
+                    shares_delta_5d, shares_delta_10d, consecutive_add_days,
+                    consecutive_reduce_days, consecutive_active_add_days,
+                    consecutive_active_reduce_days, position_change_type,
+                    active_direction, active_delta_source, is_active_add,
+                    is_active_reduce, is_passive_weight_change,
+                    is_mixed_weight_share_signal, confidence, source_type,
+                    created_at
                 ) VALUES (
                     :date, :etf_code, :issuer, :stock_code, :stock_name,
                     :prev_date, :prev_weight_pct, :weight_pct,
@@ -397,8 +572,14 @@ def _persist_changes(current_date: str, changes: list[dict]) -> None:
                     :shares, :shares_delta_1d, :shares_delta_pct_1d,
                     :prev_rank, :rank, :rank_delta_1d, :is_new_position,
                     :is_removed_position, :weight_delta_3d, :weight_delta_5d,
-                    :weight_delta_10d, :consecutive_add_days,
-                    :consecutive_reduce_days, :source_type, :created_at
+                    :weight_delta_10d, :shares_delta_3d, :shares_delta_5d,
+                    :shares_delta_10d, :consecutive_add_days,
+                    :consecutive_reduce_days, :consecutive_active_add_days,
+                    :consecutive_active_reduce_days, :position_change_type,
+                    :active_direction, :active_delta_source, :is_active_add,
+                    :is_active_reduce, :is_passive_weight_change,
+                    :is_mixed_weight_share_signal, :confidence, :source_type,
+                    :created_at
                 )
                 """,
                 changes,
