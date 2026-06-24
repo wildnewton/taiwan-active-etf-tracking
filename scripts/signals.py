@@ -94,20 +94,69 @@ def _lte(value, threshold):
     return value is not None and value <= threshold
 
 
+def _positive(value):
+    return value is not None and value > 0
+
+
+def _negative(value):
+    return value is not None and value < 0
+
+
 def _issuers(rows):
     return {r["issuer"] for r in rows if r.get("issuer")}
 
 
-def _is_add(r):
-    return (r["is_new_position"] and _gte(r["weight_pct"], 2.0)) or (
-        r["consecutive_add_days"] >= 3 and _gte(r["weight_delta_3d"], 0.8)
+def _active_add_event(r):
+    if r.get("is_new_position") and _gte(r.get("weight_pct"), 2.0):
+        return True
+    if r.get("is_active_add"):
+        return True
+    if r.get("active_direction") == "add":
+        return True
+    return False
+
+
+def _active_reduce_event(r):
+    if r.get("is_removed_position") and _gte(r.get("prev_weight_pct"), 2.0):
+        return True
+    if r.get("is_active_reduce"):
+        return True
+    if r.get("active_direction") == "reduce":
+        return True
+    return False
+
+
+def _consecutive_active_add_event(r):
+    if r.get("consecutive_active_add_days", 0) >= 3 and _positive(r.get("shares_delta_3d")):
+        return True
+    # Backward-compatible test/data fallback: if a row predates the new active
+    # fields, require an actual 1-day share increase before considering the old
+    # weight streak as active evidence.
+    return (
+        not r.get("is_passive_weight_change")
+        and r.get("consecutive_active_add_days", 0) == 0
+        and r.get("consecutive_add_days", 0) >= 3
+        and _positive(r.get("shares_delta_1d"))
     )
+
+
+def _consecutive_active_reduce_event(r):
+    if r.get("consecutive_active_reduce_days", 0) >= 3 and _negative(r.get("shares_delta_3d")):
+        return True
+    return (
+        not r.get("is_passive_weight_change")
+        and r.get("consecutive_active_reduce_days", 0) == 0
+        and r.get("consecutive_reduce_days", 0) >= 3
+        and _negative(r.get("shares_delta_1d"))
+    )
+
+
+def _is_add(r):
+    return _active_add_event(r) or _consecutive_active_add_event(r)
 
 
 def _is_reduce(r):
-    return (r["is_removed_position"] and _gte(r["prev_weight_pct"], 2.0)) or (
-        r["consecutive_reduce_days"] >= 3 and _lte(r["weight_delta_3d"], -0.8)
-    )
+    return _active_reduce_event(r) or _consecutive_active_reduce_event(r)
 
 
 def _evidence(rows):
@@ -122,8 +171,13 @@ def _evidence(rows):
             "prev_weight_pct": r.get("prev_weight_pct"),
             "weight_delta_3d": r.get("weight_delta_3d"),
             "shares_delta_1d": r.get("shares_delta_1d"),
+            "shares_delta_3d": r.get("shares_delta_3d"),
+            "position_change_type": r.get("position_change_type"),
+            "active_direction": r.get("active_direction"),
             "consecutive_add_days": r.get("consecutive_add_days"),
             "consecutive_reduce_days": r.get("consecutive_reduce_days"),
+            "consecutive_active_add_days": r.get("consecutive_active_add_days"),
+            "consecutive_active_reduce_days": r.get("consecutive_active_reduce_days"),
         }
         for r in rows
     ]
@@ -148,7 +202,7 @@ def _signal(date, signal_type, strength, score, row, rows):
         "explanation": signal_type,
         "evidence_json": json.dumps(_evidence(rows), ensure_ascii=False),
         "action_label": score_to_action_label(score),
-        "confidence": "normal",
+        "confidence": row.get("confidence") or "normal",
         "created_at": datetime.now().isoformat(),
     }
 
@@ -162,11 +216,11 @@ def _single_signals(date, rows):
         if r["is_removed_position"] and _gte(r["prev_weight_pct"], 2.0):
             strength = "strong" if _gte(r["prev_weight_pct"], 3.0) and r.get("prev_rank") is not None and r["prev_rank"] <= 15 else "medium"
             signals.append(_signal(date, "removed_core_position", strength, -5, r, [r]))
-        if r["consecutive_add_days"] >= 3 and _gte(r["weight_delta_3d"], 0.8):
-            score = 3 + (1 if r.get("shares_delta_1d") is not None and r["shares_delta_1d"] > 0 else 0)
+        if _consecutive_active_add_event(r):
+            score = 3 + (1 if _positive(r.get("shares_delta_1d")) else 0)
             signals.append(_signal(date, "consecutive_add_3d", "medium", score, r, [r]))
-        if r["consecutive_reduce_days"] >= 3 and _lte(r["weight_delta_3d"], -0.8):
-            score = -3 + (-1 if r.get("shares_delta_1d") is not None and r["shares_delta_1d"] < 0 else 0)
+        if _consecutive_active_reduce_event(r):
+            score = -3 + (-1 if _negative(r.get("shares_delta_1d")) else 0)
             signals.append(_signal(date, "consecutive_reduce_3d", "medium", score, r, [r]))
     return signals
 

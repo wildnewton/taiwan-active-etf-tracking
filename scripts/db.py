@@ -9,6 +9,23 @@ _DB_PATH = DEFAULT_DB_PATH
 _MEMORY_CONN = None
 
 
+_CHANGE_COLUMN_MIGRATIONS = {
+    "shares_delta_3d": "REAL",
+    "shares_delta_5d": "REAL",
+    "shares_delta_10d": "REAL",
+    "consecutive_active_add_days": "INTEGER DEFAULT 0",
+    "consecutive_active_reduce_days": "INTEGER DEFAULT 0",
+    "position_change_type": "TEXT DEFAULT 'unchanged'",
+    "active_direction": "TEXT DEFAULT 'none'",
+    "active_delta_source": "TEXT DEFAULT 'shares'",
+    "is_active_add": "INTEGER DEFAULT 0",
+    "is_active_reduce": "INTEGER DEFAULT 0",
+    "is_passive_weight_change": "INTEGER DEFAULT 0",
+    "is_mixed_weight_share_signal": "INTEGER DEFAULT 0",
+    "confidence": "TEXT DEFAULT 'normal'",
+}
+
+
 def _serialize(value):
     if isinstance(value, (date, datetime)):
         return value.isoformat()
@@ -137,9 +154,23 @@ def init_db(db_path):
                 weight_delta_3d REAL,
                 weight_delta_5d REAL,
                 weight_delta_10d REAL,
+                shares_delta_3d REAL,
+                shares_delta_5d REAL,
+                shares_delta_10d REAL,
 
                 consecutive_add_days INTEGER DEFAULT 0,
                 consecutive_reduce_days INTEGER DEFAULT 0,
+                consecutive_active_add_days INTEGER DEFAULT 0,
+                consecutive_active_reduce_days INTEGER DEFAULT 0,
+
+                position_change_type TEXT DEFAULT 'unchanged',
+                active_direction TEXT DEFAULT 'none',
+                active_delta_source TEXT DEFAULT 'shares',
+                is_active_add INTEGER DEFAULT 0,
+                is_active_reduce INTEGER DEFAULT 0,
+                is_passive_weight_change INTEGER DEFAULT 0,
+                is_mixed_weight_share_signal INTEGER DEFAULT 0,
+                confidence TEXT DEFAULT 'normal',
 
                 source_type TEXT,
                 created_at TEXT NOT NULL,
@@ -148,6 +179,7 @@ def init_db(db_path):
             )
             """
         )
+        _ensure_change_columns(conn)
         conn.execute(
             """
             CREATE INDEX IF NOT EXISTS idx_holdings_date_etf
@@ -166,6 +198,18 @@ def init_db(db_path):
             ON etf_holding_changes(stock_code, date)
             """
         )
+
+
+def _ensure_change_columns(conn):
+    existing = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(etf_holding_changes)").fetchall()
+    }
+    for column_name, column_type in _CHANGE_COLUMN_MIGRATIONS.items():
+        if column_name not in existing:
+            conn.execute(
+                f"ALTER TABLE etf_holding_changes ADD COLUMN {column_name} {column_type}"
+            )
 
 
 def insert_holdings(rows):
