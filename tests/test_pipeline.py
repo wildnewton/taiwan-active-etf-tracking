@@ -78,7 +78,7 @@ def test_run_daily_scrape_all_success():
         summary = run_daily_scrape(":memory:")
 
     assert scrape.call_count == 19
-    assert summary["date"] == date.today().isoformat()
+    assert summary["date"] == "2026-06-22"  # data date from make_row, not date.today()
     assert summary["total_etfs"] == 19
     assert summary["moneydj_success"] == 19
     assert summary["official_success"] == 0
@@ -224,3 +224,57 @@ def test_insert_scrape_run_uses_insert_or_ignore():
         ).fetchone()[0]
 
     assert count == 1
+
+
+def test_run_daily_scrape_uses_data_date_not_today():
+    """Summary date should be the data date from scraper rows, not date.today()."""
+    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
+        patch("pipeline.init_db"), \
+        patch("pipeline.insert_holdings"), \
+        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.insert_scrape_run"):
+        summary = run_daily_scrape(":memory:")
+
+    # make_row uses date "2026/06/22", so summary should reflect that (ISO format)
+    assert summary["date"] == "2026-06-22", (
+        f"Expected data date '2026-06-22' but got '{summary['date']}'. "
+        "Pipeline should use 資料日期 from scraper, not date.today()."
+    )
+
+
+def test_scrape_run_uses_data_date_not_today():
+    """ScrapeRun records should use data date from scraper, not date.today()."""
+    captured_runs = []
+
+    def capture_run(run):
+        captured_runs.append(run)
+
+    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
+        patch("pipeline.init_db"), \
+        patch("pipeline.insert_holdings"), \
+        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.insert_scrape_run", side_effect=capture_run):
+        run_daily_scrape(":memory:")
+
+    assert len(captured_runs) == 19
+    for run in captured_runs:
+        assert run.date == date(2026, 6, 22), (
+            f"Expected ScrapeRun date 2026-06-22 but got {run.date}. "
+            "ScrapeRun should use 資料日期 from scraper, not date.today()."
+        )
+
+
+def test_run_daily_scrape_warns_when_data_date_differs_from_today():
+    """Pipeline should warn when 資料日期 != today."""
+    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
+        patch("pipeline.init_db"), \
+        patch("pipeline.insert_holdings"), \
+        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.insert_scrape_run"):
+        summary = run_daily_scrape(":memory:")
+
+    # Data is from 2026/06/22 but today is different
+    assert "data_date" in summary, (
+        "Summary should include 'data_date' field showing the 資料日期 from scraper."
+    )
+    assert summary["data_date"] == "2026-06-22"

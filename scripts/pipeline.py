@@ -75,6 +75,7 @@ def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     init_db(db_path)
     today = date.today()
     summary = _new_summary(today)
+    data_date = None
 
     for etf in TRACKED_ETFS:
         etf_code = etf["code"]
@@ -82,8 +83,12 @@ def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
         started_at = datetime.now()
         result = scrape_fn(etf_code)
         finished_at = datetime.now()
-        _record_result(summary, etf_code, today, started_at, finished_at, result)
+        if data_date is None and result["ok"] is True:
+            data_date = _extract_data_date(result, today)
+            summary["data_date"] = data_date.isoformat()
+        _record_result(summary, etf_code, data_date or today, started_at, finished_at, result)
 
+    summary["date"] = (data_date or today).isoformat()
     return summary
 
 
@@ -91,6 +96,7 @@ async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dic
     init_db(db_path)
     today = date.today()
     summary = _new_summary(today)
+    data_date = None
 
     for etf in TRACKED_ETFS:
         etf_code = etf["code"]
@@ -98,14 +104,19 @@ async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dic
         started_at = datetime.now()
         result = await scrape_fn(etf_code)
         finished_at = datetime.now()
-        _record_result(summary, etf_code, today, started_at, finished_at, result)
+        if data_date is None and result["ok"] is True:
+            data_date = _extract_data_date(result, today)
+            summary["data_date"] = data_date.isoformat()
+        _record_result(summary, etf_code, data_date or today, started_at, finished_at, result)
 
+    summary["date"] = (data_date or today).isoformat()
     return summary
 
 
 def _new_summary(today: date) -> dict:
     return {
         "date": today.isoformat(),
+        "data_date": None,
         "total_etfs": len(TRACKED_ETFS),
         "moneydj_success": 0,
         "official_success": 0,
@@ -113,7 +124,18 @@ def _new_summary(today: date) -> dict:
         "total_stock_rows": 0,
         "total_non_stock_rows": 0,
         "failures": [],
+        "moneydj_warnings": [],
     }
+
+
+def _extract_data_date(result: dict, fallback: date) -> date:
+    """Extract the 資料日期 from the first row of a successful scrape result."""
+    rows = result.get("all_rows") or result.get("stock_rows") or []
+    for row in rows:
+        parsed = _parse_row_date(row.get("date"), fallback)
+        if parsed != fallback:
+            return parsed
+    return fallback
 
 
 def _record_result(
@@ -138,11 +160,33 @@ def _record_result(
             summary["moneydj_success"] += 1
         elif result["source_type"] == "official_fallback":
             summary["official_success"] += 1
+            # Check MoneyDJ failure reason for this ETF
+            _check_moneydj_warning(summary, etf_code)
     else:
         summary["failed"] += 1
         summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
+        # Check MoneyDJ failure reason for this ETF
+        _check_moneydj_warning(summary, etf_code)
 
     insert_scrape_run(_build_scrape_run(etf_code, today, started_at, finished_at, result))
+
+
+def _check_moneydj_warning(summary: dict, etf_code: str) -> None:
+    """Check MoneyDJ validation for an ETF and add warning if it fails."""
+    from scrapers.moneydj import scrape_moneydj
+    from config import get_etf_config
+
+    result = scrape_moneydj(etf_code)
+    if result["ok"] is False:
+        cfg = get_etf_config(etf_code)
+        summary["moneydj_warnings"].append({
+            "etf_code": etf_code,
+            "issuer": cfg.get("issuer", "unknown"),
+            "reason": result.get("reason", "unknown"),
+            "rows": len(result.get("all_rows", [])),
+            "weight": result.get("total_weight_all_rows", 0.0),
+            "url": result.get("source_url", ""),
+        })
 
 
 def _to_holding_row(row: dict, default_date: date) -> HoldingRow:

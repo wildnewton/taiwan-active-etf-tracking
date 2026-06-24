@@ -42,6 +42,23 @@ def main():
     scrape_summary = run_daily_scrape_with_browser(args.db)
     print(f"  Scrape summary: {scrape_summary}")
 
+    # Print MoneyDJ validation warnings
+    moneydj_warnings = scrape_summary.get("moneydj_warnings", [])
+    if moneydj_warnings:
+        print(f"\n⚠️ MoneyDJ 驗證失敗 ({len(moneydj_warnings)} ETFs):")
+        for w in moneydj_warnings:
+            print(f"  - {w['etf_code']} ({w['issuer']}): {w['reason']}")
+            print(f"    Rows: {w['rows']}, Weight: {w['weight']:.2f}%")
+            print(f"    URL: {w['url']}")
+
+    # Warn if data date differs from today
+    from datetime import date as date_cls
+    today_str = date_cls.today().isoformat()
+    data_date = scrape_summary.get("data_date")
+    if data_date and data_date != today_str:
+        print(f"\n⚠️ 資料日期 ≠ 今天：資料日期 {data_date}，今天 {today_str}")
+        print(f"  所有持倉和 scrape run 都使用資料日期 {data_date}")
+
     print("Step 2/4: Detecting holding changes...")
     change_summary = detect_holding_changes()
     print(f"  Change summary: {change_summary}")

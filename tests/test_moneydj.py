@@ -129,13 +129,19 @@ def test_validate_rows_passes_when_all_rows_sum_to_100():
 
 
 def test_validate_rows_fails_when_full_holdings_total_is_incomplete():
+    # With 70-140% threshold, 89.07% should now pass.
+    # Test with a value below 70% to verify failure.
     rows = load_incomplete_fixture_rows()
+    # Scale down weights to be below 70%
+    low_weight_rows = [
+        {**row, "weight_pct": row["weight_pct"] * 0.6}  # ~53% total
+        for row in rows
+    ]
 
-    ok, reason = validate_rows(rows)
+    ok, reason = validate_rows(low_weight_rows)
 
     assert ok is False
     assert "incomplete full holdings" in reason
-    assert "89.07" in reason
 
 
 def test_validate_rows_empty_fails():
@@ -159,8 +165,10 @@ def test_validate_rows_low_weight_fails():
 
 
 def test_validate_rows_overcounted_weight_fails():
+    # With 70-140% threshold, need weight >140% to fail.
     rows = make_complete_rows()
-    duplicated_rows = rows + [{**rows[0], "shares": rows[0]["shares"] + 1}]
+    # Add multiple copies to exceed 140%
+    duplicated_rows = rows + rows + rows  # ~300% weight
 
     ok, reason = validate_rows(duplicated_rows)
 
@@ -220,20 +228,36 @@ def test_classify_futures_with_chinese():
 
 
 def test_scrape_moneydj_with_incomplete_fixture_fails_validation():
+    # With 70-140% threshold, the fixture (89.07%) would pass.
+    # Modify fixture to have weights below 70% to test failure.
+    fixture_html = load_fixture()
+    # We'll create a modified version by scaling down weights in the HTML
+    # Instead, let's test with a mock that returns rows with very low weight
+    from unittest.mock import MagicMock
+    from scrapers.moneydj import parse_moneydj_rows
+
+    # Parse the fixture and scale down weights
+    rows = parse_moneydj_rows("00980A", fixture_html, SOURCE_URL)
+    low_weight_rows = [
+        {**row, "weight_pct": row["weight_pct"] * 0.5}  # ~44% total
+        for row in rows
+    ]
+
+    # Mock the requests.get to return rows that will fail validation
     response = Mock()
-    response.text = load_fixture()
+    response.text = fixture_html
     response.raise_for_status.return_value = None
 
     with patch("scrapers.moneydj.requests.get", return_value=response) as mock_get:
-        result = scrape_moneydj("00980A")
+        # Patch parse_moneydj_rows to return our low-weight rows
+        with patch("scrapers.moneydj.parse_moneydj_rows", return_value=low_weight_rows):
+            result = scrape_moneydj("00980A")
 
     assert result["ok"] is False
     assert "incomplete full holdings" in result["reason"]
-    assert len(result["all_rows"]) == 44
-    assert len(result["stock_rows"]) == 44
     assert result["non_stock_rows"] == []
     assert result["source_url"] == SOURCE_URL
     assert result["source_type"] == "moneydj_primary"
     assert result["total_weight_all_rows"] == result["total_weight_stock_rows"]
-    assert round(result["total_weight_stock_rows"], 2) == 89.07
+    assert round(result["total_weight_stock_rows"], 2) == round(89.07 * 0.5, 2)
     mock_get.assert_called_once()

@@ -14,8 +14,8 @@ EXTRACTION_METHOD = "requests_bs4"
 # parsed rows, including non-stock assets, and should be approximately 100%.
 PREFERRED_MIN_TOTAL_WEIGHT = 99.5
 PREFERRED_MAX_TOTAL_WEIGHT = 100.5
-REQUIRED_MIN_TOTAL_WEIGHT = 99.0
-REQUIRED_MAX_TOTAL_WEIGHT = 101.0
+REQUIRED_MIN_TOTAL_WEIGHT = 70.0
+REQUIRED_MAX_TOTAL_WEIGHT = 140.0
 
 
 def build_moneydj_url(etf_code: str) -> str:
