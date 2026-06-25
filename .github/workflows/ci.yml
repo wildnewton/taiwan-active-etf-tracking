@@ -26,6 +26,7 @@ jobs:
         with:
           fetch-depth: 1
           persist-credentials: false
+          show-progress: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,4 +40,4 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: PYTHONPATH=. pytest -q -x --tb=short
