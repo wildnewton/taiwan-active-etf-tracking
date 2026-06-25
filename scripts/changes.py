@@ -8,6 +8,12 @@ from config import TRACKED_ETFS, get_etf_config
 
 _VALID_ETF_COUNT = len(TRACKED_ETFS)
 _EPSILON = 1e-9
+_SOURCE_PRIORITIES = {
+    "moneydj_primary": 40,
+    "moneydj_browser": 38,
+    "official_browser": 35,
+    "official_static": 30,
+}
 
 
 def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
@@ -78,9 +84,10 @@ def detect_holding_changes(
 ) -> dict:
     """Compute and persist ETF holding changes for current_date.
 
-    The comparison is ETF-specific and stock-specific. New and removed
-    positions are included via an outer join of today's and previous date's
-    holdings.
+    The comparison is ETF-specific and stock-specific. Each ETF/date first picks
+    exactly one canonical source. Changes are only computed for ETF/date pairs
+    whose current and previous canonical sources are comparable, so partial
+    fallback sources do not create false new/removed positions.
     """
     current_date = current_date or get_latest_valid_date(min_success_ratio)
     if not current_date:
@@ -93,19 +100,40 @@ def detect_holding_changes(
     if not previous_date:
         return _empty_summary(current_date, None, "no previous holdings date")
 
-    current = _load_ranked_holdings(current_date)
-    previous = _load_ranked_holdings(previous_date)
+    current_sources = _select_canonical_sources(current_date)
+    previous_sources = _select_canonical_sources(previous_date)
+    comparable_etfs, skipped_etfs = _comparable_etfs(current_sources, previous_sources)
+
+    current = _load_ranked_holdings(current_date, current_sources, comparable_etfs)
+    previous = _load_ranked_holdings(previous_date, previous_sources, comparable_etfs)
     if not current and not previous:
+        _persist_changes(current_date, [])
+        if skipped_etfs:
+            return _empty_summary(
+                current_date,
+                previous_date,
+                "not comparable ETF/date pairs",
+                skipped_etfs=skipped_etfs,
+            )
         return _empty_summary(current_date, previous_date, "no holdings rows")
 
     trading_dates = _holding_dates_through(current_date)
-    weight_cache = {date_value: _load_weight_index(date_value) for date_value in trading_dates}
-    shares_cache = {date_value: _load_shares_index(date_value) for date_value in trading_dates}
+    source_cache = {date_value: _select_canonical_sources(date_value) for date_value in trading_dates}
+    weight_cache = {
+        date_value: _load_weight_index(date_value, source_cache.get(date_value, {}))
+        for date_value in trading_dates
+    }
+    shares_cache = {
+        date_value: _load_shares_index(date_value, source_cache.get(date_value, {}))
+        for date_value in trading_dates
+    }
 
     changes = []
     keys = sorted(set(current) | set(previous))
     for key in keys:
         etf_code, stock_code = key
+        if etf_code not in comparable_etfs:
+            continue
         today_row = current.get(key)
         prev_row = previous.get(key)
         changes.append(
@@ -124,6 +152,14 @@ def detect_holding_changes(
 
     _persist_changes(current_date, changes)
 
+    if not changes and skipped_etfs:
+        return _empty_summary(
+            current_date,
+            previous_date,
+            "not comparable ETF/date pairs",
+            skipped_etfs=skipped_etfs,
+        )
+
     return {
         "ok": True,
         "date": current_date,
@@ -131,6 +167,7 @@ def detect_holding_changes(
         "rows": len(changes),
         "new_positions": sum(row["is_new_position"] for row in changes),
         "removed_positions": sum(row["is_removed_position"] for row in changes),
+        "skipped_etfs": skipped_etfs,
     }
 
 
@@ -138,7 +175,7 @@ def _min_successes(min_success_ratio: float) -> int:
     return ceil(_VALID_ETF_COUNT * min_success_ratio)
 
 
-def _empty_summary(current_date, previous_date, reason: str) -> dict:
+def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) -> dict:
     return {
         "ok": False,
         "date": current_date,
@@ -147,10 +184,124 @@ def _empty_summary(current_date, previous_date, reason: str) -> dict:
         "new_positions": 0,
         "removed_positions": 0,
         "reason": reason,
+        "skipped_etfs": skipped_etfs or [],
     }
 
 
-def _load_ranked_holdings(date_value: str) -> dict:
+def _select_canonical_sources(date_value: str) -> dict:
+    """Pick one canonical holdings source for each ETF on a date."""
+    with db._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT etf_code, source_type, stock_code, shares, weight_pct
+            FROM etf_daily_holdings
+            WHERE date = ?
+            """,
+            (date_value,),
+        ).fetchall()
+
+    grouped = {}
+    for etf_code, source_type, stock_code, shares, weight_pct in rows:
+        key = (etf_code, source_type)
+        entry = grouped.setdefault(
+            key,
+            {
+                "etf_code": etf_code,
+                "source_type": source_type,
+                "source_family": _source_family(source_type),
+                "stock_codes": set(),
+                "stock_count": 0,
+                "shares_count": 0,
+                "total_weight": 0.0,
+                "quality_score": 0.0,
+            },
+        )
+        entry["stock_codes"].add(stock_code)
+        entry["stock_count"] += 1
+        if shares is not None:
+            entry["shares_count"] += 1
+        entry["total_weight"] += weight_pct or 0.0
+
+    selected = {}
+    for entry in grouped.values():
+        stock_count = entry["stock_count"]
+        shares_coverage = entry["shares_count"] / stock_count if stock_count else 0.0
+        entry["shares_coverage"] = shares_coverage
+        entry["quality_score"] = _source_quality_score(entry)
+        current_best = selected.get(entry["etf_code"])
+        if current_best is None or _source_sort_key(entry) > _source_sort_key(current_best):
+            selected[entry["etf_code"]] = entry
+    return selected
+
+
+def _source_family(source_type: str) -> str:
+    source_type = source_type or ""
+    if "moneydj" in source_type:
+        return "moneydj"
+    if "official" in source_type:
+        return "official"
+    return source_type or "unknown"
+
+
+def _source_quality_score(entry: dict) -> float:
+    priority = _SOURCE_PRIORITIES.get(entry["source_type"], 10)
+    stock_count_bonus = entry["stock_count"] * 2.0
+    shares_bonus = entry["shares_coverage"] * 10.0
+    total_weight = entry["total_weight"]
+    weight_bonus = 5.0 if 80.0 <= total_weight <= 105.0 else 0.0
+    return priority + stock_count_bonus + shares_bonus + weight_bonus
+
+
+def _source_sort_key(entry: dict):
+    return (
+        entry["quality_score"],
+        entry["stock_count"],
+        _SOURCE_PRIORITIES.get(entry["source_type"], 10),
+        entry["source_type"],
+    )
+
+
+def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
+    comparable = set()
+    skipped = []
+    for etf_code in sorted(set(current_sources) | set(previous_sources)):
+        current = current_sources.get(etf_code)
+        previous = previous_sources.get(etf_code)
+        if not current or not previous:
+            skipped.append(etf_code)
+            continue
+        if _is_comparable_source_pair(current, previous):
+            comparable.add(etf_code)
+        else:
+            skipped.append(etf_code)
+    return comparable, skipped
+
+
+def _is_comparable_source_pair(current: dict, previous: dict) -> bool:
+    current_codes = current.get("stock_codes", set())
+    previous_codes = previous.get("stock_codes", set())
+    if not current_codes or not previous_codes:
+        return False
+
+    overlap = len(current_codes & previous_codes) / max(len(current_codes), len(previous_codes))
+    current_vs_previous_size = len(current_codes) / len(previous_codes)
+
+    # Very high overlap is comparable even across fallback variants.
+    if overlap >= 0.90 and current_vs_previous_size >= 0.70:
+        return True
+
+    # Same source family can tolerate a little more churn, but not partial-source collapse.
+    if (
+        current.get("source_family") == previous.get("source_family")
+        and overlap >= 0.70
+        and current_vs_previous_size >= 0.70
+    ):
+        return True
+
+    return False
+
+
+def _load_ranked_holdings(date_value: str, canonical_sources: dict | None = None, allowed_etfs=None) -> dict:
     with db._connect() as conn:
         rows = conn.execute(
             """
@@ -162,10 +313,17 @@ def _load_ranked_holdings(date_value: str) -> dict:
             (date_value,),
         ).fetchall()
 
+    allowed_etfs = set(allowed_etfs) if allowed_etfs is not None else None
     ranked = {}
     rank_by_etf = {}
     for row in rows:
         etf_code = row[1]
+        if allowed_etfs is not None and etf_code not in allowed_etfs:
+            continue
+        if canonical_sources is not None:
+            selected = canonical_sources.get(etf_code)
+            if not selected or row[6] != selected["source_type"]:
+                continue
         rank_by_etf[etf_code] = rank_by_etf.get(etf_code, 0) + 1
         ranked[(etf_code, row[2])] = {
             "date": row[0],
@@ -194,30 +352,40 @@ def _holding_dates_through(current_date: str) -> list[str]:
     return [row[0] for row in rows]
 
 
-def _load_weight_index(date_value: str) -> dict:
+def _load_weight_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
         rows = conn.execute(
             """
-            SELECT etf_code, stock_code, weight_pct
+            SELECT etf_code, stock_code, weight_pct, source_type
             FROM etf_daily_holdings
             WHERE date = ?
             """,
             (date_value,),
         ).fetchall()
-    return {(row[0], row[1]): row[2] for row in rows}
+    return {
+        (row[0], row[1]): row[2]
+        for row in rows
+        if canonical_sources is None
+        or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
+    }
 
 
-def _load_shares_index(date_value: str) -> dict:
+def _load_shares_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
         rows = conn.execute(
             """
-            SELECT etf_code, stock_code, shares
+            SELECT etf_code, stock_code, shares, source_type
             FROM etf_daily_holdings
             WHERE date = ?
             """,
             (date_value,),
         ).fetchall()
-    return {(row[0], row[1]): row[2] for row in rows}
+    return {
+        (row[0], row[1]): row[2]
+        for row in rows
+        if canonical_sources is None
+        or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
+    }
 
 
 def _build_change_row(
@@ -287,86 +455,16 @@ def _build_change_row(
         "rank_delta_1d": rank_delta,
         "is_new_position": is_new_position,
         "is_removed_position": is_removed_position,
-        "weight_delta_3d": _rolling_weight_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            3,
-            trading_dates,
-            weight_cache,
-        ),
-        "weight_delta_5d": _rolling_weight_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            5,
-            trading_dates,
-            weight_cache,
-        ),
-        "weight_delta_10d": _rolling_weight_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            10,
-            trading_dates,
-            weight_cache,
-        ),
-        "shares_delta_3d": _rolling_shares_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            3,
-            trading_dates,
-            shares_cache,
-        ),
-        "shares_delta_5d": _rolling_shares_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            5,
-            trading_dates,
-            shares_cache,
-        ),
-        "shares_delta_10d": _rolling_shares_delta(
-            etf_code,
-            stock_code,
-            current_date,
-            10,
-            trading_dates,
-            shares_cache,
-        ),
-        "consecutive_add_days": _consecutive_direction_days(
-            etf_code,
-            stock_code,
-            current_date,
-            trading_dates,
-            weight_cache,
-            direction="add",
-        ),
-        "consecutive_reduce_days": _consecutive_direction_days(
-            etf_code,
-            stock_code,
-            current_date,
-            trading_dates,
-            weight_cache,
-            direction="reduce",
-        ),
-        "consecutive_active_add_days": _consecutive_active_direction_days(
-            etf_code,
-            stock_code,
-            current_date,
-            trading_dates,
-            shares_cache,
-            direction="add",
-        ),
-        "consecutive_active_reduce_days": _consecutive_active_direction_days(
-            etf_code,
-            stock_code,
-            current_date,
-            trading_dates,
-            shares_cache,
-            direction="reduce",
-        ),
+        "weight_delta_3d": _rolling_weight_delta(etf_code, stock_code, current_date, 3, trading_dates, weight_cache),
+        "weight_delta_5d": _rolling_weight_delta(etf_code, stock_code, current_date, 5, trading_dates, weight_cache),
+        "weight_delta_10d": _rolling_weight_delta(etf_code, stock_code, current_date, 10, trading_dates, weight_cache),
+        "shares_delta_3d": _rolling_shares_delta(etf_code, stock_code, current_date, 3, trading_dates, shares_cache),
+        "shares_delta_5d": _rolling_shares_delta(etf_code, stock_code, current_date, 5, trading_dates, shares_cache),
+        "shares_delta_10d": _rolling_shares_delta(etf_code, stock_code, current_date, 10, trading_dates, shares_cache),
+        "consecutive_add_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="add"),
+        "consecutive_reduce_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="reduce"),
+        "consecutive_active_add_days": _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="add"),
+        "consecutive_active_reduce_days": _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="reduce"),
         **classification,
         "source_type": source_type,
         "created_at": datetime.now().isoformat(),
