@@ -90,6 +90,10 @@ def _gte(value, threshold):
     return value is not None and value >= threshold
 
 
+def _lte(value, threshold):
+    return value is not None and value <= threshold
+
+
 def _positive(value):
     return value is not None and value > 0
 
