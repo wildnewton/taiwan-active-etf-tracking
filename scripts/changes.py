@@ -290,11 +290,11 @@ def _is_comparable_source_pair(current: dict, previous: dict) -> bool:
     if overlap >= 0.90 and current_vs_previous_size >= 0.70:
         return True
 
-    # Same source family can tolerate a little more churn, but not partial-source collapse.
+    # Same source family can tolerate ordinary portfolio turnover, but not a partial-source collapse.
     if (
         current.get("source_family") == previous.get("source_family")
-        and overlap >= 0.70
-        and current_vs_previous_size >= 0.70
+        and overlap >= 0.50
+        and current_vs_previous_size >= 0.50
     ):
         return True
 
@@ -546,36 +546,20 @@ def _relative_delta_pct(delta, previous):
     return delta / previous * 100.0
 
 
-def _rolling_weight_delta(
-    etf_code: str,
-    stock_code: str,
-    current_date: str,
-    window_size: int,
-    trading_dates: list[str],
-    weight_cache: dict[str, dict],
-):
+def _rolling_weight_delta(etf_code: str, stock_code: str, current_date: str, window_size: int, trading_dates: list[str], weight_cache: dict[str, dict]):
     dates = [date_value for date_value in trading_dates if date_value <= current_date]
     if len(dates) < window_size:
         return None
-
     start_date = dates[-window_size]
     current_weight = weight_cache.get(current_date, {}).get((etf_code, stock_code), 0.0)
     start_weight = weight_cache.get(start_date, {}).get((etf_code, stock_code), 0.0)
     return current_weight - start_weight
 
 
-def _rolling_shares_delta(
-    etf_code: str,
-    stock_code: str,
-    current_date: str,
-    window_size: int,
-    trading_dates: list[str],
-    shares_cache: dict[str, dict],
-):
+def _rolling_shares_delta(etf_code: str, stock_code: str, current_date: str, window_size: int, trading_dates: list[str], shares_cache: dict[str, dict]):
     dates = [date_value for date_value in trading_dates if date_value <= current_date]
     if len(dates) < window_size:
         return None
-
     start_date = dates[-window_size]
     current_shares = shares_cache.get(current_date, {}).get((etf_code, stock_code), 0.0)
     start_shares = shares_cache.get(start_date, {}).get((etf_code, stock_code), 0.0)
@@ -584,18 +568,10 @@ def _rolling_shares_delta(
     return current_shares - start_shares
 
 
-def _consecutive_direction_days(
-    etf_code: str,
-    stock_code: str,
-    current_date: str,
-    trading_dates: list[str],
-    weight_cache: dict[str, dict],
-    direction: str,
-) -> int:
+def _consecutive_direction_days(etf_code: str, stock_code: str, current_date: str, trading_dates: list[str], weight_cache: dict[str, dict], direction: str) -> int:
     dates = [date_value for date_value in trading_dates if date_value <= current_date]
     count = 0
     key = (etf_code, stock_code)
-
     for index in range(len(dates) - 1, 0, -1):
         current_weight = weight_cache.get(dates[index], {}).get(key, 0.0)
         previous_weight = weight_cache.get(dates[index - 1], {}).get(key, 0.0)
@@ -606,22 +582,13 @@ def _consecutive_direction_days(
             count += 1
             continue
         break
-
     return count
 
 
-def _consecutive_active_direction_days(
-    etf_code: str,
-    stock_code: str,
-    current_date: str,
-    trading_dates: list[str],
-    shares_cache: dict[str, dict],
-    direction: str,
-) -> int:
+def _consecutive_active_direction_days(etf_code: str, stock_code: str, current_date: str, trading_dates: list[str], shares_cache: dict[str, dict], direction: str) -> int:
     dates = [date_value for date_value in trading_dates if date_value <= current_date]
     count = 0
     key = (etf_code, stock_code)
-
     for index in range(len(dates) - 1, 0, -1):
         current_shares = shares_cache.get(dates[index], {}).get(key)
         previous_shares = shares_cache.get(dates[index - 1], {}).get(key)
@@ -634,17 +601,13 @@ def _consecutive_active_direction_days(
             count += 1
             continue
         break
-
     return count
 
 
 def _persist_changes(current_date: str, changes: list[dict]) -> None:
     with db._connect() as conn:
         with conn:
-            conn.execute(
-                "DELETE FROM etf_holding_changes WHERE date = ?",
-                (current_date,),
-            )
+            conn.execute("DELETE FROM etf_holding_changes WHERE date = ?", (current_date,))
             if not changes:
                 return
             conn.executemany(
