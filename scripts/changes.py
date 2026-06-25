@@ -10,6 +10,7 @@ from config import TRACKED_ETFS, get_etf_config
 _VALID_ETF_COUNT = len(TRACKED_ETFS)
 _EPSILON = 1e-9
 _MIN_SCALE_SAMPLE_SIZE = 3
+_MIN_ACTIVE_DELTA_PCT = 1.0
 _SOURCE_PRIORITIES = {
     "moneydj_primary": 40,
     "moneydj_browser": 38,
@@ -59,11 +60,7 @@ def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -
     return row[0] if row and row[0] else None
 
 
-def detect_holding_changes(
-    current_date: Optional[str] = None,
-    previous_date: Optional[str] = None,
-    min_success_ratio: float = 0.8,
-) -> dict:
+def detect_holding_changes(current_date: Optional[str] = None, previous_date: Optional[str] = None, min_success_ratio: float = 0.8) -> dict:
     current_date = current_date or get_latest_valid_date(min_success_ratio)
     if not current_date:
         return _empty_summary(None, None, "no current holdings date")
@@ -283,21 +280,13 @@ def _holding_dates_through(current_date: str) -> list[str]:
 def _load_weight_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
         rows = conn.execute("SELECT etf_code, stock_code, weight_pct, source_type FROM etf_daily_holdings WHERE date = ?", (date_value,)).fetchall()
-    return {
-        (row[0], row[1]): row[2]
-        for row in rows
-        if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
-    }
+    return {(row[0], row[1]): row[2] for row in rows if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])}
 
 
 def _load_shares_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
         rows = conn.execute("SELECT etf_code, stock_code, shares, source_type FROM etf_daily_holdings WHERE date = ?", (date_value,)).fetchall()
-    return {
-        (row[0], row[1]): row[2]
-        for row in rows
-        if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
-    }
+    return {(row[0], row[1]): row[2] for row in rows if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])}
 
 
 def _estimate_etf_scale_factors(current: dict, previous: dict) -> dict:
@@ -323,12 +312,14 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
     shares_delta = _nullable_delta(today_shares, previous_shares)
     expected_shares = _expected_shares(previous_shares, etf_scale_factor)
     active_shares_delta = _active_shares_delta(today_shares, expected_shares, shares_delta)
-    active_shares_delta_pct = _relative_delta_pct(active_shares_delta, expected_shares)
+    active_delta_denominator = expected_shares if expected_shares is not None else previous_shares
+    active_shares_delta_pct = _relative_delta_pct(active_shares_delta, active_delta_denominator)
     is_new_position = 1 if today and not previous else 0
     is_removed_position = 1 if previous and not today else 0
     classification = _classify_position_change(
         shares_delta=shares_delta,
         active_shares_delta=active_shares_delta,
+        active_shares_delta_pct=active_shares_delta_pct,
         weight_delta=weight_delta,
         etf_scale_factor=etf_scale_factor,
         is_new_position=bool(is_new_position),
@@ -339,6 +330,12 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
     rank_delta = previous_rank - today_rank if today_rank is not None and previous_rank is not None else None
     stock_name = today.get("stock_name") if today and today.get("stock_name") else previous.get("stock_name") if previous else None
     source_type = today.get("source_type") if today and today.get("source_type") else previous.get("source_type") if previous else None
+    if etf_scale_factor is None:
+        consecutive_active_add_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="add")
+        consecutive_active_reduce_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="reduce")
+    else:
+        consecutive_active_add_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "add")
+        consecutive_active_reduce_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "reduce")
     return {
         "date": current_date,
         "etf_code": etf_code,
@@ -371,8 +368,8 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
         "shares_delta_10d": _rolling_shares_delta(etf_code, stock_code, current_date, 10, trading_dates, shares_cache),
         "consecutive_add_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="add"),
         "consecutive_reduce_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="reduce"),
-        "consecutive_active_add_days": _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="add"),
-        "consecutive_active_reduce_days": _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="reduce"),
+        "consecutive_active_add_days": consecutive_active_add_days,
+        "consecutive_active_reduce_days": consecutive_active_reduce_days,
         **classification,
         "source_type": source_type,
         "created_at": datetime.now().isoformat(),
@@ -392,7 +389,15 @@ def _active_shares_delta(today_shares, expected_shares, raw_shares_delta):
     return raw_shares_delta
 
 
-def _classify_position_change(*, shares_delta, active_shares_delta, weight_delta, etf_scale_factor, is_new_position: bool, is_removed_position: bool) -> dict:
+def _is_material_active_delta(active_shares_delta, active_shares_delta_pct):
+    if active_shares_delta is None or abs(active_shares_delta) <= _EPSILON:
+        return False
+    if active_shares_delta_pct is None:
+        return True
+    return abs(active_shares_delta_pct) >= _MIN_ACTIVE_DELTA_PCT
+
+
+def _classify_position_change(*, shares_delta, active_shares_delta, active_shares_delta_pct, weight_delta, etf_scale_factor, is_new_position: bool, is_removed_position: bool) -> dict:
     if is_new_position:
         return _classification("new_position", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
     if is_removed_position:
@@ -408,6 +413,11 @@ def _classify_position_change(*, shares_delta, active_shares_delta, weight_delta
             return _classification("flow_scaled_increase", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
         if shares_delta < -_EPSILON:
             return _classification("flow_scaled_decrease", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
+    if not _is_material_active_delta(active_shares_delta, active_shares_delta_pct):
+        if active_shares_delta > _EPSILON:
+            return _classification("immaterial_active_increase", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
+        if active_shares_delta < -_EPSILON:
+            return _classification("immaterial_active_decrease", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
     if active_shares_delta > _EPSILON and weight_delta >= -_EPSILON:
         return _classification("confirmed_active_add", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
     if active_shares_delta > _EPSILON and weight_delta < -_EPSILON:
@@ -437,6 +447,25 @@ def _classification(position_change_type, active_direction, is_active_add, is_ac
         "flow_adjusted_direction": flow_adjusted_direction,
         "confidence": confidence,
     }
+
+
+def _flow_adjusted_consecutive_days(etf_code: str, stock_code: str, previous_date: str, classification: dict, direction: str) -> int:
+    flag = "is_active_add" if direction == "add" else "is_active_reduce"
+    column = "consecutive_active_add_days" if direction == "add" else "consecutive_active_reduce_days"
+    if not classification.get(flag) or classification.get("flow_adjusted_direction") != direction:
+        return 0
+    with db._connect() as conn:
+        row = conn.execute(
+            f"""
+            SELECT {column}, active_direction, flow_adjusted_direction, {flag}
+            FROM etf_holding_changes
+            WHERE date = ? AND etf_code = ? AND stock_code = ?
+            """,
+            (previous_date, etf_code, stock_code),
+        ).fetchone()
+    if row and row[3] and (row[1] == direction or row[2] == direction):
+        return (row[0] or 0) + 1
+    return 1
 
 
 def _issuer_for(etf_code: str) -> str:
