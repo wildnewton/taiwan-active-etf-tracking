@@ -111,6 +111,12 @@ def _active_delta(r):
     return value if value is not None else r.get("shares_delta_1d")
 
 
+def _three_day_fallback_delta(r):
+    if r.get("active_shares_delta_1d") is not None:
+        return None
+    return r.get("shares_delta_3d")
+
+
 def _active_add_event(r):
     if r.get("is_new_position") and _gte(r.get("weight_pct"), 2.0):
         return True
@@ -132,8 +138,8 @@ def _active_reduce_event(r):
 
 
 def _consecutive_active_add_event(r):
-    if r.get("consecutive_active_add_days", 0) >= 3 and _positive(_active_delta(r)):
-        return True
+    if r.get("consecutive_active_add_days", 0) >= 3:
+        return _positive(_active_delta(r)) or _positive(_three_day_fallback_delta(r))
     return (
         not r.get("is_passive_weight_change")
         and r.get("consecutive_active_add_days", 0) == 0
@@ -144,8 +150,8 @@ def _consecutive_active_add_event(r):
 
 
 def _consecutive_active_reduce_event(r):
-    if r.get("consecutive_active_reduce_days", 0) >= 3 and _negative(_active_delta(r)):
-        return True
+    if r.get("consecutive_active_reduce_days", 0) >= 3:
+        return _negative(_active_delta(r)) or _negative(_three_day_fallback_delta(r))
     return (
         not r.get("is_passive_weight_change")
         and r.get("consecutive_active_reduce_days", 0) == 0
@@ -224,10 +230,10 @@ def _single_signals(date, rows):
             strength = "strong" if _gte(r["prev_weight_pct"], 3.0) and r.get("prev_rank") is not None and r["prev_rank"] <= 15 else "medium"
             signals.append(_signal(date, "removed_core_position", strength, -5, r, [r]))
         if _consecutive_active_add_event(r):
-            score = 3 + (1 if _positive(_active_delta(r)) else 0)
+            score = 3 + (1 if (_positive(_active_delta(r)) or _positive(_three_day_fallback_delta(r))) else 0)
             signals.append(_signal(date, "consecutive_add_3d", "medium", score, r, [r]))
         if _consecutive_active_reduce_event(r):
-            score = -3 + (-1 if _negative(_active_delta(r)) else 0)
+            score = -3 + (-1 if (_negative(_active_delta(r)) or _negative(_three_day_fallback_delta(r))) else 0)
             signals.append(_signal(date, "consecutive_reduce_3d", "medium", score, r, [r]))
     return signals
 
