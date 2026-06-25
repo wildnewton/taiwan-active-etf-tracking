@@ -330,8 +330,12 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
     rank_delta = previous_rank - today_rank if today_rank is not None and previous_rank is not None else None
     stock_name = today.get("stock_name") if today and today.get("stock_name") else previous.get("stock_name") if previous else None
     source_type = today.get("source_type") if today and today.get("source_type") else previous.get("source_type") if previous else None
-    consecutive_active_add_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "add")
-    consecutive_active_reduce_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "reduce")
+    if etf_scale_factor is None:
+        consecutive_active_add_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="add")
+        consecutive_active_reduce_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="reduce")
+    else:
+        consecutive_active_add_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "add")
+        consecutive_active_reduce_days = _flow_adjusted_consecutive_days(etf_code, stock_code, previous_date, classification, "reduce")
     return {
         "date": current_date,
         "etf_code": etf_code,
@@ -514,6 +518,25 @@ def _consecutive_direction_days(etf_code: str, stock_code: str, current_date: st
             count += 1
             continue
         if direction == "reduce" and current_weight < previous_weight - _EPSILON:
+            count += 1
+            continue
+        break
+    return count
+
+
+def _consecutive_active_direction_days(etf_code: str, stock_code: str, current_date: str, trading_dates: list[str], shares_cache: dict[str, dict], direction: str) -> int:
+    dates = [date_value for date_value in trading_dates if date_value <= current_date]
+    count = 0
+    key = (etf_code, stock_code)
+    for index in range(len(dates) - 1, 0, -1):
+        current_shares = shares_cache.get(dates[index], {}).get(key)
+        previous_shares = shares_cache.get(dates[index - 1], {}).get(key)
+        if current_shares is None or previous_shares is None:
+            break
+        if direction == "add" and current_shares > previous_shares + _EPSILON:
+            count += 1
+            continue
+        if direction == "reduce" and current_shares < previous_shares - _EPSILON:
             count += 1
             continue
         break
