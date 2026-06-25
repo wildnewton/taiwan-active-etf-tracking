@@ -19,11 +19,6 @@ _SOURCE_PRIORITIES = {
 
 
 def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
-    """Return latest scrape-run date with enough successful ETF scrapes.
-
-    Falls back to the latest holdings date when scrape-run metadata is absent,
-    which keeps unit tests and ad-hoc backfills easy to run.
-    """
     min_successes = _min_successes(min_success_ratio)
     with db._connect() as conn:
         rows = conn.execute(
@@ -37,13 +32,11 @@ def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
         for row in rows:
             if row[1] >= min_successes:
                 return row[0]
-
         row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
     return row[0] if row and row[0] else None
 
 
 def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -> Optional[str]:
-    """Return previous valid scrape-run date before current_date."""
     min_successes = _min_successes(min_success_ratio)
     with db._connect() as conn:
         rows = conn.execute(
@@ -59,7 +52,6 @@ def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -
         for row in rows:
             if row[1] >= min_successes:
                 return row[0]
-
         row = conn.execute(
             "SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?",
             (current_date,),
@@ -72,11 +64,6 @@ def detect_holding_changes(
     previous_date: Optional[str] = None,
     min_success_ratio: float = 0.8,
 ) -> dict:
-    """Compute and persist ETF holding changes for current_date.
-
-    Each ETF/date first picks exactly one canonical source. ETF/date pairs that
-    are not comparable are skipped to avoid false new/removed positions.
-    """
     current_date = current_date or get_latest_valid_date(min_success_ratio)
     if not current_date:
         return _empty_summary(None, None, "no current holdings date")
@@ -94,29 +81,17 @@ def detect_holding_changes(
     if not current and not previous:
         _persist_changes(current_date, [])
         if skipped_etfs:
-            return _empty_summary(
-                current_date,
-                previous_date,
-                "not comparable ETF/date pairs",
-                skipped_etfs=skipped_etfs,
-            )
+            return _empty_summary(current_date, previous_date, "not comparable ETF/date pairs", skipped_etfs=skipped_etfs)
         return _empty_summary(current_date, previous_date, "no holdings rows")
 
     scale_factors = _estimate_etf_scale_factors(current, previous)
     trading_dates = _holding_dates_through(current_date)
     source_cache = {date_value: _select_canonical_sources(date_value) for date_value in trading_dates}
-    weight_cache = {
-        date_value: _load_weight_index(date_value, source_cache.get(date_value, {}))
-        for date_value in trading_dates
-    }
-    shares_cache = {
-        date_value: _load_shares_index(date_value, source_cache.get(date_value, {}))
-        for date_value in trading_dates
-    }
+    weight_cache = {date_value: _load_weight_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
+    shares_cache = {date_value: _load_shares_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
 
     changes = []
-    keys = sorted(set(current) | set(previous))
-    for key in keys:
+    for key in sorted(set(current) | set(previous)):
         etf_code, stock_code = key
         if etf_code not in comparable_etfs:
             continue
@@ -138,12 +113,7 @@ def detect_holding_changes(
     _persist_changes(current_date, changes)
 
     if not changes and skipped_etfs:
-        return _empty_summary(
-            current_date,
-            previous_date,
-            "not comparable ETF/date pairs",
-            skipped_etfs=skipped_etfs,
-        )
+        return _empty_summary(current_date, previous_date, "not comparable ETF/date pairs", skipped_etfs=skipped_etfs)
 
     return {
         "ok": True,
@@ -174,7 +144,6 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) 
 
 
 def _select_canonical_sources(date_value: str) -> dict:
-    """Pick one canonical holdings source for each ETF on a date."""
     with db._connect() as conn:
         rows = conn.execute(
             """
@@ -237,12 +206,7 @@ def _source_quality_score(entry: dict) -> float:
 
 
 def _source_sort_key(entry: dict):
-    return (
-        entry["quality_score"],
-        entry["stock_count"],
-        _SOURCE_PRIORITIES.get(entry["source_type"], 10),
-        entry["source_type"],
-    )
+    return (entry["quality_score"], entry["stock_count"], _SOURCE_PRIORITIES.get(entry["source_type"], 10), entry["source_type"])
 
 
 def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
@@ -266,21 +230,11 @@ def _is_comparable_source_pair(current: dict, previous: dict) -> bool:
     previous_codes = previous.get("stock_codes", set())
     if not current_codes or not previous_codes:
         return False
-
     overlap = len(current_codes & previous_codes) / max(len(current_codes), len(previous_codes))
     current_vs_previous_size = len(current_codes) / len(previous_codes)
-
     if overlap >= 0.90 and current_vs_previous_size >= 0.70:
         return True
-
-    if (
-        current.get("source_family") == previous.get("source_family")
-        and overlap >= 0.50
-        and current_vs_previous_size >= 0.50
-    ):
-        return True
-
-    return False
+    return current.get("source_family") == previous.get("source_family") and overlap >= 0.50 and current_vs_previous_size >= 0.50
 
 
 def _load_ranked_holdings(date_value: str, canonical_sources: dict | None = None, allowed_etfs=None) -> dict:
@@ -322,51 +276,27 @@ def _load_ranked_holdings(date_value: str, canonical_sources: dict | None = None
 
 def _holding_dates_through(current_date: str) -> list[str]:
     with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT DISTINCT date
-            FROM etf_daily_holdings
-            WHERE date <= ?
-            ORDER BY date
-            """,
-            (current_date,),
-        ).fetchall()
+        rows = conn.execute("SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ? ORDER BY date", (current_date,)).fetchall()
     return [row[0] for row in rows]
 
 
 def _load_weight_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT etf_code, stock_code, weight_pct, source_type
-            FROM etf_daily_holdings
-            WHERE date = ?
-            """,
-            (date_value,),
-        ).fetchall()
+        rows = conn.execute("SELECT etf_code, stock_code, weight_pct, source_type FROM etf_daily_holdings WHERE date = ?", (date_value,)).fetchall()
     return {
         (row[0], row[1]): row[2]
         for row in rows
-        if canonical_sources is None
-        or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
+        if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
     }
 
 
 def _load_shares_index(date_value: str, canonical_sources: dict | None = None) -> dict:
     with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT etf_code, stock_code, shares, source_type
-            FROM etf_daily_holdings
-            WHERE date = ?
-            """,
-            (date_value,),
-        ).fetchall()
+        rows = conn.execute("SELECT etf_code, stock_code, shares, source_type FROM etf_daily_holdings WHERE date = ?", (date_value,)).fetchall()
     return {
         (row[0], row[1]): row[2]
         for row in rows
-        if canonical_sources is None
-        or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
+        if canonical_sources is None or (row[0] in canonical_sources and row[3] == canonical_sources[row[0]]["source_type"])
     }
 
 
@@ -381,34 +311,15 @@ def _estimate_etf_scale_factors(current: dict, previous: dict) -> dict:
         if current_shares is None or previous_shares is None or previous_shares <= _EPSILON:
             continue
         ratios_by_etf.setdefault(key[0], []).append(current_shares / previous_shares)
-
-    return {
-        etf_code: median(ratios)
-        for etf_code, ratios in ratios_by_etf.items()
-        if len(ratios) >= _MIN_SCALE_SAMPLE_SIZE
-    }
+    return {etf_code: median(ratios) for etf_code, ratios in ratios_by_etf.items() if len(ratios) >= _MIN_SCALE_SAMPLE_SIZE}
 
 
-def _build_change_row(
-    *,
-    current_date: str,
-    previous_date: str,
-    etf_code: str,
-    stock_code: str,
-    today: Optional[dict],
-    previous: Optional[dict],
-    etf_scale_factor,
-    trading_dates: list[str],
-    weight_cache: dict[str, dict],
-    shares_cache: dict[str, dict],
-) -> dict:
+def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, stock_code: str, today: Optional[dict], previous: Optional[dict], etf_scale_factor, trading_dates: list[str], weight_cache: dict[str, dict], shares_cache: dict[str, dict]) -> dict:
     today_weight = today["weight_pct"] if today else None
     previous_weight = previous["weight_pct"] if previous else None
     today_shares = today["shares"] if today else None
     previous_shares = previous["shares"] if previous else None
-    current_weight_for_delta = today_weight if today_weight is not None else 0.0
-    previous_weight_for_delta = previous_weight if previous_weight is not None else 0.0
-    weight_delta = current_weight_for_delta - previous_weight_for_delta
+    weight_delta = (today_weight if today_weight is not None else 0.0) - (previous_weight if previous_weight is not None else 0.0)
     shares_delta = _nullable_delta(today_shares, previous_shares)
     expected_shares = _expected_shares(previous_shares, etf_scale_factor)
     active_shares_delta = _active_shares_delta(today_shares, expected_shares, shares_delta)
@@ -423,14 +334,11 @@ def _build_change_row(
         is_new_position=bool(is_new_position),
         is_removed_position=bool(is_removed_position),
     )
-
     today_rank = today["rank"] if today else None
     previous_rank = previous["rank"] if previous else None
     rank_delta = previous_rank - today_rank if today_rank is not None and previous_rank is not None else None
-
     stock_name = today.get("stock_name") if today and today.get("stock_name") else previous.get("stock_name") if previous else None
     source_type = today.get("source_type") if today and today.get("source_type") else previous.get("source_type") if previous else None
-
     return {
         "date": current_date,
         "etf_code": etf_code,
@@ -479,37 +387,27 @@ def _expected_shares(previous_shares, etf_scale_factor):
 
 def _active_shares_delta(today_shares, expected_shares, raw_shares_delta):
     if today_shares is not None and expected_shares is not None:
-        return today_shares - expected_shares
+        delta = today_shares - expected_shares
+        return 0.0 if abs(delta) <= _EPSILON else delta
     return raw_shares_delta
 
 
-def _classify_position_change(
-    *,
-    shares_delta,
-    active_shares_delta,
-    weight_delta,
-    etf_scale_factor,
-    is_new_position: bool,
-    is_removed_position: bool,
-) -> dict:
+def _classify_position_change(*, shares_delta, active_shares_delta, weight_delta, etf_scale_factor, is_new_position: bool, is_removed_position: bool) -> dict:
     if is_new_position:
         return _classification("new_position", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
     if is_removed_position:
         return _classification("removed_position", "reduce", 0, 1, 0, 0, 0, "reduce", "high", etf_scale_factor)
-
     if active_shares_delta is None:
         if weight_delta > _EPSILON:
             return _classification("weight_only_increase", "unknown", 0, 0, 0, 0, 0, "unknown", "low", etf_scale_factor)
         if weight_delta < -_EPSILON:
             return _classification("weight_only_decrease", "unknown", 0, 0, 0, 0, 0, "unknown", "low", etf_scale_factor)
         return _classification("unchanged", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
-
     if etf_scale_factor is not None and abs(active_shares_delta) <= _EPSILON and shares_delta is not None:
         if shares_delta > _EPSILON:
             return _classification("flow_scaled_increase", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
         if shares_delta < -_EPSILON:
             return _classification("flow_scaled_decrease", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
-
     if active_shares_delta > _EPSILON and weight_delta >= -_EPSILON:
         return _classification("confirmed_active_add", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
     if active_shares_delta > _EPSILON and weight_delta < -_EPSILON:
@@ -518,7 +416,6 @@ def _classify_position_change(
         return _classification("confirmed_active_reduce", "reduce", 0, 1, 0, 0, 0, "reduce", "high", etf_scale_factor)
     if active_shares_delta < -_EPSILON and weight_delta > _EPSILON:
         return _classification("mixed_reduce_but_weight_up", "reduce", 0, 1, 0, 1, 0, "reduce", "medium", etf_scale_factor)
-
     if weight_delta > _EPSILON:
         return _classification("passive_weight_increase", "none", 0, 0, 1, 0, 0, "none", "low", etf_scale_factor)
     if weight_delta < -_EPSILON:
@@ -526,18 +423,7 @@ def _classify_position_change(
     return _classification("unchanged", "none", 0, 0, 0, 0, 0, "none", "high", etf_scale_factor)
 
 
-def _classification(
-    position_change_type,
-    active_direction,
-    is_active_add,
-    is_active_reduce,
-    is_passive_weight_change,
-    is_mixed_weight_share_signal,
-    is_flow_scaled_change,
-    flow_adjusted_direction,
-    confidence,
-    etf_scale_factor,
-) -> dict:
+def _classification(position_change_type, active_direction, is_active_add, is_active_reduce, is_passive_weight_change, is_mixed_weight_share_signal, is_flow_scaled_change, flow_adjusted_direction, confidence, etf_scale_factor) -> dict:
     active_delta_source = "flow_adjusted_shares" if etf_scale_factor is not None else "shares"
     return {
         "position_change_type": position_change_type,
