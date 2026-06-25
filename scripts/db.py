@@ -23,6 +23,12 @@ _CHANGE_COLUMN_MIGRATIONS = {
     "is_passive_weight_change": "INTEGER DEFAULT 0",
     "is_mixed_weight_share_signal": "INTEGER DEFAULT 0",
     "confidence": "TEXT DEFAULT 'normal'",
+    "etf_scale_factor": "REAL",
+    "expected_shares": "REAL",
+    "active_shares_delta_1d": "REAL",
+    "active_shares_delta_pct_1d": "REAL",
+    "is_flow_scaled_change": "INTEGER DEFAULT 0",
+    "flow_adjusted_direction": "TEXT DEFAULT 'none'",
 }
 
 
@@ -143,6 +149,10 @@ def init_db(db_path):
                 shares REAL,
                 shares_delta_1d REAL,
                 shares_delta_pct_1d REAL,
+                etf_scale_factor REAL,
+                expected_shares REAL,
+                active_shares_delta_1d REAL,
+                active_shares_delta_pct_1d REAL,
 
                 prev_rank INTEGER,
                 rank INTEGER,
@@ -170,6 +180,8 @@ def init_db(db_path):
                 is_active_reduce INTEGER DEFAULT 0,
                 is_passive_weight_change INTEGER DEFAULT 0,
                 is_mixed_weight_share_signal INTEGER DEFAULT 0,
+                is_flow_scaled_change INTEGER DEFAULT 0,
+                flow_adjusted_direction TEXT DEFAULT 'none',
                 confidence TEXT DEFAULT 'normal',
 
                 source_type TEXT,
@@ -261,7 +273,7 @@ def insert_scrape_run(run):
     with _connect() as conn:
         conn.execute(
             """
-            INSERT OR REPLACE INTO etf_scrape_runs (
+            INSERT OR IGNORE INTO etf_scrape_runs (
                 date, etf_code, status, primary_source, primary_success,
                 moneydj_browser_used, official_fallback_used, official_success,
                 rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
