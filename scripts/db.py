@@ -261,7 +261,7 @@ def insert_scrape_run(run):
     with _connect() as conn:
         conn.execute(
             """
-            INSERT OR IGNORE INTO etf_scrape_runs (
+            INSERT OR REPLACE INTO etf_scrape_runs (
                 date, etf_code, status, primary_source, primary_success,
                 moneydj_browser_used, official_fallback_used, official_success,
                 rows_extracted, stock_rows_extracted, non_stock_rows_extracted,

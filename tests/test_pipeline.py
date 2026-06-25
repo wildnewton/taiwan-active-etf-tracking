@@ -189,7 +189,7 @@ def test_scrape_run_no_run_id():
     assert field_names[1] == "etf_code"
 
 
-def test_insert_scrape_run_uses_insert_or_ignore():
+def test_insert_scrape_run_no_duplicates():
     """Inserting the same (date, etf_code) twice should not create duplicates."""
     from datetime import date, datetime
     from models import ScrapeRun
@@ -224,6 +224,70 @@ def test_insert_scrape_run_uses_insert_or_ignore():
         ).fetchone()[0]
 
     assert count == 1
+
+
+def test_insert_scrape_run_replaces_failure_with_success():
+    """A later success should overwrite an earlier failure for the same (date, etf_code).
+
+    This is the real-world scenario: run A fails 00400A (writes failure record),
+    run B succeeds 00400A (should REPLACE the failure with success).
+    """
+    from datetime import date, datetime
+    from models import ScrapeRun
+
+    db.init_db(":memory:")
+
+    failure = ScrapeRun(
+        date=date(2026, 6, 24),
+        etf_code="00400A",
+        status="failed",
+        primary_source="moneydj_primary",
+        primary_success=False,
+        moneydj_browser_used=False,
+        official_fallback_used=False,
+        official_success=False,
+        rows_extracted=0,
+        stock_rows_extracted=0,
+        non_stock_rows_extracted=0,
+        total_weight_all_rows=0.0,
+        total_weight_stock_rows=0.0,
+        source_url="",
+        error="all sources failed",
+        started_at=datetime(2026, 6, 24, 20, 5, 10),
+        finished_at=datetime(2026, 6, 24, 20, 5, 15),
+    )
+
+    success = ScrapeRun(
+        date=date(2026, 6, 24),
+        etf_code="00400A",
+        status="success",
+        primary_source="moneydj_primary",
+        primary_success=True,
+        moneydj_browser_used=False,
+        official_fallback_used=False,
+        official_success=False,
+        rows_extracted=54,
+        stock_rows_extracted=54,
+        non_stock_rows_extracted=0,
+        total_weight_all_rows=93.6,
+        total_weight_stock_rows=93.6,
+        source_url="https://www.moneydj.com/ETF/X/Basic/Basic0007B.xdjhtm?etfid=00400A.TW",
+        error=None,
+        started_at=datetime(2026, 6, 24, 23, 31, 26),
+        finished_at=datetime(2026, 6, 24, 23, 31, 28),
+    )
+
+    db.insert_scrape_run(failure)
+    db.insert_scrape_run(success)  # should REPLACE the failure
+
+    with db._connect() as conn:
+        row = conn.execute(
+            "SELECT status, rows_extracted, error FROM etf_scrape_runs WHERE etf_code = '00400A'"
+        ).fetchone()
+
+    assert row[0] == "success", f"Expected 'success' but got '{row[0]}'"
+    assert row[1] == 54, f"Expected 54 rows but got {row[1]}"
+    assert row[2] is None, f"Expected no error but got '{row[2]}'"
 
 
 def test_run_daily_scrape_uses_data_date_not_today():
