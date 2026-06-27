@@ -1,10 +1,11 @@
 """Nightly pipeline runner for Taiwan Active ETF tracking.
 
 Runs the full workflow:
-  1. Browser-enabled scrape
-  2. Holding change detection
-  3. Manager signal generation
-  4. Daily signal report → timestamped file
+  1. ETF universe discovery/reconciliation
+  2. Browser-enabled scrape
+  3. Holding change detection
+  4. Manager signal generation
+  5. Daily signal report → timestamped file
 
 Usage:
     python3 scripts/nightly_pipeline.py
@@ -16,10 +17,11 @@ from datetime import datetime
 from pathlib import Path
 
 import db
-from pipeline import run_daily_scrape_with_browser
 from changes import detect_holding_changes
-from signals import generate_manager_signals
+from discover_active_etfs import discover_and_reconcile
+from pipeline import run_daily_scrape_with_browser
 from report import generate_signal_report
+from signals import generate_manager_signals
 
 
 def main():
@@ -34,15 +36,37 @@ def main():
         default="reports",
         help="Directory for signal report files (default: reports)",
     )
+    parser.add_argument(
+        "--skip-discovery",
+        action="store_true",
+        help="Skip ETF universe discovery and use the existing DB universe",
+    )
+    parser.add_argument(
+        "--strict-discovery",
+        action="store_true",
+        help="Fail the nightly run if ETF universe discovery fails",
+    )
     args = parser.parse_args()
 
     db.init_db(args.db)
 
-    print("Step 1/4: Running browser-enabled scrape...")
+    if not args.skip_discovery:
+        print("Step 1/5: Discovering active ETF universe...")
+        try:
+            discovery_summary = discover_and_reconcile(args.db)
+            print(f"  Discovery summary: {discovery_summary}")
+        except Exception as exc:
+            print(f"⚠️ ETF universe discovery failed: {exc}")
+            print("  Continuing with existing DB-backed ETF universe")
+            if args.strict_discovery:
+                raise
+    else:
+        print("Step 1/5: Skipping ETF universe discovery")
+
+    print("Step 2/5: Running browser-enabled scrape...")
     scrape_summary = run_daily_scrape_with_browser(args.db)
     print(f"  Scrape summary: {scrape_summary}")
 
-    # Check data completeness
     total_etfs = scrape_summary.get("total_etfs")
     moneydj_success = scrape_summary.get("moneydj_success", 0)
     official_success = scrape_summary.get("official_success", 0)
@@ -60,7 +84,6 @@ def main():
             f"實際取得 {successful_etfs} 檔{failure_text}"
         )
 
-    # Print MoneyDJ validation warnings
     moneydj_warnings = scrape_summary.get("moneydj_warnings", [])
     if moneydj_warnings:
         print(f"\n⚠️ MoneyDJ 驗證失敗 ({len(moneydj_warnings)} ETFs):")
@@ -69,7 +92,6 @@ def main():
             print(f"    Rows: {w['rows']}, Weight: {w['weight']:.2f}%")
             print(f"    URL: {w['url']}")
 
-    # Warn if data date differs from today
     from datetime import date as date_cls
     today_str = date_cls.today().isoformat()
     data_date = scrape_summary.get("data_date")
@@ -77,20 +99,19 @@ def main():
         print(f"\n⚠️ 資料日期 ≠ 今天：資料日期 {data_date}，今天 {today_str}")
         print(f"  所有持倉和 scrape run 都使用資料日期 {data_date}")
 
-    print("Step 2/4: Detecting holding changes...")
+    print("Step 3/5: Detecting holding changes...")
     change_summary = detect_holding_changes()
     print(f"  Change summary: {change_summary}")
 
-    # Warn about skipped ETFs
     skipped_etfs = change_summary.get("skipped_etfs", [])
     if skipped_etfs:
         print(f"⚠️ 變更偵測跳過以下 ETF: {', '.join(skipped_etfs)}")
 
-    print("Step 3/4: Generating manager signals...")
+    print("Step 4/5: Generating manager signals...")
     signal_summary = generate_manager_signals()
     print(f"  Signal summary: {signal_summary}")
 
-    print("Step 4/4: Generating signal report...")
+    print("Step 5/5: Generating signal report...")
     report_text = generate_signal_report()
 
     report_dir = Path(args.report_dir)
