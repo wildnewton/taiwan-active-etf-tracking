@@ -1,10 +1,9 @@
 """Daily report generators for Taiwan Active ETF tracking."""
-import json
 import sqlite3
 from datetime import datetime, timezone, timedelta, date
 
 import db
-from config import TRACKED_ETFS
+from etf_universe import get_active_etf_count
 
 CST = timezone(timedelta(hours=8))
 
@@ -21,29 +20,24 @@ def generate_signal_report(signal_date=None) -> str:
     6. Signal details (if available)
     """
     now = datetime.now(CST)
-    today = date.today()
     data_date = _get_latest_holdings_date()
     prev_date = _get_previous_holdings_date(data_date)
 
     lines = []
-    lines.append(f"📊 台灣主動 ETF 每日報告")
+    lines.append("📊 台灣主動 ETF 每日報告")
     lines.append(f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST | 資料日期: {data_date or 'N/A'}")
     lines.append("")
 
-    # ── 1. Executive Summary ──
     stats = _get_summary_stats(data_date)
-    prev_stats = _get_summary_stats(prev_date) if prev_date else None
 
     lines.append("═══ 摘要 ═══")
     lines.append(f"ETF 數量: {stats['etf_count']} | 股票檔數: {stats['stock_count']} | 非股票資產: {stats['non_stock_count']}")
-    
-    # Change summary
+
     changes = _get_change_summary(data_date)
     if changes:
         lines.append(f"較前日 ({prev_date}): 🟢 {changes['new_count']} 新增 | 🔴 {changes['removed_count']} 移除 | 📈 {changes['increased_count']} 增持 | 📉 {changes['decreased_count']} 減持")
     lines.append("")
 
-    # ── 2. Top Movers ──
     top_movers = _get_top_movers(data_date, limit=10)
     if top_movers:
         lines.append("═══ 🔥 最大變動 (全市場) ═══")
@@ -57,13 +51,11 @@ def generate_signal_report(signal_date=None) -> str:
             )
         lines.append("")
 
-    # ── 3. New / Removed positions ──
     new_positions = _get_new_positions(data_date)
     removed_positions = _get_removed_positions(data_date)
 
     if new_positions:
         lines.append("═══ 🆕 新增部位 ═══")
-        # Group by stock, show which ETFs added
         grouped = _group_positions(new_positions)
         for stock_code, entries in grouped.items():
             etf_list = ", ".join(e["etf_code"] for e in entries)
@@ -82,7 +74,6 @@ def generate_signal_report(signal_date=None) -> str:
             lines.append(f"  ➖ {stock_code} {stock_name:8s} 原 {max_weight:.2f}% ({etf_list})")
         lines.append("")
 
-    # ── 4. Consensus View ──
     consensus = _get_consensus_stocks(data_date, min_etfs=15)
     if consensus:
         lines.append("═══ 📊 高共識持股 (≥15 檔 ETF) ═══")
@@ -98,7 +89,6 @@ def generate_signal_report(signal_date=None) -> str:
             )
         lines.append("")
 
-    # ── 5. Investment Observations ──
     observations = _generate_observations(data_date, prev_date, top_movers, new_positions, removed_positions, consensus)
     if observations:
         lines.append("═══ 💡 投資觀察 ═══")
@@ -106,7 +96,6 @@ def generate_signal_report(signal_date=None) -> str:
             lines.append(f"  • {obs}")
         lines.append("")
 
-    # ── 6. Warnings ──
     warnings = _get_data_warnings(data_date)
     if warnings:
         lines.append("═══ ⚠️ 資料品質警告 ═══")
@@ -114,11 +103,10 @@ def generate_signal_report(signal_date=None) -> str:
             lines.append(f"  {w}")
         lines.append("")
 
-    # ── 7. Signals (if available) ──
     signals = _get_signals(data_date)
     if signals:
         lines.append("═══ 📈 管理人訊號 ═══")
-        for sig in signals[:20]:  # Top 20 only
+        for sig in signals[:20]:
             lines.append(f"  {sig['action_label']}: {sig['stock_code']} {sig['stock_name']} ({sig['signal_type']}, score={sig['signal_score']:+.0f})")
         if len(signals) > 20:
             lines.append(f"  ... 另有 {len(signals) - 20} 個訊號")
@@ -182,7 +170,7 @@ def _get_change_summary(data_date):
     conn.row_factory = _dict_factory
     try:
         row = conn.execute(
-            """SELECT 
+            """SELECT
                 SUM(CASE WHEN is_new_position = 1 THEN 1 ELSE 0 END) as new_count,
                 SUM(CASE WHEN is_removed_position = 1 THEN 1 ELSE 0 END) as removed_count,
                 SUM(CASE WHEN is_new_position = 0 AND is_removed_position = 0 AND weight_delta_1d > 0 THEN 1 ELSE 0 END) as increased_count,
@@ -254,14 +242,10 @@ def _get_removed_positions(data_date):
 
 
 def _group_positions(positions, use_prev=False):
-    """Group positions by stock_code."""
     grouped = {}
-    weight_key = "prev_weight_pct" if use_prev else "weight_pct"
     for p in positions:
         code = p["stock_code"]
-        if code not in grouped:
-            grouped[code] = []
-        grouped[code].append(p)
+        grouped.setdefault(code, []).append(p)
     return grouped
 
 
@@ -287,7 +271,6 @@ def _get_consensus_stocks(data_date, min_etfs=15):
 
 
 def _get_stock_weight_change(stock_code, current_date, prev_date):
-    """Get the total weight change for a stock across all ETFs."""
     conn = db._connect()
     old_factory = conn.row_factory
     conn.row_factory = None
@@ -308,13 +291,10 @@ def _get_stock_weight_change(stock_code, current_date, prev_date):
 
 
 def _generate_observations(data_date, prev_date, top_movers, new_positions, removed_positions, consensus):
-    """Generate investment-relevant observations."""
     observations = []
-
     if not data_date or not prev_date:
         return observations
 
-    # Observation: stocks with biggest consensus shifts
     if consensus:
         gaining_consensus = []
         losing_consensus = []
@@ -336,7 +316,6 @@ def _generate_observations(data_date, prev_date, top_movers, new_positions, remo
             names = ", ".join(f"{s['stock_code']} {s['stock_name']}({d:.1f}%)" for s, d in losing_consensus[:3])
             observations.append(f"高共識減持: {names}")
 
-    # Observation: ETFs with most active changes
     etf_activity = {}
     for m in top_movers:
         code = m["etf_code"]
@@ -347,9 +326,6 @@ def _generate_observations(data_date, prev_date, top_movers, new_positions, remo
             names = ", ".join(f"{code}({cnt}檔)" for code, cnt in most_active)
             observations.append(f"最活躍 ETF: {names}")
 
-    # Observation: sector themes (if multiple stocks in same sector move together)
-    # TODO: add sector classification
-
     return observations
 
 
@@ -359,22 +335,20 @@ def _get_data_warnings(data_date):
     warnings = []
     conn = db._connect()
     old_factory = conn.row_factory
-    conn.row_factory = None  # Reset to default tuple factory
+    conn.row_factory = None
     try:
-        # Check for missing ETFs
         row = conn.execute(
             "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
             (data_date,),
         ).fetchone()
         actual_count = row[0] if row else 0
-        expected_count = len(TRACKED_ETFS)
+        expected_count = get_active_etf_count()
         if actual_count < expected_count:
             warnings.append(
                 f"⚠️ 資料不完整: 預期 {expected_count} 檔 ETF，"
                 f"實際取得 {actual_count} 檔"
             )
 
-        # Check for low-weight ETFs
         rows = conn.execute(
             """SELECT etf_code, SUM(weight_pct) as total_weight
                FROM etf_daily_holdings
@@ -386,7 +360,6 @@ def _get_data_warnings(data_date):
         for r in rows:
             warnings.append(f"⚠️ {r[0]}: 股票權重僅 {r[1]:.1f}%，可能資料不完整")
 
-        # Check for failed scrapes
         try:
             failed = conn.execute(
                 "SELECT etf_code FROM etf_scrape_runs WHERE date = ? AND status = 'failed'",
@@ -423,8 +396,6 @@ def _dict_factory(cursor, row):
     return {column[0]: row[index] for index, column in enumerate(cursor.description)}
 
 
-# ── Legacy report (kept for backward compatibility) ──
-
 SIGNAL_SECTIONS = [
     ("A. Strong consensus adds", lambda row: row["signal_type"] == "consensus_add_3d" and row["signal_strength"] == "strong"),
     ("B. New core positions", lambda row: row["signal_type"] == "new_core_position"),
@@ -440,7 +411,7 @@ def generate_daily_report(summary: dict) -> str:
     """Generate a human-readable daily report from pipeline summary."""
     now = datetime.now(CST)
     lines = [
-        f"📊 台灣主動 ETF 每日持倉報告",
+        "📊 台灣主動 ETF 每日持倉報告",
         f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST",
         "",
         f"**數據日期**: {summary.get('date', 'N/A')}",
