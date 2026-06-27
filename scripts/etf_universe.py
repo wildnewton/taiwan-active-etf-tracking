@@ -1,0 +1,364 @@
+"""DB-backed ETF universe helpers.
+
+`etf_universe` is the operational source of truth for which Taiwan active ETFs
+should be fetched. Rows with `retired = 0` are included in nightly holdings
+scrapes; retired rows are retained for historical lookup but skipped going
+forward.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date, datetime
+from pathlib import Path
+
+import db
+from config import get_moneydj_url
+
+
+SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "seeds" / "etf_universe_seed.json"
+
+
+def _now() -> str:
+    return datetime.now().isoformat()
+
+
+def _today() -> str:
+    return date.today().isoformat()
+
+
+def _dict_factory(cursor, row):
+    return {column[0]: row[index] for index, column in enumerate(cursor.description)}
+
+
+def _ensure_table() -> None:
+    conn = db._connect()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS etf_universe (
+            code TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            issuer TEXT,
+            market TEXT,
+            isin TEXT,
+            retired INTEGER NOT NULL DEFAULT 0,
+            first_seen_date TEXT,
+            last_seen_date TEXT,
+            retired_since TEXT,
+            official_url TEXT,
+            official_method TEXT,
+            official_logic TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def _with_derived_fields(row: dict) -> dict:
+    return {**row, "moneydj_url": get_moneydj_url(row["code"])}
+
+
+def _fetch_raw(code: str) -> dict | None:
+    _ensure_table()
+    conn = db._connect()
+    old = conn.row_factory
+    conn.row_factory = _dict_factory
+    try:
+        return conn.execute(
+            "SELECT * FROM etf_universe WHERE code = ?",
+            (code.upper(),),
+        ).fetchone()
+    finally:
+        conn.row_factory = old
+
+
+def _count_rows() -> int:
+    _ensure_table()
+    with db._connect() as conn:
+        row = conn.execute("SELECT COUNT(*) FROM etf_universe").fetchone()
+    return row[0] if row else 0
+
+
+def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str | None = None) -> int:
+    """Seed known ETF metadata from JSON without overwriting DB edits.
+
+    Returns the number of newly inserted rows. Existing rows are intentionally
+    left untouched so manual DB metadata edits are preserved.
+    """
+    _ensure_table()
+    seed_path = Path(path) if path is not None else SEED_PATH
+    rows = json.loads(seed_path.read_text(encoding="utf-8"))
+    inserted = 0
+    seen_date = seen_date or _today()
+    now = _now()
+
+    with db._connect() as conn:
+        for raw in rows:
+            code = raw["code"].upper()
+            existing = conn.execute(
+                "SELECT 1 FROM etf_universe WHERE code = ?",
+                (code,),
+            ).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                """
+                INSERT INTO etf_universe (
+                    code, name, issuer, market, isin, retired,
+                    first_seen_date, last_seen_date, retired_since,
+                    official_url, official_method, official_logic,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)
+                """,
+                (
+                    code,
+                    raw["name"],
+                    raw.get("issuer"),
+                    raw.get("market"),
+                    raw.get("isin"),
+                    seen_date,
+                    seen_date,
+                    raw.get("official_url"),
+                    raw.get("official_method"),
+                    raw.get("official_logic"),
+                    now,
+                    now,
+                ),
+            )
+            inserted += 1
+    return inserted
+
+
+def ensure_seeded() -> int:
+    """Seed the universe only when it is currently empty."""
+    if _count_rows() > 0:
+        return 0
+    return seed_etf_universe_from_file()
+
+
+def get_active_etfs() -> list[dict]:
+    ensure_seeded()
+    conn = db._connect()
+    old = conn.row_factory
+    conn.row_factory = _dict_factory
+    try:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM etf_universe
+            WHERE retired = 0
+            ORDER BY code
+            """
+        ).fetchall()
+    finally:
+        conn.row_factory = old
+    return [_with_derived_fields(row) for row in rows]
+
+
+def get_active_etf_count() -> int:
+    ensure_seeded()
+    with db._connect() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM etf_universe WHERE retired = 0"
+        ).fetchone()
+    return row[0] if row else 0
+
+
+def get_etf_config(code: str) -> dict:
+    ensure_seeded()
+    row = _fetch_raw(code)
+    if row is None:
+        raise KeyError(f"Unknown ETF code: {code}")
+    return _with_derived_fields(row)
+
+
+def upsert_etf(row: dict) -> None:
+    """Insert or update one ETF universe row, preserving omitted fields."""
+    _ensure_table()
+    code = row["code"].upper()
+    existing = _fetch_raw(code)
+    now = _now()
+
+    if existing:
+        merged = {**existing, **row, "code": code, "updated_at": now}
+    else:
+        merged = {
+            "code": code,
+            "name": row.get("name") or code,
+            "issuer": row.get("issuer"),
+            "market": row.get("market"),
+            "isin": row.get("isin"),
+            "retired": int(row.get("retired", 0)),
+            "first_seen_date": row.get("first_seen_date"),
+            "last_seen_date": row.get("last_seen_date"),
+            "retired_since": row.get("retired_since"),
+            "official_url": row.get("official_url"),
+            "official_method": row.get("official_method"),
+            "official_logic": row.get("official_logic"),
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_universe (
+                code, name, issuer, market, isin, retired,
+                first_seen_date, last_seen_date, retired_since,
+                official_url, official_method, official_logic,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                merged["code"],
+                merged["name"],
+                merged.get("issuer"),
+                merged.get("market"),
+                merged.get("isin"),
+                int(merged.get("retired") or 0),
+                merged.get("first_seen_date"),
+                merged.get("last_seen_date"),
+                merged.get("retired_since"),
+                merged.get("official_url"),
+                merged.get("official_method"),
+                merged.get("official_logic"),
+                merged.get("created_at") or now,
+                merged.get("updated_at") or now,
+            ),
+        )
+
+
+def retire_etf(code: str, retired_since: str | None = None, reason: str | None = None) -> None:
+    ensure_seeded()
+    retired_since = retired_since or _today()
+    now = _now()
+    with db._connect() as conn:
+        conn.execute(
+            """
+            UPDATE etf_universe
+            SET retired = 1,
+                retired_since = COALESCE(retired_since, ?),
+                updated_at = ?
+            WHERE code = ?
+            """,
+            (retired_since, now, code.upper()),
+        )
+
+
+def _reactivate_etf(code: str, seen_date: str) -> None:
+    now = _now()
+    with db._connect() as conn:
+        conn.execute(
+            """
+            UPDATE etf_universe
+            SET retired = 0,
+                retired_since = NULL,
+                last_seen_date = ?,
+                updated_at = ?
+            WHERE code = ?
+            """,
+            (seen_date, now, code.upper()),
+        )
+
+
+def reconcile_discovered_universe(discovered_rows: list[dict], seen_date: str | None = None) -> dict:
+    """Reconcile exchange-discovered active ETFs into etf_universe.
+
+    Discovery rows are expected to represent currently listed active A-class ETFs.
+    Missing active rows are marked retired; existing manual official metadata is
+    preserved; new rows are inserted with official fields unset.
+    """
+    ensure_seeded()
+    seen_date = seen_date or _today()
+    discovered = {row["code"].upper(): {**row, "code": row["code"].upper()} for row in discovered_rows}
+    inserted: list[str] = []
+    reactivated: list[str] = []
+    updated: list[str] = []
+    retired: list[str] = []
+    now = _now()
+
+    with db._connect() as conn:
+        current_rows = conn.execute(
+            "SELECT code, retired FROM etf_universe"
+        ).fetchall()
+        known = {row[0]: row[1] for row in current_rows}
+
+        for code, raw in sorted(discovered.items()):
+            if code not in known:
+                conn.execute(
+                    """
+                    INSERT INTO etf_universe (
+                        code, name, issuer, market, isin, retired,
+                        first_seen_date, last_seen_date, retired_since,
+                        official_url, official_method, official_logic,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
+                    """,
+                    (
+                        code,
+                        raw.get("name") or code,
+                        raw.get("issuer"),
+                        raw.get("market"),
+                        raw.get("isin"),
+                        seen_date,
+                        seen_date,
+                        now,
+                        now,
+                    ),
+                )
+                inserted.append(code)
+                continue
+
+            if known[code]:
+                conn.execute(
+                    """
+                    UPDATE etf_universe
+                    SET retired = 0,
+                        retired_since = NULL,
+                        last_seen_date = ?,
+                        market = COALESCE(?, market),
+                        isin = COALESCE(?, isin),
+                        updated_at = ?
+                    WHERE code = ?
+                    """,
+                    (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                )
+                reactivated.append(code)
+            else:
+                conn.execute(
+                    """
+                    UPDATE etf_universe
+                    SET last_seen_date = ?,
+                        market = COALESCE(?, market),
+                        isin = COALESCE(?, isin),
+                        updated_at = ?
+                    WHERE code = ?
+                    """,
+                    (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                )
+                updated.append(code)
+
+        discovered_codes = set(discovered)
+        for code, was_retired in sorted(known.items()):
+            if was_retired:
+                continue
+            if code not in discovered_codes:
+                conn.execute(
+                    """
+                    UPDATE etf_universe
+                    SET retired = 1,
+                        retired_since = COALESCE(retired_since, ?),
+                        updated_at = ?
+                    WHERE code = ?
+                    """,
+                    (seen_date, now, code),
+                )
+                retired.append(code)
+
+    return {
+        "inserted": inserted,
+        "reactivated": reactivated,
+        "updated": updated,
+        "retired": retired,
+        "active_total": get_active_etf_count(),
+    }
