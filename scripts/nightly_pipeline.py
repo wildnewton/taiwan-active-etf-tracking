@@ -42,6 +42,24 @@ def main():
     scrape_summary = run_daily_scrape_with_browser(args.db)
     print(f"  Scrape summary: {scrape_summary}")
 
+    # Check data completeness
+    total_etfs = scrape_summary.get("total_etfs")
+    moneydj_success = scrape_summary.get("moneydj_success", 0)
+    official_success = scrape_summary.get("official_success", 0)
+    successful_etfs = moneydj_success + official_success
+    if total_etfs is not None and successful_etfs < total_etfs:
+        failures = scrape_summary.get("failures", [])
+        failed_codes = [
+            f.get("etf_code")
+            for f in failures
+            if isinstance(f, dict) and f.get("etf_code")
+        ]
+        failure_text = f"（失敗: {', '.join(failed_codes)}）" if failed_codes else ""
+        print(
+            f"⚠️ 資料不完整: 預期 {total_etfs} 檔 ETF，"
+            f"實際取得 {successful_etfs} 檔{failure_text}"
+        )
+
     # Print MoneyDJ validation warnings
     moneydj_warnings = scrape_summary.get("moneydj_warnings", [])
     if moneydj_warnings:
@@ -62,6 +80,11 @@ def main():
     print("Step 2/4: Detecting holding changes...")
     change_summary = detect_holding_changes()
     print(f"  Change summary: {change_summary}")
+
+    # Warn about skipped ETFs
+    skipped_etfs = change_summary.get("skipped_etfs", [])
+    if skipped_etfs:
+        print(f"⚠️ 變更偵測跳過以下 ETF: {', '.join(skipped_etfs)}")
 
     print("Step 3/4: Generating manager signals...")
     signal_summary = generate_manager_signals()

@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timezone, timedelta, date
 
 import db
+from config import TRACKED_ETFS
 
 CST = timezone(timedelta(hours=8))
 
@@ -360,6 +361,19 @@ def _get_data_warnings(data_date):
     old_factory = conn.row_factory
     conn.row_factory = None  # Reset to default tuple factory
     try:
+        # Check for missing ETFs
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
+            (data_date,),
+        ).fetchone()
+        actual_count = row[0] if row else 0
+        expected_count = len(TRACKED_ETFS)
+        if actual_count < expected_count:
+            warnings.append(
+                f"⚠️ 資料不完整: 預期 {expected_count} 檔 ETF，"
+                f"實際取得 {actual_count} 檔"
+            )
+
         # Check for low-weight ETFs
         rows = conn.execute(
             """SELECT etf_code, SUM(weight_pct) as total_weight

@@ -224,7 +224,7 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
                 pass
 
     page.on("response", on_response)
-    await page.goto(source_url, wait_until="networkidle", timeout=30000)
+    await page.goto(source_url, wait_until="networkidle", timeout=60000)
     await page.wait_for_timeout(3000)
     page.remove_listener("response", on_response)
 
@@ -266,7 +266,7 @@ async def scrape_mega_playwright(etf_code: str, page) -> dict:
     config = get_official_config(etf_code)
     source_url = config["url"]
 
-    await page.goto(source_url, wait_until="networkidle", timeout=30000)
+    await page.goto(source_url, wait_until="networkidle", timeout=60000)
     await page.wait_for_timeout(3000)
     body_text = await page.locator("body").inner_text()
 
@@ -279,8 +279,7 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
     config = get_official_config(etf_code)
     source_url = config["url"]
 
-    await page.goto(source_url, wait_until="networkidle", timeout=30000)
-    await page.wait_for_timeout(3000)
+    await page.goto(source_url, wait_until="networkidle", timeout=60000)
 
     tables = await page.query_selector_all("table")
     table_data = []

@@ -167,3 +167,40 @@ def test_generate_signal_report_handles_no_signals():
     assert "📊 台灣主動 ETF 每日報告" in report
     # No signals section when there are none
     assert "管理人訊號" not in report
+
+
+def test_report_warns_when_etfs_missing():
+    """⚠️ Report should warn when holdings have < 19 ETFs for latest date."""
+    db.init_db(":memory:")
+    ensure_signal_table()
+
+    # Insert holdings for only 13 ETFs (simulating incomplete scrape)
+    for i in range(400, 413):
+        etf = f"00{i}A"
+        insert_holding("2026-06-26", etf, str(2300 + i), f"Stock{i}", 5.0)
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "⚠️" in report, f"Expected ⚠️ warning in report:\n{report}"
+    assert "13" in report, f"Expected 13 ETFs mentioned:\n{report}"
+    assert "19" in report, f"Expected 19 total mentioned:\n{report}"
+    assert "缺失" in report or "不完整" in report or "預期" in report
+
+
+def test_report_no_warning_when_all_etfs_present():
+    """No missing-ETF warning when all 19 ETFs have holdings data."""
+    db.init_db(":memory:")
+    ensure_signal_table()
+
+    # Insert holdings for all 19 ETFs with realistic weights
+    codes = ["00400A", "00401A", "00403A", "00404A", "00405A",
+             "00406A", "00980A", "00981A", "00982A", "00984A",
+             "00985A", "00987A", "00991A", "00992A", "00993A",
+             "00994A", "00995A", "00996A", "00999A"]
+    for i, etf in enumerate(codes):
+        insert_holding("2026-06-26", etf, str(2300 + i), f"Stock{i}", 85.0)
+
+    report = generate_signal_report("2026-06-26")
+
+    # Should NOT have the missing-ETF warning
+    assert "預期" not in report, f"Unexpected missing-ETF warning:\n{report}"

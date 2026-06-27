@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, patch
 
-from scraper import scrape_holdings, scrape_holdings_with_browser
+from scraper import scrape_holdings, scrape_holdings_with_browser, _MONEYDJ_RETRY_DELAYS
 
 
 def make_result(ok=True, source_type="moneydj_primary", reason="ok"):
@@ -17,39 +17,70 @@ def make_result(ok=True, source_type="moneydj_primary", reason="ok"):
     }
 
 
+def test_retry_delays_fibonacci_times_two():
+    """_MONEYDJ_RETRY_DELAYS follows Fibonacci * 2 pattern: 2,2,4,6,10,16,26,42,68."""
+    assert len(_MONEYDJ_RETRY_DELAYS) == 9  # 10 attempts = 9 gaps
+    assert _MONEYDJ_RETRY_DELAYS == [2, 2, 4, 6, 10, 16, 26, 42, 68]
+
+
 def test_scrape_holdings_moneydj_primary():
+    """MoneyDJ succeeds first try → returns immediately, no retry."""
     moneydj_result = make_result(ok=True, source_type="moneydj_primary")
 
     with patch("scraper.scrape_moneydj", return_value=moneydj_result) as moneydj, \
-        patch("scraper.scrape_official_static") as official:
+        patch("scraper.scrape_official_static") as official, \
+        patch("time.sleep") as sleep:
         result = scrape_holdings("00980A")
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
     moneydj.assert_called_once_with("00980A")
     official.assert_not_called()
+    sleep.assert_not_called()
 
 
-def test_scrape_holdings_moneydj_fails_tries_official():
-    moneydj_result = make_result(ok=False, source_type="moneydj_primary", reason="blocked")
+def test_scrape_holdings_retry_then_succeeds():
+    """MoneyDJ fails twice → succeeds on 3rd call. No official needed."""
+    fail = make_result(ok=False, source_type="moneydj_primary", reason="timeout")
+    success = make_result(ok=True, source_type="moneydj_primary")
+
+    with patch("scraper.scrape_moneydj", side_effect=[fail, fail, success]) as moneydj, \
+        patch("scraper.scrape_official_static") as official, \
+        patch("time.sleep") as sleep:
+        result = scrape_holdings("00980A")
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert moneydj.call_count == 3
+    official.assert_not_called()
+    assert sleep.call_count == 2
+
+
+def test_scrape_holdings_retry_all_fail_goes_to_official():
+    """MoneyDJ retries 10x then all fail → falls to official success."""
+    fail = make_result(ok=False, source_type="moneydj_primary", reason="timeout")
     official_result = make_result(ok=True, source_type="official_fallback")
 
-    with patch("scraper.scrape_moneydj", return_value=moneydj_result) as moneydj, \
-        patch("scraper.scrape_official_static", return_value=official_result) as official:
+    with patch("scraper.scrape_moneydj", side_effect=[fail] * 10) as moneydj, \
+        patch("scraper.scrape_official_static", return_value=official_result) as official, \
+        patch("time.sleep") as sleep:
         result = scrape_holdings("00980A")
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"
-    moneydj.assert_called_once_with("00980A")
+    assert moneydj.call_count == 10
     official.assert_called_once_with("00980A")
+    assert sleep.call_count == 9
 
 
-def test_scrape_holdings_all_fail():
-    moneydj_result = make_result(ok=False, source_type="moneydj_primary", reason="blocked")
+def test_scrape_holdings_retry_all_fail_goes_to_failed():
+    """MoneyDJ and official both fail after retries → FAILED_RESULT."""
+    fail = make_result(ok=False, source_type="moneydj_primary", reason="timeout")
     official_result = make_result(ok=False, source_type="official_fallback", reason="empty")
 
-    with patch("scraper.scrape_moneydj", return_value=moneydj_result), \
-        patch("scraper.scrape_official_static", return_value=official_result):
+    with patch("scraper.scrape_moneydj", side_effect=[fail] * 10), \
+        patch("scraper.scrape_official_static", return_value=official_result), \
+        patch("time.sleep"):
         result = scrape_holdings("00980A")
 
     assert result == {
@@ -65,17 +96,68 @@ def test_scrape_holdings_all_fail():
     }
 
 
-def test_scrape_holdings_returns_correct_source_type():
+# ── Browser path retry tests ──
+# scrape_holdings_with_browser is a sync wrapper around the async function.
+# _run_async will run the real async function; we mock the scrapers it calls.
+
+def test_scrape_with_browser_retry_then_moneydj_primary():
+    """Browser path: MoneyDJ retry then succeeds → moneydj_primary."""
     page = AsyncMock()
-    moneydj_result = make_result(ok=False, source_type="moneydj_primary", reason="blocked")
+    fail = make_result(ok=False, source_type="moneydj_primary", reason="timeout")
+    success = make_result(ok=True, source_type="moneydj_primary")
+
+    with patch("scraper.scrape_moneydj", side_effect=[fail, fail, success]) as moneydj, \
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock()) as browser, \
+        patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
+        patch("scraper.scrape_official_static") as official_static, \
+        patch("time.sleep") as sleep:
+        result = scrape_holdings_with_browser("00980A", page)
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert moneydj.call_count == 3
+    browser.assert_not_called()
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert sleep.call_count == 2
+
+
+def test_scrape_with_browser_retry_all_fail_then_browser():
+    """Browser path: MoneyDJ all 10 retries fail → browser fallback succeeds."""
+    page = AsyncMock()
+    fail = make_result(ok=False, source_type="moneydj_primary", reason="timeout")
     browser_result = make_result(ok=True, source_type="moneydj_browser")
 
-    with patch("scraper.scrape_moneydj", return_value=moneydj_result), \
+    with patch("scraper.scrape_moneydj", side_effect=[fail] * 10) as moneydj, \
         patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)) as browser, \
-        patch("scraper.scrape_official_static") as official:
+        patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
+        patch("scraper.scrape_official_static") as official_static, \
+        patch("time.sleep") as sleep:
         result = scrape_holdings_with_browser("00980A", page)
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_browser"
+    assert moneydj.call_count == 10
     browser.assert_awaited_once_with("00980A", page)
-    official.assert_not_called()
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert sleep.call_count == 9
+
+
+def test_scrape_with_browser_first_try_immediate():
+    """Browser path: MoneyDJ succeeds first try → no retry, no fallback."""
+    page = AsyncMock()
+    success = make_result(ok=True, source_type="moneydj_primary")
+
+    with patch("scraper.scrape_moneydj", return_value=success) as moneydj, \
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock()) as browser, \
+        patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
+        patch("scraper.scrape_official_static") as official_static:
+        result = scrape_holdings_with_browser("00980A", page)
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    moneydj.assert_called_once_with("00980A")
+    browser.assert_not_called()
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
