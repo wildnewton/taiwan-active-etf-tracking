@@ -28,10 +28,11 @@ EXPECTED_CODES = {
 }
 
 
-def test_config_no_longer_exports_tracked_etfs():
+def test_config_tracked_etfs_is_not_a_static_python_list():
     config = importlib.import_module("config")
 
-    assert not hasattr(config, "TRACKED_ETFS")
+    assert not isinstance(config.TRACKED_ETFS, list)
+    assert len(config.TRACKED_ETFS) == 19
 
 
 def test_init_db_creates_etf_universe_table():
@@ -156,8 +157,9 @@ def test_reconcile_discovery_reactivates_retired_etf():
     assert "00980A" in active_codes
 
 
-def test_pipeline_fetches_only_not_retired_etfs_from_db():
-    db.init_db(":memory:")
+def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
+    db_path = str(tmp_path / "universe.sqlite")
+    db.init_db(db_path)
     from etf_universe import retire_etf, seed_etf_universe_from_file
     from pipeline import run_daily_scrape
 
@@ -182,7 +184,7 @@ def test_pipeline_fetches_only_not_retired_etfs_from_db():
     import pipeline
 
     pipeline.scrape_holdings = fake_scrape
-    summary = run_daily_scrape(":memory:")
+    summary = run_daily_scrape(db_path)
 
     assert "00980A" not in seen_codes
     assert len(seen_codes) == 18
