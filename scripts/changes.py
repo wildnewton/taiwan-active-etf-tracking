@@ -4,10 +4,9 @@ from statistics import median
 from typing import Optional
 
 import db
-from config import TRACKED_ETFS, get_etf_config
+from etf_universe import get_active_etf_count, get_etf_config
 
 
-_VALID_ETF_COUNT = len(TRACKED_ETFS)
 _EPSILON = 1e-9
 _MIN_SCALE_SAMPLE_SIZE = 3
 _MIN_ACTIVE_DELTA_PCT = 1.0
@@ -124,7 +123,7 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
 
 
 def _min_successes(min_success_ratio: float) -> int:
-    return ceil(_VALID_ETF_COUNT * min_success_ratio)
+    return ceil(get_active_etf_count() * min_success_ratio)
 
 
 def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) -> dict:
@@ -471,7 +470,7 @@ def _flow_adjusted_consecutive_days(etf_code: str, stock_code: str, previous_dat
 def _issuer_for(etf_code: str) -> str:
     try:
         return get_etf_config(etf_code)["issuer"]
-    except ValueError:
+    except KeyError:
         return ""
 
 
