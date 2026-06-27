@@ -28,11 +28,10 @@ EXPECTED_CODES = {
 }
 
 
-def test_config_tracked_etfs_is_not_a_static_python_list():
+def test_config_no_longer_exports_tracked_etfs():
     config = importlib.import_module("config")
 
-    assert not isinstance(config.TRACKED_ETFS, list)
-    assert len(config.TRACKED_ETFS) == 19
+    assert not hasattr(config, "TRACKED_ETFS")
 
 
 def test_init_db_creates_etf_universe_table():
