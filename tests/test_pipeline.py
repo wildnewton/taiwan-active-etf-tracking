@@ -4,8 +4,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import db
-from config import TRACKED_ETFS
+from etf_universe import get_active_etfs
 from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
+
+
+def _active_codes():
+    return [etf["code"] for etf in get_active_etfs()]
 
 
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
@@ -105,7 +109,7 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
         summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
 
     assert scraper.await_count == 19
-    assert [call.args[0] for call in scraper.await_args_list] == [etf["code"] for etf in TRACKED_ETFS]
+    assert [call.args[0] for call in scraper.await_args_list] == _active_codes()
     assert {call.args[1] for call in scraper.await_args_list} == {page}
     assert summary["total_etfs"] == 19
     assert summary["moneydj_success"] == 19
@@ -120,7 +124,7 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
 
 
 def test_run_daily_scrape_some_fail():
-    failed_codes = {TRACKED_ETFS[0]["code"], TRACKED_ETFS[1]["code"]}
+    failed_codes = set(_active_codes()[:2])
 
     def fake_scrape(code):
         if code in failed_codes:
@@ -299,7 +303,6 @@ def test_run_daily_scrape_uses_data_date_not_today():
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
-    # make_row uses date "2026/06/22", so summary should reflect that (ISO format)
     assert summary["date"] == "2026-06-22", (
         f"Expected data date '2026-06-22' but got '{summary['date']}'. "
         "Pipeline should use 資料日期 from scraper, not date.today()."
@@ -337,7 +340,6 @@ def test_run_daily_scrape_warns_when_data_date_differs_from_today():
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
-    # Data is from 2026/06/22 but today is different
     assert "data_date" in summary, (
         "Summary should include 'data_date' field showing the 資料日期 from scraper."
     )
