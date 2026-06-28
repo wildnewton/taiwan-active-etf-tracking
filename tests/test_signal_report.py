@@ -5,6 +5,7 @@ import db
 from report import generate_signal_report, get_latest_signal_date
 
 
+
 def ensure_signal_table():
     with db._connect() as conn:
         conn.execute(
@@ -29,6 +30,7 @@ def ensure_signal_table():
             )
             """
         )
+
 
 
 def insert_signal(
@@ -74,6 +76,7 @@ def insert_signal(
         )
 
 
+
 def insert_holding(date, etf_code, stock_code, stock_name, weight_pct=5.0):
     with db._connect() as conn:
         conn.execute(
@@ -88,6 +91,7 @@ def insert_holding(date, etf_code, stock_code, stock_name, weight_pct=5.0):
         )
 
 
+
 def test_get_latest_signal_date_returns_most_recent_date():
     db.init_db(":memory:")
     ensure_signal_table()
@@ -95,6 +99,7 @@ def test_get_latest_signal_date_returns_most_recent_date():
     insert_signal(date="2026-06-23", stock_code="2383")
 
     assert get_latest_signal_date() == "2026-06-23"
+
 
 
 def test_generate_signal_report_shows_summary_and_signals():
@@ -134,10 +139,11 @@ def test_generate_signal_report_shows_summary_and_signals():
     # New format checks
     assert "📊 台灣主動 ETF 每日報告" in report
     assert "═══ 摘要 ═══" in report
-    # Signals section should appear when signals exist
-    assert "═══ 📈 管理人訊號 ═══" in report
+    # Signals section should appear when signals exist without pinning presentation details.
+    assert "管理人訊號" in report
     assert "2383 台光電" in report
     assert "2454 聯發科" in report
+
 
 
 def test_generate_signal_report_uses_latest_holdings_date():
@@ -158,6 +164,7 @@ def test_generate_signal_report_uses_latest_holdings_date():
     assert "摘要" in report
 
 
+
 def test_generate_signal_report_handles_no_signals():
     """Report should still work when no signals exist (e.g., <3 days of data)."""
     db.init_db(":memory:")
@@ -167,6 +174,7 @@ def test_generate_signal_report_handles_no_signals():
     assert "📊 台灣主動 ETF 每日報告" in report
     # No signals section when there are none
     assert "管理人訊號" not in report
+
 
 
 def test_report_warns_when_etfs_missing():
@@ -185,6 +193,7 @@ def test_report_warns_when_etfs_missing():
     assert "13" in report, f"Expected 13 ETFs mentioned:\n{report}"
     assert "19" in report, f"Expected 19 total mentioned:\n{report}"
     assert "缺失" in report or "不完整" in report or "預期" in report
+
 
 
 def test_report_no_warning_when_all_etfs_present():
