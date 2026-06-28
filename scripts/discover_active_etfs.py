@@ -87,6 +87,9 @@ def discover_active_etfs_with_status(sources: list[dict[str, str]] | None = None
         except (RuntimeError, requests.RequestException) as exc:
             failed_markets.append({"market": market, "reason": str(exc)})
             continue
+        if not source_rows:
+            failed_markets.append({"market": market, "reason": "empty source result"})
+            continue
         securities.extend(source_rows)
         completed_markets.append(market)
     discovered = [security.as_dict() for security in securities if is_primary_active_etf(security)]
