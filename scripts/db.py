@@ -38,6 +38,7 @@ _ETF_UNIVERSE_COLUMN_MIGRATIONS = {
     "first_seen_date": "TEXT",
     "last_seen_date": "TEXT",
     "retired_since": "TEXT",
+    "pending_retirement_since": "TEXT",
     "official_url": "TEXT",
     "official_method": "TEXT",
     "official_logic": "TEXT",
@@ -82,7 +83,7 @@ def init_db(db_path):
         conn = sqlite3.connect(_DB_PATH)
 
     with conn:
-        conn.execute("CREATE TABLE IF NOT EXISTS etf_universe (code TEXT PRIMARY KEY, name TEXT NOT NULL, issuer TEXT, market TEXT, isin TEXT, retired INTEGER NOT NULL DEFAULT 0, first_seen_date TEXT, last_seen_date TEXT, retired_since TEXT, official_url TEXT, official_method TEXT, official_logic TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        conn.execute("CREATE TABLE IF NOT EXISTS etf_universe (code TEXT PRIMARY KEY, name TEXT NOT NULL, issuer TEXT, market TEXT, isin TEXT, retired INTEGER NOT NULL DEFAULT 0, first_seen_date TEXT, last_seen_date TEXT, retired_since TEXT, pending_retirement_since TEXT, official_url TEXT, official_method TEXT, official_logic TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
         _ensure_etf_universe_columns(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_holdings (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, shares REAL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code, source_type))")
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_non_stock_assets (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, asset_name, source_type))")
