@@ -70,7 +70,10 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
 
     current_sources = _select_canonical_sources(current_date)
     previous_sources = _select_canonical_sources(previous_date)
-    comparable_etfs, skipped_etfs = _comparable_etfs(current_sources, previous_sources)
+    diagnostics = _source_pair_diagnostics(current_date, previous_date, current_sources, previous_sources)
+    _persist_change_diagnostics(current_date, previous_date, diagnostics)
+    comparable_etfs = {row["etf_code"] for row in diagnostics if row["status"] == "included"}
+    skipped_etfs = [row["etf_code"] for row in diagnostics if row["status"] == "skipped"]
 
     current = _load_ranked_holdings(current_date, current_sources, comparable_etfs)
     previous = _load_ranked_holdings(previous_date, previous_sources, comparable_etfs)
@@ -206,28 +209,77 @@ def _source_sort_key(entry: dict):
 
 
 def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
-    comparable = set()
-    skipped = []
-    for etf_code in sorted(set(current_sources) | set(previous_sources)):
-        current = current_sources.get(etf_code)
-        previous = previous_sources.get(etf_code)
-        if not current or not previous:
-            skipped.append(etf_code)
-            continue
-        if _is_comparable_source_pair(current, previous):
-            comparable.add(etf_code)
-        else:
-            skipped.append(etf_code)
+    diagnostics = _source_pair_diagnostics(None, None, current_sources, previous_sources)
+    comparable = {row["etf_code"] for row in diagnostics if row["status"] == "included"}
+    skipped = [row["etf_code"] for row in diagnostics if row["status"] == "skipped"]
     return comparable, skipped
 
 
-def _is_comparable_source_pair(current: dict, previous: dict) -> bool:
+def _source_pair_diagnostics(current_date, previous_date, current_sources: dict, previous_sources: dict) -> list[dict]:
+    rows = []
+    now = datetime.now().isoformat()
+    for etf_code in sorted(set(current_sources) | set(previous_sources)):
+        current = current_sources.get(etf_code)
+        previous = previous_sources.get(etf_code)
+        overlap_ratio, size_ratio = _source_pair_ratios(current, previous)
+        if not current:
+            status, reason = "skipped", "missing_current_source"
+        elif not previous:
+            status, reason = "skipped", "missing_previous_source"
+        elif _is_comparable_source_pair(current, previous):
+            status, reason = "included", "comparable_source_pair"
+        else:
+            status, reason = "skipped", "incompatible_source_pair"
+        rows.append(_diagnostic_row(current_date, previous_date, etf_code, current, previous, status, reason, overlap_ratio, size_ratio, now))
+    return rows
+
+
+def _diagnostic_row(current_date, previous_date, etf_code, current, previous, status, reason, overlap_ratio, size_ratio, created_at):
+    return {
+        "date": current_date,
+        "prev_date": previous_date,
+        "etf_code": etf_code,
+        "status": status,
+        "reason": reason,
+        "current_source_type": _source_attr(current, "source_type"),
+        "previous_source_type": _source_attr(previous, "source_type"),
+        "current_source_family": _source_attr(current, "source_family"),
+        "previous_source_family": _source_attr(previous, "source_family"),
+        "current_stock_count": _source_attr(current, "stock_count"),
+        "previous_stock_count": _source_attr(previous, "stock_count"),
+        "current_total_weight": _source_attr(current, "total_weight"),
+        "previous_total_weight": _source_attr(previous, "total_weight"),
+        "current_shares_coverage": _source_attr(current, "shares_coverage"),
+        "previous_shares_coverage": _source_attr(previous, "shares_coverage"),
+        "current_quality_score": _source_attr(current, "quality_score"),
+        "previous_quality_score": _source_attr(previous, "quality_score"),
+        "overlap_ratio": overlap_ratio,
+        "size_ratio": size_ratio,
+        "created_at": created_at,
+    }
+
+
+def _source_attr(source, key):
+    return source.get(key) if source else None
+
+
+def _source_pair_ratios(current: dict | None, previous: dict | None) -> tuple[float | None, float | None]:
+    if not current or not previous:
+        return None, None
     current_codes = current.get("stock_codes", set())
     previous_codes = previous.get("stock_codes", set())
     if not current_codes or not previous_codes:
+        return None, None
+    return (
+        len(current_codes & previous_codes) / max(len(current_codes), len(previous_codes)),
+        len(current_codes) / len(previous_codes),
+    )
+
+
+def _is_comparable_source_pair(current: dict, previous: dict) -> bool:
+    overlap, current_vs_previous_size = _source_pair_ratios(current, previous)
+    if overlap is None or current_vs_previous_size is None:
         return False
-    overlap = len(current_codes & previous_codes) / max(len(current_codes), len(previous_codes))
-    current_vs_previous_size = len(current_codes) / len(previous_codes)
     if overlap >= 0.90 and current_vs_previous_size >= 0.70:
         return True
     return current.get("source_family") == previous.get("source_family") and overlap >= 0.50 and current_vs_previous_size >= 0.50
@@ -540,6 +592,43 @@ def _consecutive_active_direction_days(etf_code: str, stock_code: str, current_d
             continue
         break
     return count
+
+
+def _ensure_change_diagnostics_table(conn):
+    conn.execute("CREATE TABLE IF NOT EXISTS etf_change_diagnostics (date TEXT NOT NULL, prev_date TEXT NOT NULL, etf_code TEXT NOT NULL, status TEXT NOT NULL, reason TEXT, current_source_type TEXT, previous_source_type TEXT, current_source_family TEXT, previous_source_family TEXT, current_stock_count INTEGER, previous_stock_count INTEGER, current_total_weight REAL, previous_total_weight REAL, current_shares_coverage REAL, previous_shares_coverage REAL, current_quality_score REAL, previous_quality_score REAL, overlap_ratio REAL, size_ratio REAL, created_at TEXT NOT NULL, PRIMARY KEY (date, prev_date, etf_code))")
+
+
+def _persist_change_diagnostics(current_date: str, previous_date: str, diagnostics: list[dict]) -> None:
+    with db._connect() as conn:
+        with conn:
+            _ensure_change_diagnostics_table(conn)
+            conn.execute("DELETE FROM etf_change_diagnostics WHERE date = ? AND prev_date = ?", (current_date, previous_date))
+            if not diagnostics:
+                return
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO etf_change_diagnostics (
+                    date, prev_date, etf_code, status, reason,
+                    current_source_type, previous_source_type,
+                    current_source_family, previous_source_family,
+                    current_stock_count, previous_stock_count,
+                    current_total_weight, previous_total_weight,
+                    current_shares_coverage, previous_shares_coverage,
+                    current_quality_score, previous_quality_score,
+                    overlap_ratio, size_ratio, created_at
+                ) VALUES (
+                    :date, :prev_date, :etf_code, :status, :reason,
+                    :current_source_type, :previous_source_type,
+                    :current_source_family, :previous_source_family,
+                    :current_stock_count, :previous_stock_count,
+                    :current_total_weight, :previous_total_weight,
+                    :current_shares_coverage, :previous_shares_coverage,
+                    :current_quality_score, :previous_quality_score,
+                    :overlap_ratio, :size_ratio, :created_at
+                )
+                """,
+                diagnostics,
+            )
 
 
 def _persist_changes(current_date: str, changes: list[dict]) -> None:
