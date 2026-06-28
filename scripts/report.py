@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 import db
+from changes import _select_canonical_sources
 from etf_universe import get_active_etf_count
 
 CST = timezone(timedelta(hours=8))
@@ -239,6 +240,34 @@ def _using_row_factory(factory):
         conn.row_factory = old_factory
 
 
+def _canonical_rows(data_date: str) -> list[dict]:
+    if not data_date:
+        return []
+    canonical_sources = _select_canonical_sources(data_date)
+    if not canonical_sources:
+        return []
+    try:
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                """SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                          shares, weight_pct, source_url, source_type, extraction_method, scraped_at
+                   FROM etf_daily_holdings
+                   WHERE date = ?""",
+                (data_date,),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [
+        row
+        for row in rows
+        if row.get("source_type") == canonical_sources.get(row.get("etf_code"), {}).get("source_type")
+    ]
+
+
+def _canonical_stock_rows(data_date: str) -> list[dict]:
+    return [row for row in _canonical_rows(data_date) if row.get("asset_type") == "stock"]
+
+
 def _get_latest_holdings_date():
     with _using_row_factory(None) as conn:
         row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
@@ -279,14 +308,7 @@ def _get_data_quality(data_date):
 
 
 def _get_actual_etf_count(data_date):
-    if not data_date:
-        return 0
-    with _using_row_factory(None) as conn:
-        row = conn.execute(
-            "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
-            (data_date,),
-        ).fetchone()
-    return row[0] if row else 0
+    return len({row["etf_code"] for row in _canonical_rows(data_date)})
 
 
 def _get_failed_etfs(data_date):
@@ -306,26 +328,12 @@ def _get_failed_etfs(data_date):
 def _get_summary_stats(data_date):
     if not data_date:
         return {"etf_count": 0, "stock_count": 0, "non_stock_count": 0}
-    with _using_row_factory(None) as conn:
-        row = conn.execute(
-            "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
-            (data_date,),
-        ).fetchone()
-        etf_count = row[0] if row else 0
-
-        row2 = conn.execute(
-            "SELECT COUNT(DISTINCT stock_code) FROM etf_daily_holdings WHERE date = ? AND asset_type = 'stock'",
-            (data_date,),
-        ).fetchone()
-        stock_count = row2[0] if row2 else 0
-
-        row3 = conn.execute(
-            "SELECT COUNT(*) FROM etf_daily_holdings WHERE date = ? AND asset_type != 'stock'",
-            (data_date,),
-        ).fetchone()
-        non_stock_count = row3[0] if row3 else 0
-
-    return {"etf_count": etf_count, "stock_count": stock_count, "non_stock_count": non_stock_count}
+    rows = _canonical_rows(data_date)
+    return {
+        "etf_count": len({row["etf_code"] for row in rows}),
+        "stock_count": len({row["stock_code"] for row in rows if row.get("asset_type") == "stock"}),
+        "non_stock_count": sum(1 for row in rows if row.get("asset_type") != "stock"),
+    }
 
 
 def _get_change_summary(data_date):
@@ -445,44 +453,57 @@ def _group_positions(positions):
 def _get_consensus_stocks(data_date, min_etfs=15):
     if not data_date:
         return []
-    try:
-        active_count = get_active_etf_count()
-        with _using_row_factory(_dict_factory) as conn:
-            rows = conn.execute(
-                """SELECT stock_code, stock_name,
-                          COUNT(DISTINCT etf_code) as etf_count,
-                          AVG(weight_pct) as avg_weight,
-                          MAX(weight_pct) as max_weight,
-                          SUM(weight_pct) as total_weight
-                   FROM etf_daily_holdings
-                   WHERE date = ? AND asset_type = 'stock'
-                   GROUP BY stock_code, stock_name
-                   HAVING etf_count >= ?
-                   ORDER BY etf_count DESC, avg_weight DESC""",
-                (data_date, min_etfs),
-            ).fetchall()
-        for row in rows:
-            row["active_etf_count"] = active_count
-        return rows
-    except sqlite3.OperationalError:
-        return []
+    stock_groups = {}
+    for row in _canonical_stock_rows(data_date):
+        key = (row["stock_code"], row.get("stock_name"))
+        group = stock_groups.setdefault(
+            key,
+            {
+                "stock_code": row["stock_code"],
+                "stock_name": row.get("stock_name"),
+                "etfs": set(),
+                "weights": [],
+            },
+        )
+        group["etfs"].add(row["etf_code"])
+        group["weights"].append(row["weight_pct"] or 0.0)
+
+    active_count = get_active_etf_count()
+    rows = []
+    for group in stock_groups.values():
+        etf_count = len(group["etfs"])
+        if etf_count < min_etfs:
+            continue
+        weights = group["weights"]
+        rows.append(
+            {
+                "stock_code": group["stock_code"],
+                "stock_name": group["stock_name"],
+                "etf_count": etf_count,
+                "avg_weight": sum(weights) / len(weights) if weights else 0.0,
+                "max_weight": max(weights) if weights else 0.0,
+                "total_weight": sum(weights),
+                "active_etf_count": active_count,
+            }
+        )
+    return sorted(rows, key=lambda row: (-row["etf_count"], -row["avg_weight"], row["stock_code"]))
 
 
 def _get_stock_weight_change(stock_code, current_date, prev_date):
     if not stock_code or not current_date or not prev_date:
         return None
-    with _using_row_factory(None) as conn:
-        curr = conn.execute(
-            "SELECT SUM(weight_pct) FROM etf_daily_holdings WHERE date = ? AND stock_code = ? AND asset_type = 'stock'",
-            (current_date, stock_code),
-        ).fetchone()
-        prev = conn.execute(
-            "SELECT SUM(weight_pct) FROM etf_daily_holdings WHERE date = ? AND stock_code = ? AND asset_type = 'stock'",
-            (prev_date, stock_code),
-        ).fetchone()
-    if curr and curr[0] is not None and prev and prev[0] is not None:
-        return curr[0] - prev[0]
+    current_weight = _canonical_stock_weight_sum(stock_code, current_date)
+    previous_weight = _canonical_stock_weight_sum(stock_code, prev_date)
+    if current_weight is not None and previous_weight is not None:
+        return current_weight - previous_weight
     return None
+
+
+def _canonical_stock_weight_sum(stock_code, data_date):
+    rows = [row for row in _canonical_stock_rows(data_date) if row.get("stock_code") == stock_code]
+    if not rows:
+        return None
+    return sum(row.get("weight_pct") or 0.0 for row in rows)
 
 
 def _generate_observations(data_date, prev_date, top_movers, new_positions, removed_positions, consensus):
@@ -549,17 +570,13 @@ def _get_data_warnings(data_date):
                 f"實際取得 {actual_count} 檔"
             )
 
-        with _using_row_factory(None) as conn:
-            rows = conn.execute(
-                """SELECT etf_code, SUM(weight_pct) as total_weight
-                   FROM etf_daily_holdings
-                   WHERE date = ? AND asset_type = 'stock'
-                   GROUP BY etf_code
-                   HAVING total_weight < 80""",
-                (data_date,),
-            ).fetchall()
-        for row in rows:
-            warnings.append(f"⚠️ {row[0]}: 股票權重僅 {row[1]:.1f}%，可能資料不完整")
+        totals_by_etf = {}
+        for row in _canonical_stock_rows(data_date):
+            etf_code = row["etf_code"]
+            totals_by_etf[etf_code] = totals_by_etf.get(etf_code, 0.0) + (row.get("weight_pct") or 0.0)
+        for etf_code, total_weight in sorted(totals_by_etf.items()):
+            if total_weight < 80.0:
+                warnings.append(f"⚠️ {etf_code}: 股票權重僅 {total_weight:.1f}%，可能資料不完整")
 
         failed = _get_failed_etfs(data_date)
         if failed:
