@@ -74,8 +74,13 @@ def _fetch_raw(code: str) -> dict | None:
 
 def _count_rows() -> int:
     _ensure_table()
-    with db._connect() as conn:
+    conn = db._connect()
+    old = conn.row_factory
+    conn.row_factory = None
+    try:
         row = conn.execute("SELECT COUNT(*) FROM etf_universe").fetchone()
+    finally:
+        conn.row_factory = old
     return row[0] if row else 0
 
 
@@ -157,10 +162,15 @@ def get_active_etfs() -> list[dict]:
 
 def get_active_etf_count() -> int:
     ensure_seeded()
-    with db._connect() as conn:
+    conn = db._connect()
+    old = conn.row_factory
+    conn.row_factory = None
+    try:
         row = conn.execute(
             "SELECT COUNT(*) FROM etf_universe WHERE retired = 0"
         ).fetchone()
+    finally:
+        conn.row_factory = old
     return row[0] if row else 0
 
 
