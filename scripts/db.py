@@ -32,6 +32,23 @@ _CHANGE_COLUMN_MIGRATIONS = {
 }
 
 
+_ETF_UNIVERSE_COLUMN_MIGRATIONS = {
+    "name": "TEXT",
+    "issuer": "TEXT",
+    "market": "TEXT",
+    "isin": "TEXT",
+    "retired": "INTEGER NOT NULL DEFAULT 0",
+    "first_seen_date": "TEXT",
+    "last_seen_date": "TEXT",
+    "retired_since": "TEXT",
+    "official_url": "TEXT",
+    "official_method": "TEXT",
+    "official_logic": "TEXT",
+    "created_at": "TEXT",
+    "updated_at": "TEXT",
+}
+
+
 def _serialize(value):
     if isinstance(value, (date, datetime)):
         return value.isoformat()
@@ -71,6 +88,27 @@ def init_db(db_path):
         conn = sqlite3.connect(_DB_PATH)
 
     with conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS etf_universe (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                issuer TEXT,
+                market TEXT,
+                isin TEXT,
+                retired INTEGER NOT NULL DEFAULT 0,
+                first_seen_date TEXT,
+                last_seen_date TEXT,
+                retired_since TEXT,
+                official_url TEXT,
+                official_method TEXT,
+                official_logic TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        _ensure_etf_universe_columns(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS etf_daily_holdings (
@@ -210,6 +248,24 @@ def init_db(db_path):
             ON etf_holding_changes(stock_code, date)
             """
         )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_etf_universe_retired
+            ON etf_universe(retired, code)
+            """
+        )
+
+
+def _ensure_etf_universe_columns(conn):
+    existing = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()
+    }
+    for column_name, column_type in _ETF_UNIVERSE_COLUMN_MIGRATIONS.items():
+        if column_name not in existing:
+            conn.execute(
+                f"ALTER TABLE etf_universe ADD COLUMN {column_name} {column_type}"
+            )
 
 
 def _ensure_change_columns(conn):

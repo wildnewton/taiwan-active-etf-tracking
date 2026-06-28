@@ -2,8 +2,8 @@ import asyncio
 from datetime import date, datetime
 from typing import Awaitable, Callable
 
-from config import TRACKED_ETFS, get_etf_config
 from db import init_db, insert_holdings, insert_non_stock_assets, insert_scrape_run
+from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings, scrape_holdings_with_browser_async
 
@@ -13,18 +13,12 @@ AsyncScrapeFn = Callable[[str], Awaitable[dict]]
 
 
 def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
-    """Run the static scrape pipeline.
-
-    This mode is fast and test-friendly. It tries MoneyDJ static first and then
-    official static fallbacks.
-    """
     return _run_daily_scrape_sync(db_path, scrape_holdings)
 
 
 def run_daily_scrape_with_browser(
     db_path: str = "data/active_etf_holdings.sqlite",
 ) -> dict:
-    """Run the production browser-enabled scrape pipeline from sync code."""
     return asyncio.run(run_daily_scrape_with_browser_async(db_path))
 
 
@@ -32,18 +26,6 @@ async def run_daily_scrape_with_browser_async(
     db_path: str = "data/active_etf_holdings.sqlite",
     page=None,
 ) -> dict:
-    """Run the production browser-enabled scrape pipeline.
-
-    Decision tree per ETF:
-      1. MoneyDJ static
-      2. MoneyDJ browser
-      3. Official browser fallback
-      4. Official static fallback
-      5. Fail
-
-    Passing a page is mainly for tests. Production calls create one shared
-    Playwright browser/page and reuse it across all ETFs.
-    """
     if page is not None:
         return await _run_daily_scrape_async(
             db_path,
@@ -71,15 +53,20 @@ async def run_daily_scrape_with_browser_async(
             await browser.close()
 
 
+def _active_etfs_for_run() -> list[dict]:
+    seed_etf_universe_from_file()
+    return get_active_etfs()
+
+
 def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     init_db(db_path)
+    active_etfs = _active_etfs_for_run()
     today = date.today()
-    summary = _new_summary(today)
+    summary = _new_summary(today, len(active_etfs))
     data_date = None
 
-    for etf in TRACKED_ETFS:
+    for etf in active_etfs:
         etf_code = etf["code"]
-        get_etf_config(etf_code)
         started_at = datetime.now()
         result = scrape_fn(etf_code)
         finished_at = datetime.now()
@@ -94,13 +81,13 @@ def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
 
 async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dict:
     init_db(db_path)
+    active_etfs = _active_etfs_for_run()
     today = date.today()
-    summary = _new_summary(today)
+    summary = _new_summary(today, len(active_etfs))
     data_date = None
 
-    for etf in TRACKED_ETFS:
+    for etf in active_etfs:
         etf_code = etf["code"]
-        get_etf_config(etf_code)
         started_at = datetime.now()
         result = await scrape_fn(etf_code)
         finished_at = datetime.now()
@@ -113,11 +100,11 @@ async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dic
     return summary
 
 
-def _new_summary(today: date) -> dict:
+def _new_summary(today: date, total_etfs: int) -> dict:
     return {
         "date": today.isoformat(),
         "data_date": None,
-        "total_etfs": len(TRACKED_ETFS),
+        "total_etfs": total_etfs,
         "moneydj_success": 0,
         "official_success": 0,
         "failed": 0,
@@ -129,7 +116,6 @@ def _new_summary(today: date) -> dict:
 
 
 def _extract_data_date(result: dict, fallback: date) -> date:
-    """Extract the 資料日期 from the first row of a successful scrape result."""
     rows = result.get("all_rows") or result.get("stock_rows") or []
     for row in rows:
         parsed = _parse_row_date(row.get("date"), fallback)
@@ -160,21 +146,17 @@ def _record_result(
             summary["moneydj_success"] += 1
         elif result["source_type"] == "official_fallback":
             summary["official_success"] += 1
-            # Check MoneyDJ failure reason for this ETF
             _check_moneydj_warning(summary, etf_code)
     else:
         summary["failed"] += 1
         summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
-        # Check MoneyDJ failure reason for this ETF
         _check_moneydj_warning(summary, etf_code)
 
     insert_scrape_run(_build_scrape_run(etf_code, today, started_at, finished_at, result))
 
 
 def _check_moneydj_warning(summary: dict, etf_code: str) -> None:
-    """Check MoneyDJ validation for an ETF and add warning if it fails."""
     from scrapers.moneydj import scrape_moneydj
-    from config import get_etf_config
 
     result = scrape_moneydj(etf_code)
     if result["ok"] is False:
