@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Discover listed Taiwan active ETFs and reconcile etf_universe.
-
-The nightly pipeline should run this before holdings scraping. If discovery fails,
-the caller may continue using the existing DB-backed universe; this script only
-mutates retirement state after a successful exchange listing fetch.
-"""
+"""Discover listed Taiwan active ETFs and reconcile etf_universe."""
 from __future__ import annotations
 
 import argparse
@@ -34,12 +29,19 @@ class ListedSecurity:
     isin: str | None
 
     def as_dict(self) -> dict:
-        return {
-            "market": self.market,
-            "code": self.code,
-            "name": self.name,
-            "isin": self.isin,
-        }
+        return {"market": self.market, "code": self.code, "name": self.name, "isin": self.isin}
+
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    discovered: list[dict]
+    completed_markets: list[str]
+    failed_markets: list[dict]
+    expected_markets: list[str]
+
+    @property
+    def discovery_complete(self) -> bool:
+        return not self.failed_markets and sorted(self.completed_markets) == sorted(self.expected_markets)
 
 
 def fetch_security_master(source: dict[str, str], timeout: int = 30) -> list[ListedSecurity]:
@@ -73,18 +75,49 @@ def is_primary_active_etf(security: ListedSecurity) -> bool:
     return "主動" in security.name and security.code.endswith("A")
 
 
-def discover_active_etfs() -> list[dict]:
+def discover_active_etfs_with_status(sources: list[dict[str, str]] | None = None) -> DiscoveryResult:
+    sources = sources or SOURCES
     securities: list[ListedSecurity] = []
-    for source in SOURCES:
-        securities.extend(fetch_security_master(source))
-    return [security.as_dict() for security in securities if is_primary_active_etf(security)]
+    completed_markets: list[str] = []
+    failed_markets: list[dict] = []
+    for source in sources:
+        market = source["market"]
+        try:
+            source_rows = fetch_security_master(source)
+        except (RuntimeError, requests.RequestException) as exc:
+            failed_markets.append({"market": market, "reason": str(exc)})
+            continue
+        if not source_rows:
+            failed_markets.append({"market": market, "reason": "empty source result"})
+            continue
+        securities.extend(source_rows)
+        completed_markets.append(market)
+    discovered = [security.as_dict() for security in securities if is_primary_active_etf(security)]
+    discovered.sort(key=lambda row: row["code"])
+    return DiscoveryResult(
+        discovered=discovered,
+        completed_markets=sorted(completed_markets),
+        failed_markets=failed_markets,
+        expected_markets=sorted(source["market"] for source in sources),
+    )
+
+
+def discover_active_etfs() -> list[dict]:
+    return discover_active_etfs_with_status().discovered
 
 
 def discover_and_reconcile(db_path: str | Path, seen_date: str | None = None) -> dict:
     db.init_db(db_path)
-    discovered = discover_active_etfs()
-    summary = reconcile_discovered_universe(discovered, seen_date=seen_date)
-    summary["discovered"] = sorted(row["code"] for row in discovered)
+    discovery = discover_active_etfs_with_status()
+    summary = reconcile_discovered_universe(
+        discovery.discovered,
+        seen_date=seen_date,
+        discovery_complete=discovery.discovery_complete,
+    )
+    summary["discovered"] = sorted(row["code"] for row in discovery.discovered)
+    summary["discovery_complete"] = discovery.discovery_complete
+    summary["completed_markets"] = discovery.completed_markets
+    summary["failed_markets"] = discovery.failed_markets
     return summary
 
 
@@ -93,7 +126,6 @@ def main() -> int:
     parser.add_argument("--db", default="data/active_etf_holdings.sqlite")
     parser.add_argument("--seen-date", default=None)
     args = parser.parse_args()
-
     summary = discover_and_reconcile(args.db, seen_date=args.seen_date)
     print(summary)
     return 0

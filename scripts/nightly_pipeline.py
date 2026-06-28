@@ -55,6 +55,17 @@ def main():
         try:
             discovery_summary = discover_and_reconcile(args.db)
             print(f"  Discovery summary: {discovery_summary}")
+            if not discovery_summary.get("discovery_complete", True):
+                failed_markets = discovery_summary.get("failed_markets", [])
+                failed_text = ", ".join(
+                    f"{item.get('market', 'unknown')}:{item.get('reason', 'unknown')}"
+                    for item in failed_markets
+                ) or "unknown source"
+                message = f"ETF universe discovery incomplete: {failed_text}"
+                print(f"⚠️ {message}")
+                print("  Continuing with existing DB-backed ETF universe")
+                if args.strict_discovery:
+                    raise RuntimeError(message)
         except Exception as exc:
             print(f"⚠️ ETF universe discovery failed: {exc}")
             print("  Continuing with existing DB-backed ETF universe")
