@@ -306,7 +306,7 @@ def _get_data_quality(data_date):
     expected_count = get_active_etf_count()
     actual_count = _get_actual_etf_count(data_date)
     failed_etfs = _get_failed_etfs(data_date)
-    change_skips = _get_skipped_change_diagnostics(data_date, _get_previous_holdings_date(data_date))
+    change_skips = _get_skipped_change_diagnostics(data_date)
     warnings = _get_data_warnings(data_date)
     degraded = bool(warnings or failed_etfs or change_skips or (expected_count and actual_count < expected_count))
     return {
@@ -337,17 +337,23 @@ def _get_failed_etfs(data_date):
         return []
 
 
-def _get_skipped_change_diagnostics(data_date, prev_date):
-    if not data_date or not prev_date:
+def _get_skipped_change_diagnostics(data_date):
+    if not data_date:
         return []
     try:
         with _using_row_factory(_dict_factory) as conn:
             return conn.execute(
                 """SELECT etf_code, reason, current_source_type, previous_source_type
                    FROM etf_change_diagnostics
-                   WHERE date = ? AND prev_date = ? AND status = 'skipped'
+                   WHERE date = ?
+                     AND status = 'skipped'
+                     AND created_at = (
+                         SELECT MAX(created_at)
+                         FROM etf_change_diagnostics
+                         WHERE date = ?
+                     )
                    ORDER BY etf_code""",
-                (data_date, prev_date),
+                (data_date, data_date),
             ).fetchall()
     except sqlite3.OperationalError:
         return []
