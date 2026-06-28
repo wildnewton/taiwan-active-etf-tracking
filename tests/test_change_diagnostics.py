@@ -4,15 +4,7 @@ import db
 from changes import detect_holding_changes
 
 
-def insert_holding(
-    date,
-    etf_code,
-    stock_code,
-    stock_name,
-    shares,
-    weight_pct,
-    source_type="moneydj_primary",
-):
+def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct, source_type="moneydj_primary"):
     with db._connect() as conn:
         conn.execute(
             """
@@ -23,16 +15,7 @@ def insert_holding(
             ) VALUES (?, ?, ?, 'stock', ?, ?, ?, ?, 'https://example.test',
                 ?, 'test', '2026-06-24T00:00:00')
             """,
-            (
-                date,
-                etf_code,
-                f"{stock_name}({stock_code}.TW)",
-                stock_code,
-                stock_name,
-                shares,
-                weight_pct,
-                source_type,
-            ),
+            (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, shares, weight_pct, source_type),
         )
 
 
@@ -56,35 +39,22 @@ def fetch_diagnostics(date="2026-06-24", prev_date="2026-06-23"):
 
 def test_db_initializes_change_diagnostics_table():
     db.init_db(":memory:")
-
     with db._connect() as conn:
-        columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(etf_change_diagnostics)").fetchall()
-        }
-
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(etf_change_diagnostics)").fetchall()}
     assert {
-        "date",
-        "prev_date",
-        "etf_code",
-        "status",
-        "reason",
-        "current_source_type",
-        "previous_source_type",
-        "current_stock_count",
-        "previous_stock_count",
-        "overlap_ratio",
-        "size_ratio",
-        "created_at",
+        "date", "prev_date", "etf_code", "status", "reason",
+        "current_source_type", "previous_source_type",
+        "current_stock_count", "previous_stock_count",
+        "overlap_ratio", "size_ratio", "created_at",
     }.issubset(columns)
 
 
 def test_comparable_etf_persists_included_diagnostic():
     db.init_db(":memory:")
-    insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0)
-    insert_holding("2026-06-23", "00980A", "2308", "台達電", 100, 8.0)
-    insert_holding("2026-06-24", "00980A", "2330", "台積電", 110, 11.0)
-    insert_holding("2026-06-24", "00980A", "2308", "台達電", 100, 8.0)
+    insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+    insert_holding("2026-06-23", "00980A", "2308", "Delta", 100, 8.0)
+    insert_holding("2026-06-24", "00980A", "2330", "TSMC", 110, 11.0)
+    insert_holding("2026-06-24", "00980A", "2308", "Delta", 100, 8.0)
 
     summary = detect_holding_changes("2026-06-24", "2026-06-23")
 
@@ -105,17 +75,12 @@ def test_comparable_etf_persists_included_diagnostic():
 
 def test_skipped_etfs_persist_specific_reasons():
     db.init_db(":memory:")
-    insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0)
-    insert_holding("2026-06-23", "00980A", "2308", "台達電", 100, 8.0)
-    insert_holding("2026-06-23", "00980A", "2454", "聯發科", 100, 6.0)
-    insert_holding("2026-06-23", "00981A", "2330", "台積電", 100, 10.0)
-    insert_holding("2026-06-23", "00982A", "2330", "台積電", 100, 10.0)
-
-    # 00980A current source is too small to be comparable to previous day.
-    insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5, "official_static")
-    # 00981A exists only on previous day => missing current source.
-    # 00982A exists only on current day => missing previous source.
-    insert_holding("2026-06-24", "00982A", "2330", "台積電", 105, 10.5)
+    insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+    insert_holding("2026-06-23", "00980A", "2308", "Delta", 100, 8.0)
+    insert_holding("2026-06-23", "00980A", "2454", "MTK", 100, 6.0)
+    insert_holding("2026-06-23", "00981A", "2330", "TSMC", 100, 10.0)
+    insert_holding("2026-06-24", "00980A", "2330", "TSMC", 100, 10.5, "official_static")
+    insert_holding("2026-06-24", "00982A", "2330", "TSMC", 105, 10.5)
 
     summary = detect_holding_changes("2026-06-24", "2026-06-23")
 
@@ -130,8 +95,8 @@ def test_skipped_etfs_persist_specific_reasons():
 
 def test_diagnostics_are_replaced_for_same_date_pair_on_rerun():
     db.init_db(":memory:")
-    insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0)
-    insert_holding("2026-06-24", "00980A", "2330", "台積電", 110, 11.0)
+    insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+    insert_holding("2026-06-24", "00980A", "2330", "TSMC", 110, 11.0)
 
     detect_holding_changes("2026-06-24", "2026-06-23")
     detect_holding_changes("2026-06-24", "2026-06-23")
