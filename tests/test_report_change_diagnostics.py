@@ -38,6 +38,7 @@ def insert_change_diagnostic(
     reason,
     current_source_type="moneydj_primary",
     previous_source_type="moneydj_primary",
+    created_at=None,
 ):
     with db._connect() as conn:
         conn.execute(
@@ -57,7 +58,7 @@ def insert_change_diagnostic(
                 reason,
                 current_source_type,
                 previous_source_type,
-                f"{date}T00:00:00",
+                created_at or f"{date}T00:00:00",
             ),
         )
 
@@ -126,3 +127,22 @@ def test_report_handles_missing_change_diagnostics_table():
 
     assert "台灣主動 ETF 每日報告" in report
     assert "變更偵測跳過" not in report
+
+
+def test_report_uses_latest_diagnostics_run_when_previous_holding_date_differs():
+    db.init_db(":memory:")
+    insert_full_holdings_day("2026-06-24")
+    insert_full_holdings_day("2026-06-25")
+    insert_full_holdings_day("2026-06-26")
+    insert_change_diagnostic(
+        "2026-06-26",
+        "2026-06-24",
+        "00980A",
+        "skipped",
+        "incompatible_source_pair",
+        created_at="2026-06-26T09:00:00",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "00980A incompatible_source_pair" in report
