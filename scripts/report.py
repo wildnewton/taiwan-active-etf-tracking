@@ -113,6 +113,15 @@ def _render_data_quality(quality: dict) -> list[str]:
         lines.append(f"成功持倉 ETF: {quality['actual_count']}")
     if quality["failed_etfs"]:
         lines.append(f"抓取失敗: {', '.join(quality['failed_etfs'])}")
+    if quality.get("change_skips"):
+        lines.append("變更偵測跳過:")
+        for row in quality["change_skips"]:
+            current_source = row.get("current_source_type") or "None"
+            previous_source = row.get("previous_source_type") or "None"
+            lines.append(
+                f"  {row['etf_code']} {row.get('reason') or 'unknown'} "
+                f"({current_source}→{previous_source})"
+            )
     if quality["warnings"]:
         lines.append("資料品質警告:")
         for warning in quality["warnings"]:
@@ -291,18 +300,21 @@ def _get_data_quality(data_date):
             "expected_count": get_active_etf_count(),
             "actual_count": 0,
             "failed_etfs": [],
+            "change_skips": [],
             "warnings": ["⚠️ 無持倉資料"],
         }
     expected_count = get_active_etf_count()
     actual_count = _get_actual_etf_count(data_date)
     failed_etfs = _get_failed_etfs(data_date)
+    change_skips = _get_skipped_change_diagnostics(data_date)
     warnings = _get_data_warnings(data_date)
-    degraded = bool(warnings or failed_etfs or (expected_count and actual_count < expected_count))
+    degraded = bool(warnings or failed_etfs or change_skips or (expected_count and actual_count < expected_count))
     return {
         "status_label": "⚠️ Degraded" if degraded else "✅ Clean",
         "expected_count": expected_count,
         "actual_count": actual_count,
         "failed_etfs": failed_etfs,
+        "change_skips": change_skips,
         "warnings": warnings,
     }
 
@@ -321,6 +333,28 @@ def _get_failed_etfs(data_date):
                 (data_date,),
             ).fetchall()
         return [row[0] for row in rows]
+    except sqlite3.OperationalError:
+        return []
+
+
+def _get_skipped_change_diagnostics(data_date):
+    if not data_date:
+        return []
+    try:
+        with _using_row_factory(_dict_factory) as conn:
+            return conn.execute(
+                """SELECT etf_code, reason, current_source_type, previous_source_type
+                   FROM etf_change_diagnostics
+                   WHERE date = ?
+                     AND status = 'skipped'
+                     AND created_at = (
+                         SELECT MAX(created_at)
+                         FROM etf_change_diagnostics
+                         WHERE date = ?
+                     )
+                   ORDER BY etf_code""",
+                (data_date, data_date),
+            ).fetchall()
     except sqlite3.OperationalError:
         return []
 
