@@ -1,6 +1,7 @@
 """Daily report generators for Taiwan Active ETF tracking."""
 import json
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 import db
@@ -141,7 +142,8 @@ def _render_manager_signals(signals: list[dict]) -> list[str]:
         for row in rows:
             emitted.add(row.get("signal_id"))
             lines.append(f"  {_format_signal_line(row)}")
-        remaining = len([row for row in signals if predicate(row) and row.get("signal_id") not in {r.get("signal_id") for r in rows}])
+        row_ids = {row.get("signal_id") for row in rows}
+        remaining = len([row for row in signals if predicate(row) and row.get("signal_id") not in row_ids])
         if remaining > 0:
             lines.append(f"  ... 另有 {remaining} 個同類訊號")
     if not emitted:
@@ -226,19 +228,30 @@ def _render_consensus_holdings(consensus: list[dict], data_date, prev_date) -> l
 
 # ── Data access helpers ──
 
-def _get_latest_holdings_date():
+@contextmanager
+def _using_row_factory(factory):
     conn = db._connect()
-    row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
+    old_factory = conn.row_factory
+    conn.row_factory = factory
+    try:
+        yield conn
+    finally:
+        conn.row_factory = old_factory
+
+
+def _get_latest_holdings_date():
+    with _using_row_factory(None) as conn:
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
     return row[0] if row and row[0] else None
 
 
 def _get_previous_holdings_date(current_date):
     if not current_date:
         return None
-    conn = db._connect()
-    row = conn.execute(
-        "SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)
-    ).fetchone()
+    with _using_row_factory(None) as conn:
+        row = conn.execute(
+            "SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)
+        ).fetchone()
     return row[0] if row and row[0] else None
 
 
@@ -268,39 +281,32 @@ def _get_data_quality(data_date):
 def _get_actual_etf_count(data_date):
     if not data_date:
         return 0
-    conn = db._connect()
-    row = conn.execute(
-        "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
-        (data_date,),
-    ).fetchone()
+    with _using_row_factory(None) as conn:
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
+            (data_date,),
+        ).fetchone()
     return row[0] if row else 0
 
 
 def _get_failed_etfs(data_date):
     if not data_date:
         return []
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = None
     try:
-        rows = conn.execute(
-            "SELECT etf_code FROM etf_scrape_runs WHERE date = ? AND status = 'failed' ORDER BY etf_code",
-            (data_date,),
-        ).fetchall()
+        with _using_row_factory(None) as conn:
+            rows = conn.execute(
+                "SELECT etf_code FROM etf_scrape_runs WHERE date = ? AND status = 'failed' ORDER BY etf_code",
+                (data_date,),
+            ).fetchall()
         return [row[0] for row in rows]
     except sqlite3.OperationalError:
         return []
-    finally:
-        conn.row_factory = old_factory
 
 
 def _get_summary_stats(data_date):
     if not data_date:
         return {"etf_count": 0, "stock_count": 0, "non_stock_count": 0}
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = None
-    try:
+    with _using_row_factory(None) as conn:
         row = conn.execute(
             "SELECT COUNT(DISTINCT etf_code) FROM etf_daily_holdings WHERE date = ?",
             (data_date,),
@@ -318,8 +324,6 @@ def _get_summary_stats(data_date):
             (data_date,),
         ).fetchone()
         non_stock_count = row3[0] if row3 else 0
-    finally:
-        conn.row_factory = old_factory
 
     return {"etf_count": etf_count, "stock_count": stock_count, "non_stock_count": non_stock_count}
 
@@ -327,18 +331,17 @@ def _get_summary_stats(data_date):
 def _get_change_summary(data_date):
     if not data_date:
         return None
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
-        row = conn.execute(
-            """SELECT
-                COALESCE(SUM(CASE WHEN is_new_position = 1 THEN 1 ELSE 0 END), 0) as new_count,
-                COALESCE(SUM(CASE WHEN is_removed_position = 1 THEN 1 ELSE 0 END), 0) as removed_count,
-                COALESCE(SUM(CASE WHEN is_new_position = 0 AND is_removed_position = 0 AND weight_delta_1d > 0 THEN 1 ELSE 0 END), 0) as increased_count,
-                COALESCE(SUM(CASE WHEN is_new_position = 0 AND is_removed_position = 0 AND weight_delta_1d < 0 THEN 1 ELSE 0 END), 0) as decreased_count
-            FROM etf_holding_changes WHERE date = ?""",
-            (data_date,),
-        ).fetchone()
+        with _using_row_factory(_dict_factory) as conn:
+            row = conn.execute(
+                """SELECT
+                    COALESCE(SUM(CASE WHEN is_new_position = 1 THEN 1 ELSE 0 END), 0) as new_count,
+                    COALESCE(SUM(CASE WHEN is_removed_position = 1 THEN 1 ELSE 0 END), 0) as removed_count,
+                    COALESCE(SUM(CASE WHEN is_new_position = 0 AND is_removed_position = 0 AND weight_delta_1d > 0 THEN 1 ELSE 0 END), 0) as increased_count,
+                    COALESCE(SUM(CASE WHEN is_new_position = 0 AND is_removed_position = 0 AND weight_delta_1d < 0 THEN 1 ELSE 0 END), 0) as decreased_count
+                FROM etf_holding_changes WHERE date = ?""",
+                (data_date,),
+            ).fetchone()
         return row if row else None
     except sqlite3.OperationalError:
         return None
@@ -347,23 +350,22 @@ def _get_change_summary(data_date):
 def _get_top_movers(data_date, limit=10):
     if not data_date:
         return []
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
-        rows = conn.execute(
-            """SELECT stock_code, stock_name, etf_code,
-                      weight_pct as curr_weight, prev_weight_pct as prev_weight,
-                      weight_delta_1d, shares_delta_1d,
-                      active_shares_delta_pct_1d, position_change_type,
-                      active_direction, confidence
-               FROM etf_holding_changes
-               WHERE date = ?
-                 AND is_new_position = 0
-                 AND is_removed_position = 0
-               ORDER BY ABS(weight_delta_1d) DESC
-               LIMIT ?""",
-            (data_date, limit),
-        ).fetchall()
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                """SELECT stock_code, stock_name, etf_code,
+                          weight_pct as curr_weight, prev_weight_pct as prev_weight,
+                          weight_delta_1d, shares_delta_1d,
+                          active_shares_delta_pct_1d, position_change_type,
+                          active_direction, confidence
+                   FROM etf_holding_changes
+                   WHERE date = ?
+                     AND is_new_position = 0
+                     AND is_removed_position = 0
+                   ORDER BY ABS(weight_delta_1d) DESC
+                   LIMIT ?""",
+                (data_date, limit),
+            ).fetchall()
         return rows
     except sqlite3.OperationalError:
         return []
@@ -372,18 +374,17 @@ def _get_top_movers(data_date, limit=10):
 def _get_new_positions(data_date):
     if not data_date:
         return []
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
-        return conn.execute(
-            """SELECT etf_code, stock_code, stock_name, weight_pct, shares, rank
-               FROM etf_holding_changes
-               WHERE date = ?
-                 AND is_new_position = 1
-                 AND (weight_pct >= ? OR (rank IS NOT NULL AND rank <= ?))
-               ORDER BY weight_pct DESC""",
-            (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
-        ).fetchall()
+        with _using_row_factory(_dict_factory) as conn:
+            return conn.execute(
+                """SELECT etf_code, stock_code, stock_name, weight_pct, shares, rank
+                   FROM etf_holding_changes
+                   WHERE date = ?
+                     AND is_new_position = 1
+                     AND (weight_pct >= ? OR (rank IS NOT NULL AND rank <= ?))
+                   ORDER BY weight_pct DESC""",
+                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
+            ).fetchall()
     except sqlite3.OperationalError:
         return []
 
@@ -391,18 +392,17 @@ def _get_new_positions(data_date):
 def _get_removed_positions(data_date):
     if not data_date:
         return []
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
-        return conn.execute(
-            """SELECT etf_code, stock_code, stock_name, prev_weight_pct, prev_shares, prev_rank
-               FROM etf_holding_changes
-               WHERE date = ?
-                 AND is_removed_position = 1
-                 AND (prev_weight_pct >= ? OR (prev_rank IS NOT NULL AND prev_rank <= ?))
-               ORDER BY prev_weight_pct DESC""",
-            (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
-        ).fetchall()
+        with _using_row_factory(_dict_factory) as conn:
+            return conn.execute(
+                """SELECT etf_code, stock_code, stock_name, prev_weight_pct, prev_shares, prev_rank
+                   FROM etf_holding_changes
+                   WHERE date = ?
+                     AND is_removed_position = 1
+                     AND (prev_weight_pct >= ? OR (prev_rank IS NOT NULL AND prev_rank <= ?))
+                   ORDER BY prev_weight_pct DESC""",
+                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
+            ).fetchall()
     except sqlite3.OperationalError:
         return []
 
@@ -410,32 +410,28 @@ def _get_removed_positions(data_date):
 def _get_hidden_position_counts(data_date):
     if not data_date:
         return {"new": 0, "removed": 0}
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = None
     try:
-        new_row = conn.execute(
-            """SELECT COUNT(*) FROM etf_holding_changes
-               WHERE date = ? AND is_new_position = 1
-                 AND weight_pct < ?
-                 AND (rank IS NULL OR rank > ?)""",
-            (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
-        ).fetchone()
-        removed_row = conn.execute(
-            """SELECT COUNT(*) FROM etf_holding_changes
-               WHERE date = ? AND is_removed_position = 1
-                 AND prev_weight_pct < ?
-                 AND (prev_rank IS NULL OR prev_rank > ?)""",
-            (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
-        ).fetchone()
+        with _using_row_factory(None) as conn:
+            new_row = conn.execute(
+                """SELECT COUNT(*) FROM etf_holding_changes
+                   WHERE date = ? AND is_new_position = 1
+                     AND weight_pct < ?
+                     AND (rank IS NULL OR rank > ?)""",
+                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
+            ).fetchone()
+            removed_row = conn.execute(
+                """SELECT COUNT(*) FROM etf_holding_changes
+                   WHERE date = ? AND is_removed_position = 1
+                     AND prev_weight_pct < ?
+                     AND (prev_rank IS NULL OR prev_rank > ?)""",
+                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
+            ).fetchone()
         return {
             "new": new_row[0] if new_row else 0,
             "removed": removed_row[0] if removed_row else 0,
         }
     except sqlite3.OperationalError:
         return {"new": 0, "removed": 0}
-    finally:
-        conn.row_factory = old_factory
 
 
 def _group_positions(positions):
@@ -449,23 +445,22 @@ def _group_positions(positions):
 def _get_consensus_stocks(data_date, min_etfs=15):
     if not data_date:
         return []
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
         active_count = get_active_etf_count()
-        rows = conn.execute(
-            """SELECT stock_code, stock_name,
-                      COUNT(DISTINCT etf_code) as etf_count,
-                      AVG(weight_pct) as avg_weight,
-                      MAX(weight_pct) as max_weight,
-                      SUM(weight_pct) as total_weight
-               FROM etf_daily_holdings
-               WHERE date = ? AND asset_type = 'stock'
-               GROUP BY stock_code, stock_name
-               HAVING etf_count >= ?
-               ORDER BY etf_count DESC, avg_weight DESC""",
-            (data_date, min_etfs),
-        ).fetchall()
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                """SELECT stock_code, stock_name,
+                          COUNT(DISTINCT etf_code) as etf_count,
+                          AVG(weight_pct) as avg_weight,
+                          MAX(weight_pct) as max_weight,
+                          SUM(weight_pct) as total_weight
+                   FROM etf_daily_holdings
+                   WHERE date = ? AND asset_type = 'stock'
+                   GROUP BY stock_code, stock_name
+                   HAVING etf_count >= ?
+                   ORDER BY etf_count DESC, avg_weight DESC""",
+                (data_date, min_etfs),
+            ).fetchall()
         for row in rows:
             row["active_etf_count"] = active_count
         return rows
@@ -476,10 +471,7 @@ def _get_consensus_stocks(data_date, min_etfs=15):
 def _get_stock_weight_change(stock_code, current_date, prev_date):
     if not stock_code or not current_date or not prev_date:
         return None
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = None
-    try:
+    with _using_row_factory(None) as conn:
         curr = conn.execute(
             "SELECT SUM(weight_pct) FROM etf_daily_holdings WHERE date = ? AND stock_code = ? AND asset_type = 'stock'",
             (current_date, stock_code),
@@ -488,8 +480,6 @@ def _get_stock_weight_change(stock_code, current_date, prev_date):
             "SELECT SUM(weight_pct) FROM etf_daily_holdings WHERE date = ? AND stock_code = ? AND asset_type = 'stock'",
             (prev_date, stock_code),
         ).fetchone()
-    finally:
-        conn.row_factory = old_factory
     if curr and curr[0] is not None and prev and prev[0] is not None:
         return curr[0] - prev[0]
     return None
@@ -550,9 +540,6 @@ def _get_data_warnings(data_date):
     if not data_date:
         return ["⚠️ 無持倉資料"]
     warnings = []
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = None
     try:
         actual_count = _get_actual_etf_count(data_date)
         expected_count = get_active_etf_count()
@@ -562,22 +549,23 @@ def _get_data_warnings(data_date):
                 f"實際取得 {actual_count} 檔"
             )
 
-        rows = conn.execute(
-            """SELECT etf_code, SUM(weight_pct) as total_weight
-               FROM etf_daily_holdings
-               WHERE date = ? AND asset_type = 'stock'
-               GROUP BY etf_code
-               HAVING total_weight < 80""",
-            (data_date,),
-        ).fetchall()
+        with _using_row_factory(None) as conn:
+            rows = conn.execute(
+                """SELECT etf_code, SUM(weight_pct) as total_weight
+                   FROM etf_daily_holdings
+                   WHERE date = ? AND asset_type = 'stock'
+                   GROUP BY etf_code
+                   HAVING total_weight < 80""",
+                (data_date,),
+            ).fetchall()
         for row in rows:
             warnings.append(f"⚠️ {row[0]}: 股票權重僅 {row[1]:.1f}%，可能資料不完整")
 
         failed = _get_failed_etfs(data_date)
         if failed:
             warnings.append(f"⚠️ 抓取失敗: {', '.join(failed)}")
-    finally:
-        conn.row_factory = old_factory
+    except sqlite3.OperationalError:
+        pass
 
     return warnings
 
@@ -585,13 +573,12 @@ def _get_data_warnings(data_date):
 def _get_signals(data_date):
     if not data_date:
         return []
-    conn = db._connect()
-    conn.row_factory = _dict_factory
     try:
-        rows = conn.execute(
-            "SELECT * FROM etf_manager_signals WHERE date = ?",
-            (data_date,),
-        ).fetchall()
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                "SELECT * FROM etf_manager_signals WHERE date = ?",
+                (data_date,),
+            ).fetchall()
         return sorted(rows, key=_signal_sort_key)
     except sqlite3.OperationalError:
         return []
@@ -631,11 +618,12 @@ def _format_signal_line(row: dict) -> str:
     avg_active_text = f" | avg activeΔ {avg_active:+.2f}%" if avg_active is not None else ""
     reason = row.get("freshness_reason") or row.get("explanation") or ""
     reason_text = f" | {reason}" if reason else ""
+    score = row.get("signal_score") or 0
     return (
         f"{direction} {row.get('stock_code')} {row.get('stock_name') or ''} "
         f"| {row.get('signal_type')} | {freshness} | "
         f"{issuer_count} issuers/{etf_count} ETF | "
-        f"score={row.get('signal_score'):+.0f} | conf={row.get('confidence') or 'normal'}"
+        f"score={score:+.0f} | conf={row.get('confidence') or 'normal'}"
         f"{avg_active_text}{reason_text}"
     )
 
@@ -726,9 +714,9 @@ def generate_daily_report(summary: dict) -> str:
 
 def get_latest_signal_date():
     """Return the latest date with manager signals, or None if unavailable."""
-    conn = db._connect()
     try:
-        row = conn.execute("SELECT MAX(date) FROM etf_manager_signals").fetchone()
+        with _using_row_factory(None) as conn:
+            row = conn.execute("SELECT MAX(date) FROM etf_manager_signals").fetchone()
     except sqlite3.OperationalError:
         return None
     return row[0] if row and row[0] else None
