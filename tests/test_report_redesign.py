@@ -137,7 +137,7 @@ def insert_signal(
         )
 
 
-def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weight=0.0, weight=0.0, is_removed=0):
+def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weight=0.0, weight=0.0, is_removed=0, prev_rank=50):
     with db._connect() as conn:
         conn.execute(
             """
@@ -149,7 +149,7 @@ def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weigh
                 position_change_type, active_direction, is_active_add, is_active_reduce,
                 confidence, source_type, created_at
             ) VALUES (?, ?, '測試投信', ?, ?, '2026-06-25', ?, ?, ?, 1000, 0,
-                -1000, -1000, -100.0, 10, NULL, 0, ?, 'removed_position',
+                -1000, -1000, -100.0, ?, NULL, 0, ?, 'removed_position',
                 'reduce', 0, 1, 'high', 'moneydj_primary', ?)
             """,
             (
@@ -160,6 +160,7 @@ def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weigh
                 prev_weight,
                 weight,
                 weight - prev_weight,
+                prev_rank,
                 is_removed,
                 f"{date}T00:00:00",
             ),
