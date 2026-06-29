@@ -1,3 +1,4 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -8,10 +9,21 @@ build/
 .eggs/
 venv/
 .venv/
+
+# Databases and runtime output
 *.sqlite
 *.sqlite-journal
 data/*.sqlite
 .env
 logs/
 reports/
+
+# macOS / Finder metadata
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
