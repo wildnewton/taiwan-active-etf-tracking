@@ -20,6 +20,7 @@ SOURCES = [
 ]
 CODE_NAME_RE = re.compile(r"^([0-9A-Z]{4,8})\s+(.+)$")
 DOMESTIC_TAIWAN_KEYWORDS = ("台灣", "臺灣", "台股", "臺股")
+DOMESTIC_ISSUER_KEYWORDS = ("中國信託",)
 OFFSHORE_INSTRUMENT_KEYWORDS = (
     "境外",
     "海外",
@@ -30,6 +31,7 @@ OFFSHORE_INSTRUMENT_KEYWORDS = (
     "越南",
     "印度",
     "歐洲",
+    "亞洲",
 )
 
 
@@ -89,6 +91,8 @@ def is_primary_active_etf(security: ListedSecurity) -> bool:
 
 def trades_offshore_instruments(security: ListedSecurity) -> bool:
     text = f"{security.name} {security.isin or ''}"
+    for issuer in DOMESTIC_ISSUER_KEYWORDS:
+        text = text.replace(issuer, "")
     if any(keyword in text for keyword in DOMESTIC_TAIWAN_KEYWORDS):
         return False
     return any(keyword in text for keyword in OFFSHORE_INSTRUMENT_KEYWORDS)
