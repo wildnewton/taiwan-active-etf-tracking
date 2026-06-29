@@ -3,7 +3,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path("data/etf_holdings.sqlite3")
+DEFAULT_DB_PATH = Path("data/active_etf_holdings.sqlite")
 _DB_PATH = DEFAULT_DB_PATH
 _MEMORY_CONN = None
 

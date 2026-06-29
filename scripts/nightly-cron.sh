@@ -2,7 +2,7 @@
 # Nightly ETF pipeline: scrape + changes + signals + report
 set -euo pipefail
 
-PROJECT_DIR="/home/parallels/Documents/hermes-projects/taiwan-active-etf-tracking"
+PROJECT_DIR="/Users/niu/Documents/hermes-projects/taiwan-active-etf-tracking"
 LOG_DIR="${PROJECT_DIR}/logs"
 mkdir -p "${LOG_DIR}"
 
@@ -13,7 +13,7 @@ echo "=== Nightly pipeline start: $(date '+%Y-%m-%d %H:%M:%S %Z') ===" >> "${LOG
 cd "${PROJECT_DIR}"
 
 # Use system python3 (has playwright + all deps)
-PYTHON="/usr/bin/python3"
+PYTHON="${PROJECT_DIR}/.venv/bin/python3"
 
 # PYTHONPATH: scripts/ for project modules, project root for scrapers/ package
 export PYTHONPATH="${PROJECT_DIR}/scripts:${PROJECT_DIR}:${PYTHONPATH:-}"
