@@ -19,6 +19,20 @@ SOURCES = [
     {"market": "TPEx", "url": "https://isin.twse.com.tw/isin/C_public.jsp?strMode=4"},
 ]
 CODE_NAME_RE = re.compile(r"^([0-9A-Z]{4,8})\s+(.+)$")
+DOMESTIC_TAIWAN_KEYWORDS = ("台灣", "臺灣", "台股", "臺股")
+DOMESTIC_ISSUER_KEYWORDS = ("中國信託",)
+OFFSHORE_INSTRUMENT_KEYWORDS = (
+    "境外",
+    "海外",
+    "全球",
+    "美國",
+    "日本",
+    "中國",
+    "越南",
+    "印度",
+    "歐洲",
+    "亞洲",
+)
 
 
 @dataclass(frozen=True)
@@ -75,6 +89,19 @@ def is_primary_active_etf(security: ListedSecurity) -> bool:
     return "主動" in security.name and security.code.endswith("A")
 
 
+def trades_offshore_instruments(security: ListedSecurity) -> bool:
+    text = f"{security.name} {security.isin or ''}"
+    for issuer in DOMESTIC_ISSUER_KEYWORDS:
+        text = text.replace(issuer, "")
+    if any(keyword in text for keyword in DOMESTIC_TAIWAN_KEYWORDS):
+        return False
+    return any(keyword in text for keyword in OFFSHORE_INSTRUMENT_KEYWORDS)
+
+
+def is_discoverable_active_etf(security: ListedSecurity) -> bool:
+    return is_primary_active_etf(security) and not trades_offshore_instruments(security)
+
+
 def discover_active_etfs_with_status(sources: list[dict[str, str]] | None = None) -> DiscoveryResult:
     sources = sources or SOURCES
     securities: list[ListedSecurity] = []
@@ -92,7 +119,7 @@ def discover_active_etfs_with_status(sources: list[dict[str, str]] | None = None
             continue
         securities.extend(source_rows)
         completed_markets.append(market)
-    discovered = [security.as_dict() for security in securities if is_primary_active_etf(security)]
+    discovered = [security.as_dict() for security in securities if is_discoverable_active_etf(security)]
     discovered.sort(key=lambda row: row["code"])
     return DiscoveryResult(
         discovered=discovered,
