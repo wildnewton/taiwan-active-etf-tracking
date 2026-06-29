@@ -29,6 +29,7 @@ def test_explicit_offshore_active_etfs_are_excluded():
         "主動越南機會ETF",
         "主動印度市場ETF",
         "主動歐洲收益ETF",
+        "主動亞洲機會ETF",
         "主動境外股票ETF",
         "主動海外資產ETF",
     ]
@@ -37,6 +38,13 @@ def test_explicit_offshore_active_etfs_are_excluded():
         row = security(name)
         assert trades_offshore_instruments(row) is True, name
         assert is_discoverable_active_etf(row) is False, name
+
+
+def test_taiwan_issuer_name_does_not_create_china_false_positive():
+    row = security("中國信託主動優質成長ETF")
+
+    assert trades_offshore_instruments(row) is False
+    assert is_discoverable_active_etf(row) is True
 
 
 def test_domestic_taiwan_keywords_override_broad_terms():
