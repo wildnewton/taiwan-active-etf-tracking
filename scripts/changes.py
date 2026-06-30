@@ -521,7 +521,8 @@ def _flow_adjusted_consecutive_days(etf_code: str, stock_code: str, previous_dat
 
 def _issuer_for(etf_code: str) -> str:
     try:
-        return get_etf_config(etf_code)["issuer"]
+        issuer = get_etf_config(etf_code).get("issuer")
+        return issuer or ""
     except KeyError:
         return ""
 
