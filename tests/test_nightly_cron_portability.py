@@ -23,7 +23,9 @@ def test_nightly_cron_keeps_pipeline_paths_project_relative():
     text = SCRIPT.read_text()
 
     assert 'LOG_DIR="${PROJECT_DIR}/logs"' in text
-    assert 'PYTHON="${PROJECT_DIR}/.venv/bin/python3"' in text
+    assert '.venv/bin/python3 -u scripts/nightly_pipeline.py' in text
     assert 'export PYTHONPATH="${PROJECT_DIR}/scripts:${PROJECT_DIR}:${PYTHONPATH:-}"' in text
     assert "--db data/active_etf_holdings.sqlite" in text
     assert "--report-dir reports" in text
+    # Output should go to BOTH stdout and log file
+    assert "| tee -a" in text
