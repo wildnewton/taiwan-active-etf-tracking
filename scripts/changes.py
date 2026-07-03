@@ -146,9 +146,10 @@ def _select_canonical_sources(date_value: str) -> dict:
     with db._connect() as conn:
         rows = conn.execute(
             """
-            SELECT etf_code, source_type, stock_code, shares, weight_pct
-            FROM etf_daily_holdings
-            WHERE date = ?
+            SELECT h.etf_code, h.source_type, h.stock_code, h.shares, h.weight_pct
+            FROM etf_daily_holdings h
+            JOIN etf_universe u ON h.etf_code = u.code
+            WHERE u.retired = 0 AND h.date = ?
             """,
             (date_value,),
         ).fetchall()

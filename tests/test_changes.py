@@ -87,6 +87,8 @@ def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
 def test_detects_new_removed_and_existing_position_changes():
     db.init_db(":memory:")
 
+    _insert_etf_universe_entry("00980A", "Test ETF", "TestIssuer", 0)
+
     insert_holding("2026-06-20", "00980A", "2330", "台積電", 100, 10.0)
     insert_holding("2026-06-20", "00980A", "2308", "台達電", 200, 5.0)
     insert_holding("2026-06-20", "00980A", "2383", "台光電", 300, 3.0)
@@ -136,6 +138,8 @@ def test_detects_new_removed_and_existing_position_changes():
 def test_detects_three_day_rolling_delta_and_consecutive_adds():
     db.init_db(":memory:")
 
+    _insert_etf_universe_entry("00980A", "Test ETF", "TestIssuer", 0)
+
     insert_holding("2026-06-20", "00980A", "2330", "台積電", 100, 1.0)
     insert_holding("2026-06-21", "00980A", "2330", "台積電", 110, 2.0)
     insert_holding("2026-06-22", "00980A", "2330", "台積電", 120, 4.0)
@@ -153,6 +157,8 @@ def test_detects_three_day_rolling_delta_and_consecutive_adds():
 
 def test_detects_consecutive_reductions():
     db.init_db(":memory:")
+
+    _insert_etf_universe_entry("00980A", "Test ETF", "TestIssuer", 0)
 
     insert_holding("2026-06-20", "00980A", "2330", "台積電", 120, 4.0)
     insert_holding("2026-06-21", "00980A", "2330", "台積電", 110, 2.0)
