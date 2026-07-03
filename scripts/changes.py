@@ -145,17 +145,19 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) 
 def _select_canonical_sources(date_value: str) -> dict:
     with db._connect() as conn:
         rows = conn.execute(
-            """
-            SELECT h.etf_code, h.source_type, h.stock_code, h.shares, h.weight_pct
-            FROM etf_daily_holdings h
-            JOIN etf_universe u ON h.etf_code = u.code
-            WHERE u.retired = 0 AND h.date = ?
-            """,
+            "SELECT etf_code, source_type, stock_code, shares, weight_pct "
+            "FROM etf_daily_holdings WHERE date = ?",
             (date_value,),
         ).fetchall()
+        retired_rows = conn.execute(
+            "SELECT code FROM etf_universe WHERE retired = 1"
+        ).fetchall()
+    retired_codes = {row[0] for row in retired_rows}
 
     grouped = {}
     for etf_code, source_type, stock_code, shares, weight_pct in rows:
+        if etf_code in retired_codes:
+            continue
         key = (etf_code, source_type)
         entry = grouped.setdefault(
             key,

@@ -1,9 +1,11 @@
 import pytest
 
+import db
 from config import get_etf_config, get_moneydj_url
 
 
 def test_get_etf_config_returns_matching_config_by_code():
+    db.init_db(":memory:")
     config = get_etf_config("00980A")
 
     assert config["code"] == "00980A"
