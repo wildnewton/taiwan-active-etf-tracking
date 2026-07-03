@@ -16,6 +16,10 @@ from config import get_moneydj_url
 
 
 SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "seeds" / "etf_universe_seed.json"
+_SCOPE_EXCLUSION_MARKERS = (
+    "excluded_from_taiwan_stock_universe",
+    "trades_offshore_instruments=true",
+)
 
 
 def _now() -> str:
@@ -60,6 +64,11 @@ def _ensure_pending_retirement_column(conn) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
     if "pending_retirement_since" not in existing:
         conn.execute("ALTER TABLE etf_universe ADD COLUMN pending_retirement_since TEXT")
+
+
+def _is_scope_excluded(row: dict) -> bool:
+    official_logic = row.get("official_logic") or ""
+    return any(marker in official_logic for marker in _SCOPE_EXCLUSION_MARKERS)
 
 
 def _with_derived_fields(row: dict) -> dict:
@@ -310,9 +319,19 @@ def reconcile_discovered_universe(
 
     with db._connect() as conn:
         current_rows = conn.execute(
-            "SELECT code, retired, pending_retirement_since FROM etf_universe"
+            """
+            SELECT code, retired, pending_retirement_since, official_logic
+            FROM etf_universe
+            """
         ).fetchall()
-        known = {row[0]: {"retired": row[1], "pending_retirement_since": row[2]} for row in current_rows}
+        known = {
+            row[0]: {
+                "retired": row[1],
+                "pending_retirement_since": row[2],
+                "official_logic": row[3],
+            }
+            for row in current_rows
+        }
 
         for code, raw in sorted(discovered.items()):
             if code not in known:
@@ -342,6 +361,20 @@ def reconcile_discovered_universe(
                 continue
 
             if known[code]["retired"]:
+                if _is_scope_excluded(known[code]):
+                    conn.execute(
+                        """
+                        UPDATE etf_universe
+                        SET last_seen_date = ?,
+                            pending_retirement_since = NULL,
+                            market = COALESCE(?, market),
+                            isin = COALESCE(?, isin),
+                            updated_at = ?
+                        WHERE code = ?
+                        """,
+                        (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                    )
+                    continue
                 conn.execute(
                     """
                     UPDATE etf_universe
