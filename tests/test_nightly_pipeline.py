@@ -60,21 +60,25 @@ def test_script_calls_all_steps(tmp_path):
          patch("pipeline.run_daily_scrape_with_browser") as mock_scrape, \
          patch("changes.detect_holding_changes") as mock_changes, \
          patch("signals.generate_manager_signals") as mock_signals, \
-         patch("report.generate_signal_report") as mock_report:
+         patch("report.generate_signal_report") as mock_report, \
+         patch("traction_analysis.generate_traction_report") as mock_traction:
 
         mock_scrape.return_value = COMPLETE_SCRAPE
         mock_changes.return_value = {"date": "2026-06-23", "skipped_etfs": []}
         mock_signals.return_value = {"date": "2026-06-23"}
         mock_report.return_value = "Test report"
+        mock_traction.return_value = "Test traction"
 
         _run_main(db_path, report_dir)
 
         mock_init.assert_called_once_with(db_path)
+        assert mock_init.call_count == 1
         mock_discovery.assert_called_once_with(db_path)
         mock_scrape.assert_called_once_with(db_path)
         mock_changes.assert_called_once()
         mock_signals.assert_called_once()
         mock_report.assert_called_once()
+        mock_traction.assert_called_once()
 
 
 def test_script_writes_report_file(tmp_path):
@@ -86,14 +90,20 @@ def test_script_writes_report_file(tmp_path):
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
          patch("changes.detect_holding_changes", return_value={"skipped_etfs": []}), \
          patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value="Signal report text"):
+         patch("report.generate_signal_report", return_value="Signal report text"), \
+         patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
 
         _run_main(db_path, report_dir)
 
         reports = list(Path(report_dir).glob("*.txt"))
-        assert len(reports) == 1, f"Expected 1 report file, got {len(reports)}"
-        assert "taiwan_active_etf_signal_report_" in reports[0].name
-        assert reports[0].read_text(encoding="utf-8") == "Signal report text"
+        assert len(reports) == 2, f"Expected 2 report files, got {len(reports)}: {[r.name for r in reports]}"
+        names = [r.name for r in reports]
+        signal_files = [n for n in names if "taiwan_active_etf_signal_report_" in n]
+        traction_files = [n for n in names if "traction_raw_" in n]
+        assert len(signal_files) == 1, f"Expected 1 signal report, got {signal_files}"
+        assert len(traction_files) == 1, f"Expected 1 traction raw, got {traction_files}"
+        signal_path = [r for r in reports if "taiwan_active_etf_signal_report_" in r.name][0]
+        assert signal_path.read_text(encoding="utf-8") == "Signal report text"
 
 
 def test_warns_when_incomplete_scrape(capsys, tmp_path):
@@ -102,7 +112,8 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
          patch("pipeline.run_daily_scrape_with_browser", return_value=PARTIAL_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
          patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value=""):
+         patch("report.generate_signal_report", return_value=""), \
+         patch("traction_analysis.generate_traction_report", return_value=""):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
@@ -116,7 +127,8 @@ def test_warns_when_skipped_etfs(capsys, tmp_path):
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=WITH_SKIP_CHANGES), \
          patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value=""):
+         patch("report.generate_signal_report", return_value=""), \
+         patch("traction_analysis.generate_traction_report", return_value=""):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
@@ -131,7 +143,8 @@ def test_no_warning_when_complete(capsys, tmp_path):
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
          patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value=""):
+         patch("report.generate_signal_report", return_value=""), \
+         patch("traction_analysis.generate_traction_report", return_value=""):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
