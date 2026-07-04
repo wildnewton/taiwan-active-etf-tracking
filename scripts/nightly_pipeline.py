@@ -6,6 +6,7 @@ Runs the full workflow:
   3. Holding change detection
   4. Manager signal generation
   5. Daily signal report → timestamped file
+  6. Traction analysis (active_add/reduce flow) → timestamped file
 
 Usage:
     python3 scripts/nightly_pipeline.py
@@ -13,7 +14,8 @@ Usage:
     python3 scripts/nightly_pipeline.py --report-dir reports
 """
 import argparse
-from datetime import datetime
+import sys
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import db
@@ -22,6 +24,7 @@ from discover_active_etfs import discover_and_reconcile
 from pipeline import run_daily_scrape_with_browser
 from report import generate_signal_report
 from signals import generate_manager_signals
+from traction_analysis import generate_traction_report
 
 
 def main():
@@ -122,7 +125,7 @@ def main():
     signal_summary = generate_manager_signals()
     print(f"  Signal summary: {signal_summary}")
 
-    print("Step 5/5: Generating signal report...")
+    print("Step 5/6: Generating signal report...")
     report_text = generate_signal_report()
 
     report_dir = Path(args.report_dir)
@@ -132,8 +135,23 @@ def main():
     report_path = report_dir / f"taiwan_active_etf_signal_report_{stamp}.txt"
     report_path.write_text(report_text, encoding="utf-8")
 
+    print("Step 6/6: Generating traction analysis (raw data)...")
+    traction_path = None
+    try:
+        traction_raw = generate_traction_report(
+            db_path=args.db,
+            window_days=10,
+        )
+        traction_path = report_dir / f"traction_raw_{stamp}.txt"
+        traction_path.write_text(traction_raw, encoding="utf-8")
+        print(f"Traction raw data written to: {traction_path}")
+    except Exception as exc:
+        print(f"⚠️ Traction analysis failed (non-fatal): {exc}")
+
     print("Nightly Taiwan active ETF pipeline complete")
-    print(f"Report written to: {report_path}")
+    print(f"Signal report: {report_path}")
+    if traction_path:
+        print(f"Traction data: {traction_path}")
 
 
 if __name__ == "__main__":
