@@ -36,34 +36,8 @@ def _dict_factory(cursor, row):
 
 def _ensure_table() -> None:
     conn = db._connect()
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS etf_universe (
-            code TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            issuer TEXT,
-            market TEXT,
-            isin TEXT,
-            retired INTEGER NOT NULL DEFAULT 0,
-            first_seen_date TEXT,
-            last_seen_date TEXT,
-            retired_since TEXT,
-            pending_retirement_since TEXT,
-            official_url TEXT,
-            official_method TEXT,
-            official_logic TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        )
-        """
-    )
-    _ensure_pending_retirement_column(conn)
-
-
-def _ensure_pending_retirement_column(conn) -> None:
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
-    if "pending_retirement_since" not in existing:
-        conn.execute("ALTER TABLE etf_universe ADD COLUMN pending_retirement_since TEXT")
+    db._create_etf_universe_table(conn)
+    db._ensure_etf_universe_columns(conn)
 
 
 def _is_scope_excluded(row: dict) -> bool:
@@ -101,6 +75,14 @@ def _count_rows() -> int:
     return row[0] if row else 0
 
 
+def _last_active_from_row(row: dict) -> str | None:
+    if row.get("last_active_date") is not None:
+        return row.get("last_active_date")
+    if row.get("retired") and row.get("retired_since") is not None:
+        return row.get("retired_since")
+    return row.get("last_seen_date") or row.get("retired_since")
+
+
 def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str | None = None) -> int:
     """Seed known ETF metadata from JSON without overwriting DB edits.
 
@@ -127,11 +109,11 @@ def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str |
                 """
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
-                    first_seen_date, last_seen_date, retired_since,
+                    first_seen_date, last_active_date,
                     pending_retirement_since,
                     official_url, official_method, official_logic,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)
                 """,
                 (
                     code,
@@ -206,24 +188,24 @@ def upsert_etf(row: dict) -> None:
     code = row["code"].upper()
     existing = _fetch_raw(code)
     now = _now()
+    normalized = {**row, "last_active_date": _last_active_from_row(row)}
 
     if existing:
-        merged = {**existing, **row, "code": code, "updated_at": now}
+        merged = {**existing, **normalized, "code": code, "updated_at": now}
     else:
         merged = {
             "code": code,
-            "name": row.get("name") or code,
-            "issuer": row.get("issuer"),
-            "market": row.get("market"),
-            "isin": row.get("isin"),
-            "retired": int(row.get("retired", 0)),
-            "first_seen_date": row.get("first_seen_date"),
-            "last_seen_date": row.get("last_seen_date"),
-            "retired_since": row.get("retired_since"),
-            "pending_retirement_since": row.get("pending_retirement_since"),
-            "official_url": row.get("official_url"),
-            "official_method": row.get("official_method"),
-            "official_logic": row.get("official_logic"),
+            "name": normalized.get("name") or code,
+            "issuer": normalized.get("issuer"),
+            "market": normalized.get("market"),
+            "isin": normalized.get("isin"),
+            "retired": int(normalized.get("retired", 0)),
+            "first_seen_date": normalized.get("first_seen_date"),
+            "last_active_date": normalized.get("last_active_date"),
+            "pending_retirement_since": normalized.get("pending_retirement_since"),
+            "official_url": normalized.get("official_url"),
+            "official_method": normalized.get("official_method"),
+            "official_logic": normalized.get("official_logic"),
             "created_at": now,
             "updated_at": now,
         }
@@ -233,11 +215,11 @@ def upsert_etf(row: dict) -> None:
             """
             INSERT OR REPLACE INTO etf_universe (
                 code, name, issuer, market, isin, retired,
-                first_seen_date, last_seen_date, retired_since,
+                first_seen_date, last_active_date,
                 pending_retirement_since,
                 official_url, official_method, official_logic,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 merged["code"],
@@ -247,8 +229,7 @@ def upsert_etf(row: dict) -> None:
                 merged.get("isin"),
                 int(merged.get("retired") or 0),
                 merged.get("first_seen_date"),
-                merged.get("last_seen_date"),
-                merged.get("retired_since"),
+                merged.get("last_active_date"),
                 merged.get("pending_retirement_since"),
                 merged.get("official_url"),
                 merged.get("official_method"),
@@ -259,21 +240,21 @@ def upsert_etf(row: dict) -> None:
         )
 
 
-def retire_etf(code: str, retired_since: str | None = None, reason: str | None = None) -> None:
+def retire_etf(code: str, last_active_date: str | None = None, reason: str | None = None) -> None:
     ensure_seeded()
-    retired_since = retired_since or _today()
+    last_active_date = last_active_date or _today()
     now = _now()
     with db._connect() as conn:
         conn.execute(
             """
             UPDATE etf_universe
             SET retired = 1,
-                retired_since = COALESCE(retired_since, ?),
+                last_active_date = COALESCE(?, last_active_date),
                 pending_retirement_since = NULL,
                 updated_at = ?
             WHERE code = ?
             """,
-            (retired_since, now, code.upper()),
+            (last_active_date, now, code.upper()),
         )
 
 
@@ -284,9 +265,8 @@ def _reactivate_etf(code: str, seen_date: str) -> None:
             """
             UPDATE etf_universe
             SET retired = 0,
-                retired_since = NULL,
                 pending_retirement_since = NULL,
-                last_seen_date = ?,
+                last_active_date = ?,
                 updated_at = ?
             WHERE code = ?
             """,
@@ -339,11 +319,11 @@ def reconcile_discovered_universe(
                     """
                     INSERT INTO etf_universe (
                         code, name, issuer, market, isin, retired,
-                        first_seen_date, last_seen_date, retired_since,
+                        first_seen_date, last_active_date,
                         pending_retirement_since,
                         official_url, official_method, official_logic,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL, NULL, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
                     """,
                     (
                         code,
@@ -378,9 +358,8 @@ def reconcile_discovered_universe(
                     """
                     UPDATE etf_universe
                     SET retired = 0,
-                        retired_since = NULL,
                         pending_retirement_since = NULL,
-                        last_seen_date = ?,
+                        last_active_date = ?,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
                         updated_at = ?
@@ -393,7 +372,7 @@ def reconcile_discovered_universe(
                 conn.execute(
                     """
                     UPDATE etf_universe
-                    SET last_seen_date = ?,
+                    SET last_active_date = ?,
                         pending_retirement_since = NULL,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
@@ -419,7 +398,7 @@ def reconcile_discovered_universe(
                     """
                     UPDATE etf_universe
                     SET retired = 1,
-                        retired_since = COALESCE(retired_since, ?),
+                        last_active_date = ?,
                         pending_retirement_since = NULL,
                         updated_at = ?
                     WHERE code = ?
