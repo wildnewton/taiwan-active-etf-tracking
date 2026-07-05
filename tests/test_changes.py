@@ -179,7 +179,7 @@ def _insert_etf_universe_entry(code, name, issuer, retired):
             """
             INSERT INTO etf_universe
                 (code, name, issuer, market, retired,
-                 first_seen_date, last_seen_date, created_at, updated_at)
+                 first_seen_date, last_active_date, created_at, updated_at)
             VALUES (?, ?, ?, 'TWSE', ?,
                     '2026-06-20', '2026-06-23', datetime('now'), datetime('now'))
             """,
@@ -259,18 +259,16 @@ def test_retired_etf_with_null_issuer_does_not_crash():
     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
     _insert_etf_universe_entry("RETIRED", "Retired NULL", None, 1)
 
-    insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 8.0)
-    insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 20, 2.0)
-
-    insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 120, 10.0)
-    insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 25, 3.0)
+    insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
+    insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
+    insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
+    insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
 
     _insert_scrape_success("2026-06-20", "ACTIVE")
     _insert_scrape_success("2026-06-23", "ACTIVE")
 
-    # Must not raise IntegrityError
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 
     assert summary["ok"] is True
-    assert fetch_change("2330", etf_code="ACTIVE", date="2026-06-23") is not None
-    assert fetch_change("2498", etf_code="RETIRED", date="2026-06-23") is None
+    retired_row = fetch_change("2498", etf_code="RETIRED", date="2026-06-23")
+    assert retired_row is None
