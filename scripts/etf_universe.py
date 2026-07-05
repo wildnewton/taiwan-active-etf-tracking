@@ -15,7 +15,7 @@ import db
 from config import get_moneydj_url
 
 
-SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "seeds" / "etf_universe_seed.json"
+SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "etf_universe_seed.json"
 _SCOPE_EXCLUSION_MARKERS = (
     "excluded_from_taiwan_stock_universe",
     "trades_offshore_instruments=true",
