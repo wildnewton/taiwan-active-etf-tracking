@@ -84,6 +84,14 @@ def _last_active_from_row(row: dict) -> str | None:
     return row.get("last_seen_date") or row.get("retired_since")
 
 
+def _normalize_input_row(row: dict) -> dict:
+    normalized = dict(row)
+    last_active_date = _last_active_from_row(row)
+    if last_active_date is not None:
+        normalized["last_active_date"] = last_active_date
+    return normalized
+
+
 def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str | None = None) -> int:
     """Seed known ETF metadata from JSON without overwriting DB edits.
 
@@ -189,7 +197,7 @@ def upsert_etf(row: dict) -> None:
     code = row["code"].upper()
     existing = _fetch_raw(code)
     now = _now()
-    normalized = {**row, "last_active_date": _last_active_from_row(row)}
+    normalized = _normalize_input_row(row)
 
     if existing:
         merged = {**existing, **normalized, "code": code, "updated_at": now}
