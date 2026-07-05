@@ -40,6 +40,7 @@ def test_reconcile_does_not_reactivate_taiwan_scope_excluded_retired_etf():
     assert "00998A" not in summary["reactivated"]
     assert config["retired"] == 1
     assert config["retired_since"] == "2026-07-01"
+    assert config["last_seen_date"] == "2026-07-01"
     assert "00998A" not in active_codes
 
 
@@ -57,6 +58,7 @@ def test_reconcile_does_not_reactivate_retired_etf_marked_as_offshore_instrument
 
     assert "00998A" not in summary["reactivated"]
     assert config["retired"] == 1
+    assert config["last_seen_date"] == "2026-07-01"
     assert "00998A" not in active_codes
 
 
@@ -77,4 +79,5 @@ def test_reconcile_still_reactivates_normal_retired_etf_when_rediscovered():
     assert summary["reactivated"] == ["00980A"]
     assert config["retired"] == 0
     assert config["retired_since"] is None
+    assert config["last_seen_date"] == "2026-07-02"
     assert "00980A" in active_codes
