@@ -329,7 +329,12 @@ def _get_failed_etfs(data_date):
     try:
         with _using_row_factory(None) as conn:
             rows = conn.execute(
-                "SELECT etf_code FROM etf_scrape_runs WHERE date = ? AND status = 'failed' ORDER BY etf_code",
+                """SELECT sr.etf_code
+                   FROM etf_scrape_runs sr
+                   JOIN etf_universe u ON sr.etf_code = u.code
+                   WHERE sr.date = ? AND sr.status = 'failed'
+                     AND u.retired = 0
+                   ORDER BY sr.etf_code""",
                 (data_date,),
             ).fetchall()
         return [row[0] for row in rows]
@@ -343,16 +348,18 @@ def _get_skipped_change_diagnostics(data_date):
     try:
         with _using_row_factory(_dict_factory) as conn:
             return conn.execute(
-                """SELECT etf_code, reason, current_source_type, previous_source_type
-                   FROM etf_change_diagnostics
-                   WHERE date = ?
-                     AND status = 'skipped'
-                     AND created_at = (
+                """SELECT d.etf_code, d.reason, d.current_source_type, d.previous_source_type
+                   FROM etf_change_diagnostics d
+                   JOIN etf_universe u ON d.etf_code = u.code
+                   WHERE d.date = ?
+                     AND d.status = 'skipped'
+                     AND u.retired = 0
+                     AND d.created_at = (
                          SELECT MAX(created_at)
                          FROM etf_change_diagnostics
                          WHERE date = ?
                      )
-                   ORDER BY etf_code""",
+                   ORDER BY d.etf_code""",
                 (data_date, data_date),
             ).fetchall()
     except sqlite3.OperationalError:
