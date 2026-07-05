@@ -24,6 +24,26 @@ def _discovered(code="00998A", name="主動復華金融股息", market="TPEx"):
     return [{"code": code, "name": name, "market": market, "isin": None}]
 
 
+def test_upsert_preserves_last_active_date_when_metadata_update_omits_it():
+    db.init_db(":memory:")
+    from etf_universe import get_etf_config, upsert_etf
+
+    upsert_etf({
+        "code": "00998A",
+        "name": "主動復華金融股息",
+        "retired": 1,
+        "first_seen_date": "2026-07-01",
+        "last_active_date": "2026-07-01",
+        "official_logic": "excluded_from_taiwan_stock_universe",
+    })
+    upsert_etf({"code": "00998A", "name": "手動更新名稱"})
+
+    config = get_etf_config("00998A")
+
+    assert config["name"] == "手動更新名稱"
+    assert config["last_active_date"] == "2026-07-01"
+
+
 def test_reconcile_does_not_reactivate_taiwan_scope_excluded_retired_etf():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe
