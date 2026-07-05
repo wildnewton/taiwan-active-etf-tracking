@@ -365,14 +365,13 @@ def reconcile_discovered_universe(
                     conn.execute(
                         """
                         UPDATE etf_universe
-                        SET last_seen_date = ?,
-                            pending_retirement_since = NULL,
+                        SET pending_retirement_since = NULL,
                             market = COALESCE(?, market),
                             isin = COALESCE(?, isin),
                             updated_at = ?
                         WHERE code = ?
                         """,
-                        (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                        (raw.get("market"), raw.get("isin"), now, code),
                     )
                     continue
                 conn.execute(
