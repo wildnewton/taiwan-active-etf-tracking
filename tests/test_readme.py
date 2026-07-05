@@ -13,6 +13,15 @@ def test_readme_exists():
     assert README.exists()
 
 
+def test_readme_documents_taiwan_stock_active_etf_scope():
+    text = _readme_text()
+
+    assert (
+        "Taiwan Active ETF Tracking is a Python pipeline for tracking "
+        "Taiwan-listed active ETFs whose investment universe is Taiwan stocks."
+    ) in text
+
+
 def test_readme_documents_current_entrypoints_and_layout():
     text = _readme_text()
 

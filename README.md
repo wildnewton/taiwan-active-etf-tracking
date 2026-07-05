@@ -1,6 +1,6 @@
 # Taiwan Active ETF Tracking
 
-Taiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETFs, scraping daily holdings, detecting holding changes, generating manager signals, and writing nightly reports.
+Taiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETFs whose investment universe is Taiwan stocks.
 
 The project stores operational state in SQLite and treats the `etf_universe` table as the source of truth for which ETFs should be fetched. Rows with `retired = 0` are included in nightly scraping; retired rows are retained for historical lookup.
 

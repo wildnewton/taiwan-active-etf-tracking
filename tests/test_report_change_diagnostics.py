@@ -30,6 +30,23 @@ def insert_full_holdings_day(date):
         insert_holding(date, etf_code)
 
 
+def insert_failed_scrape_run(date, etf_code, error="test failure"):
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_scrape_runs (
+                date, etf_code, status, primary_source, primary_success,
+                moneydj_browser_used, official_fallback_used, official_success,
+                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                total_weight_all_rows, total_weight_stock_rows, source_url,
+                error, started_at, finished_at
+            ) VALUES (?, ?, 'failed', 'moneydj_primary', 0, 0, 0, 0,
+                0, 0, 0, 0.0, 0.0, '', ?, ?, ?)
+            """,
+            (date, etf_code, error, f"{date}T00:00:00", f"{date}T00:01:00"),
+        )
+
+
 def insert_change_diagnostic(
     date,
     prev_date,
@@ -61,6 +78,13 @@ def insert_change_diagnostic(
                 created_at or f"{date}T00:00:00",
             ),
         )
+
+
+def retire_test_etf(etf_code):
+    from etf_universe import retire_etf, seed_etf_universe_from_file
+
+    seed_etf_universe_from_file()
+    retire_etf(etf_code, last_active_date="2026-06-25", reason="test retired")
 
 
 def test_report_shows_skipped_change_diagnostics_in_data_quality():
@@ -146,3 +170,62 @@ def test_report_uses_latest_diagnostics_run_when_previous_holding_date_differs()
     report = generate_signal_report("2026-06-26")
 
     assert "00980A incompatible_source_pair" in report
+
+
+def test_retired_etf_with_failed_scrape_run_does_not_appear_in_report_failed_section():
+    db.init_db(":memory:")
+    insert_full_holdings_day("2026-06-26")
+    retire_test_etf("00980A")
+    insert_failed_scrape_run("2026-06-26", "00980A", error="retired failure")
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "抓取失敗:" not in report
+    assert "00980A" not in report
+
+
+def test_active_etf_with_failed_scrape_run_still_appears_in_report_failed_section():
+    db.init_db(":memory:")
+    insert_full_holdings_day("2026-06-26")
+    insert_failed_scrape_run("2026-06-26", "00981A", error="active failure")
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "抓取失敗: 00981A" in report
+
+
+def test_retired_etf_with_skipped_change_diagnostic_does_not_appear_in_report():
+    db.init_db(":memory:")
+    insert_full_holdings_day("2026-06-25")
+    insert_full_holdings_day("2026-06-26")
+    retire_test_etf("00980A")
+    insert_change_diagnostic(
+        "2026-06-26",
+        "2026-06-25",
+        "00980A",
+        "skipped",
+        "retired_diagnostic",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "變更偵測跳過" not in report
+    assert "00980A retired_diagnostic" not in report
+
+
+def test_active_etf_with_skipped_change_diagnostic_still_appears_in_report():
+    db.init_db(":memory:")
+    insert_full_holdings_day("2026-06-25")
+    insert_full_holdings_day("2026-06-26")
+    insert_change_diagnostic(
+        "2026-06-26",
+        "2026-06-25",
+        "00981A",
+        "skipped",
+        "active_diagnostic",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "變更偵測跳過" in report
+    assert "00981A active_diagnostic" in report
