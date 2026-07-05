@@ -36,8 +36,9 @@ def _dict_factory(cursor, row):
 
 def _ensure_table() -> None:
     conn = db._connect()
-    db._create_etf_universe_table(conn)
-    db._ensure_etf_universe_columns(conn)
+    with conn:
+        db._create_etf_universe_table(conn)
+        db._ensure_etf_universe_columns(conn)
 
 
 def _is_scope_excluded(row: dict) -> bool:
@@ -240,9 +241,14 @@ def upsert_etf(row: dict) -> None:
         )
 
 
-def retire_etf(code: str, last_active_date: str | None = None, reason: str | None = None) -> None:
+def retire_etf(
+    code: str,
+    last_active_date: str | None = None,
+    reason: str | None = None,
+    retired_since: str | None = None,
+) -> None:
     ensure_seeded()
-    last_active_date = last_active_date or _today()
+    last_active_date = last_active_date or retired_since or _today()
     now = _now()
     with db._connect() as conn:
         conn.execute(
