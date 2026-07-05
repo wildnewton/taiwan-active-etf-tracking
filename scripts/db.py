@@ -78,7 +78,7 @@ def _row_dict(row):
 def _connect():
     if _DB_PATH == ":memory:":
         return _MEMORY_CONN
-    _DB_PATH.parent.mkdir(parents=True)
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     return sqlite3.connect(_DB_PATH)
 
 
