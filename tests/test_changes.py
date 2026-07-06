@@ -103,6 +103,8 @@ def test_detects_new_removed_and_existing_position_changes():
     assert summary["rows"] == 4
     assert summary["new_positions"] == 1
     assert summary["removed_positions"] == 1
+    assert summary["previous_date"] == "2026-06-20"
+    assert summary["previous_date_weekday"] == "週六"
 
     tsmc = fetch_change("2330")
     assert tsmc["prev_weight_pct"] == 10.0

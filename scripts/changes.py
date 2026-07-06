@@ -8,6 +8,12 @@ from etf_universe import get_active_etf_count, get_etf_config
 
 
 _EPSILON = 1e-9
+
+_WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '週日']
+
+
+def _weekday_label(date_str: str) -> str:
+    return _WEEKDAYS[datetime.strptime(date_str, '%Y-%m-%d').weekday()]
 _MIN_SCALE_SAMPLE_SIZE = 3
 _MIN_ACTIVE_DELTA_PCT = 1.0
 _SOURCE_PRIORITIES = {
@@ -118,6 +124,7 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
         "ok": True,
         "date": current_date,
         "previous_date": previous_date,
+        "previous_date_weekday": _weekday_label(previous_date),
         "rows": len(changes),
         "new_positions": sum(row["is_new_position"] for row in changes),
         "removed_positions": sum(row["is_removed_position"] for row in changes),
@@ -134,6 +141,7 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) 
         "ok": False,
         "date": current_date,
         "previous_date": previous_date,
+        "previous_date_weekday": _weekday_label(previous_date) if previous_date else "未知",
         "rows": 0,
         "new_positions": 0,
         "removed_positions": 0,
