@@ -36,6 +36,12 @@ WITH_SKIP_CHANGES = {
     "rows": 631, "new_positions": 2, "removed_positions": 24,
     "skipped_etfs": ["00401A", "00404A", "00405A", "00984A"],
 }
+MANAGER_INTENT_SUMMARY = {
+    "ok": True,
+    "date": "2026-06-26",
+    "windows": [5, 10],
+    "rows": 42,
+}
 
 
 def test_script_exists():
@@ -59,6 +65,7 @@ def test_script_calls_all_steps(tmp_path):
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY) as mock_discovery, \
          patch("pipeline.run_daily_scrape_with_browser") as mock_scrape, \
          patch("changes.detect_holding_changes") as mock_changes, \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as mock_intent, \
          patch("signals.generate_manager_signals") as mock_signals, \
          patch("report.generate_signal_report") as mock_report, \
          patch("traction_analysis.generate_traction_report") as mock_traction:
@@ -76,9 +83,57 @@ def test_script_calls_all_steps(tmp_path):
         mock_discovery.assert_called_once_with(db_path)
         mock_scrape.assert_called_once_with(db_path)
         mock_changes.assert_called_once()
+        mock_intent.assert_called_once_with("2026-06-23")
         mock_signals.assert_called_once()
         mock_report.assert_called_once()
         mock_traction.assert_called_once()
+
+
+def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
+    db_path = str(tmp_path / "test.sqlite3")
+    report_dir = str(tmp_path / "reports")
+    events = []
+
+    def changes_side_effect():
+        events.append("changes")
+        return NO_SKIP_CHANGES
+
+    def intent_side_effect(target_date=None):
+        events.append(("manager_intent", target_date))
+        return MANAGER_INTENT_SUMMARY
+
+    def signals_side_effect():
+        events.append("signals")
+        return {"date": "2026-06-26"}
+
+    with patch("db.init_db"), \
+         patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+         patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+         patch("changes.detect_holding_changes", side_effect=changes_side_effect), \
+         patch("manager_intent.generate_manager_intent_rollups", side_effect=intent_side_effect), \
+         patch("signals.generate_manager_signals", side_effect=signals_side_effect), \
+         patch("report.generate_signal_report", return_value="Signal report text"), \
+         patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
+        _run_main(db_path, report_dir)
+
+    assert events == ["changes", ("manager_intent", "2026-06-26"), "signals"]
+
+
+def test_manager_intent_summary_is_printed(capsys, tmp_path):
+    with patch("db.init_db"), \
+         patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+         patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+         patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+         patch("signals.generate_manager_signals", return_value={}), \
+         patch("report.generate_signal_report", return_value=""), \
+         patch("traction_analysis.generate_traction_report", return_value=""):
+        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+    out = capsys.readouterr().out
+    assert "Generating manager intent rollups" in out
+    assert "Manager intent summary" in out
+    assert "42" in out
 
 
 def test_script_writes_report_file(tmp_path):
@@ -88,7 +143,8 @@ def test_script_writes_report_file(tmp_path):
     with patch("db.init_db"), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
-         patch("changes.detect_holding_changes", return_value={"skipped_etfs": []}), \
+         patch("changes.detect_holding_changes", return_value={"date": "2026-06-26", "skipped_etfs": []}), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value="Signal report text"), \
          patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
@@ -111,6 +167,7 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=PARTIAL_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value=""), \
          patch("traction_analysis.generate_traction_report", return_value=""):
@@ -126,6 +183,7 @@ def test_warns_when_skipped_etfs(capsys, tmp_path):
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=WITH_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value=""), \
          patch("traction_analysis.generate_traction_report", return_value=""):
@@ -142,6 +200,7 @@ def test_no_warning_when_complete(capsys, tmp_path):
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
          patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value=""), \
          patch("traction_analysis.generate_traction_report", return_value=""):
