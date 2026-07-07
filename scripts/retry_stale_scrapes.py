@@ -59,7 +59,8 @@ def retry_stale_etfs(
 
     etf_codes = [row["etf_code"] for row in stale_rows]
     retry_summary = run_selected_scrape_with_browser(db_path, etf_codes)
-    stale_after = retry_summary.get("data_freshness", {}).get("stale", stale_before)
+    fresh_after_retry = retry_summary.get("data_freshness", {}).get("fresh", 0)
+    stale_after = max(stale_before - fresh_after_retry, 0)
     improved = stale_after < stale_before
 
     summary = {
