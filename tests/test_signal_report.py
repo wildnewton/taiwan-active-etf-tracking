@@ -126,7 +126,7 @@ def test_generate_signal_report_shows_summary_and_signals():
     insert_signal(
         signal_type="consensus_reduce_3d",
         signal_strength="medium",
-        signal_score=-4,
+        signal_score=-6,
         stock_code="2454",
         stock_name="聯發科",
         etf_codes=["00980A", "00981A"],
