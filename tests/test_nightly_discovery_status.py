@@ -24,7 +24,8 @@ COMPLETE_SCRAPE = {
     "failures": [],
     "moneydj_warnings": [],
 }
-NO_SKIP_CHANGES = {"ok": True, "skipped_etfs": []}
+NO_SKIP_CHANGES = {"ok": True, "date": "2026-06-26", "skipped_etfs": []}
+MANAGER_INTENT_SUMMARY = {"ok": True, "date": "2026-06-26", "windows": [5, 10], "rows": 0}
 
 
 def _run_main(db_path, report_dir, extra_args=None):
@@ -44,6 +45,7 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
          patch("discover_active_etfs.discover_and_reconcile", return_value=INCOMPLETE_DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE) as scrape, \
          patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as intent, \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value=""):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
@@ -52,6 +54,7 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
     assert "ETF universe discovery incomplete" in out
     assert "TPEx" in out
     scrape.assert_called_once()
+    intent.assert_called_once_with("2026-06-26")
 
 
 def test_nightly_strict_mode_stops_on_incomplete_discovery(tmp_path):
