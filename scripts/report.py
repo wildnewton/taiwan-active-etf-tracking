@@ -506,17 +506,12 @@ def _get_manager_intent_rollups(data_date, limit=_MANAGER_INTENT_LIMIT):
                    FROM manager_intent_rollups
                    WHERE date = ?
                      AND window_days = ?
-                     AND primary_intent_state NOT IN ('neutral', 'insufficient_data')
-                   ORDER BY gross_active_score DESC,
-                            ABS(net_active_score) DESC,
-                            stock_code,
-                            issuer_key
-                   LIMIT ?""",
-                (data_date, _MANAGER_INTENT_WINDOW, limit),
+                     AND primary_intent_state NOT IN ('neutral', 'insufficient_data')""",
+                (data_date, _MANAGER_INTENT_WINDOW),
             ).fetchall()
     except sqlite3.OperationalError:
         return []
-    return sorted(rows, key=_manager_intent_sort_key)
+    return sorted(rows, key=_manager_intent_sort_key)[:limit]
 
 
 def _manager_intent_sort_key(row):
