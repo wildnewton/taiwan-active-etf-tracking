@@ -123,8 +123,10 @@ def insert_change(
 
 
 def get_rollup(*, date="2026-06-26", window_days=5, entity_level="stock", stock_code="2330", issuer_key=""):
-    with db._connect() as conn:
-        conn.row_factory = lambda cursor, row: {column[0]: row[index] for index, column in enumerate(cursor.description)}
+    conn = db._connect()
+    old_factory = conn.row_factory
+    conn.row_factory = lambda cursor, row: {column[0]: row[index] for index, column in enumerate(cursor.description)}
+    try:
         return conn.execute(
             """
             SELECT *
@@ -137,6 +139,8 @@ def get_rollup(*, date="2026-06-26", window_days=5, entity_level="stock", stock_
             """,
             (date, window_days, entity_level, stock_code, issuer_key),
         ).fetchone()
+    finally:
+        conn.row_factory = old_factory
 
 
 def setup_db():
