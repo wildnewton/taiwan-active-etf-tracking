@@ -4,9 +4,10 @@ Runs the full workflow:
   1. ETF universe discovery/reconciliation
   2. Browser-enabled scrape
   3. Holding change detection
-  4. Manager signal generation
-  5. Daily signal report → timestamped file
-  6. Traction analysis (active_add/reduce flow) → timestamped file
+  4. Manager intent rollup generation
+  5. Manager signal generation
+  6. Daily signal report → timestamped file
+  7. Traction analysis (active_add/reduce flow) → timestamped file
 
 Usage:
     python3 scripts/nightly_pipeline.py
@@ -21,6 +22,7 @@ from pathlib import Path
 import db
 from changes import detect_holding_changes
 from discover_active_etfs import discover_and_reconcile
+from manager_intent import generate_manager_intent_rollups
 from pipeline import run_daily_scrape_with_browser
 from report import generate_signal_report
 from signals import generate_manager_signals
@@ -54,7 +56,7 @@ def main():
     db.init_db(args.db)
 
     if not args.skip_discovery:
-        print("Step 1/5: Discovering active ETF universe...")
+        print("Step 1/7: Discovering active ETF universe...")
         try:
             discovery_summary = discover_and_reconcile(args.db)
             print(f"  Discovery summary: {discovery_summary}")
@@ -75,9 +77,9 @@ def main():
             if args.strict_discovery:
                 raise
     else:
-        print("Step 1/5: Skipping ETF universe discovery")
+        print("Step 1/7: Skipping ETF universe discovery")
 
-    print("Step 2/5: Running browser-enabled scrape...")
+    print("Step 2/7: Running browser-enabled scrape...")
     scrape_summary = run_daily_scrape_with_browser(args.db)
     print(f"  Scrape summary: {scrape_summary}")
 
@@ -113,7 +115,7 @@ def main():
         print(f"\n⚠️ 資料日期 ≠ 今天：資料日期 {data_date}，今天 {today_str}")
         print(f"  所有持倉和 scrape run 都使用資料日期 {data_date}")
 
-    print("Step 3/5: Detecting holding changes...")
+    print("Step 3/7: Detecting holding changes...")
     change_summary = detect_holding_changes()
     print(f"  Change summary: {change_summary}")
 
@@ -121,11 +123,20 @@ def main():
     if skipped_etfs:
         print(f"⚠️ 變更偵測跳過以下 ETF: {', '.join(skipped_etfs)}")
 
-    print("Step 4/5: Generating manager signals...")
+    print("Step 4/7: Generating manager intent rollups...")
+    # Note for the future report PR: primary_intent_state can be
+    # cross_fund_rotation_accumulation, cross_fund_rotation_distribution, or
+    # bare cross_fund_rotation when same-issuer rotation exists but net direction
+    # is unclear. Report text should present the bare state as unclear/mandate
+    # rotation, not as accumulation or distribution.
+    manager_intent_summary = generate_manager_intent_rollups(change_summary.get("date"))
+    print(f"  Manager intent summary: {manager_intent_summary}")
+
+    print("Step 5/7: Generating manager signals...")
     signal_summary = generate_manager_signals()
     print(f"  Signal summary: {signal_summary}")
 
-    print("Step 5/6: Generating signal report...")
+    print("Step 6/7: Generating signal report...")
     report_text = generate_signal_report()
 
     report_dir = Path(args.report_dir)
@@ -135,7 +146,7 @@ def main():
     report_path = report_dir / f"taiwan_active_etf_signal_report_{stamp}.txt"
     report_path.write_text(report_text, encoding="utf-8")
 
-    print("Step 6/6: Generating traction analysis (raw data)...")
+    print("Step 7/7: Generating traction analysis (raw data)...")
     traction_path = None
     try:
         traction_raw = generate_traction_report(
