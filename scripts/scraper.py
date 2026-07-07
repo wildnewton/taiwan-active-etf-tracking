@@ -10,6 +10,7 @@ Priority:
 
 import asyncio
 import time
+from datetime import date, datetime
 from inspect import isawaitable
 
 from config import get_etf_config
@@ -70,7 +71,12 @@ def scrape_holdings(etf_code: str) -> dict:
     """Scrape holdings without browser. Tries MoneyDJ static then official static."""
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
-        return _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        if _is_stale_result(moneydj_result, date.today()):
+            official_result = scrape_official_static(etf_code)
+            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
+                return _with_source_type(official_result, "official_fallback")
+        return moneydj_result
 
     official_result = scrape_official_static(etf_code)
     if official_result["ok"] is True:
@@ -98,30 +104,92 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
     # 1. MoneyDJ static (fastest) — retries up to 3x for transient errors
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
-        return _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        if _is_stale_result(moneydj_result, date.today()):
+            official_result = await _official_fallback_with_browser(etf_code, page)
+            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
+                return official_result
+        return moneydj_result
 
     # 2. MoneyDJ browser
     browser_result = await scrape_moneydj_browser(etf_code, page)
     if browser_result["ok"] is True:
-        return _with_source_type(browser_result, "moneydj_browser")
+        browser_result = _with_source_type(browser_result, "moneydj_browser")
+        if _is_stale_result(browser_result, date.today()):
+            official_result = await _official_fallback_with_browser(etf_code, page)
+            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
+                return official_result
+        return browser_result
 
-    # 3. Official browser-based (Capital API, Nomura stealth, Mega, Uni-President)
+    # 3-4. Official fallbacks after MoneyDJ failure.
+    official_result = await _official_fallback_with_browser(etf_code, page)
+    if official_result["ok"] is True:
+        return official_result
+
+    return FAILED_RESULT.copy()
+
+
+async def _official_fallback_with_browser(etf_code: str, page) -> dict:
     config = get_etf_config(etf_code)
     if config["official_method"] in ("api", "stealth_api", "playwright"):
         official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
             return _with_source_type(official_browser, "official_fallback")
 
-    # 4. Official static (Fubon, Taishin)
     official_result = scrape_official_static(etf_code)
     if official_result["ok"] is True:
         return _with_source_type(official_result, "official_fallback")
-
     return FAILED_RESULT.copy()
 
 
+def _result_data_date(result: dict):
+    rows = result.get("all_rows") or result.get("stock_rows") or []
+    for row in rows:
+        parsed = _parse_row_date(row.get("date"))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _is_stale_result(result: dict, target_date: date) -> bool:
+    data_date = _result_data_date(result)
+    return data_date is not None and data_date < target_date
+
+
+def _is_fresh_result(result: dict, target_date: date) -> bool:
+    return _result_data_date(result) == target_date
+
+
+def _parse_row_date(value):
+    if isinstance(value, date):
+        return value
+    if not value:
+        return None
+    for fmt in ("%Y/%m/%d", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _with_source_type(result: dict, source_type: str) -> dict:
-    return {**result, "source_type": source_type}
+    rows = []
+    for row in result.get("all_rows", []) or []:
+        rows.append({**row, "source_type": source_type})
+    stock_rows = []
+    for row in result.get("stock_rows", []) or []:
+        stock_rows.append({**row, "source_type": source_type})
+    non_stock_rows = []
+    for row in result.get("non_stock_rows", []) or []:
+        non_stock_rows.append({**row, "source_type": source_type})
+    return {
+        **result,
+        "source_type": source_type,
+        "all_rows": rows,
+        "stock_rows": stock_rows,
+        "non_stock_rows": non_stock_rows,
+    }
 
 
 def _run_async(coro) -> dict:
