@@ -4,12 +4,18 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 import db
-from etf_universe import get_active_etfs
 from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
+
+TEST_ETF_CODES = ["00980A", "00981A", "00982A"]
+TEST_ETFS = [{"code": code} for code in TEST_ETF_CODES]
 
 
 def _active_codes():
-    return [etf["code"] for etf in get_active_etfs()]
+    return TEST_ETF_CODES
+
+
+def _active_count():
+    return len(_active_codes())
 
 
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
@@ -74,6 +80,7 @@ def make_failure(reason="all sources failed"):
 
 
 def test_run_daily_scrape_all_success():
+    expected_count = _active_count()
     with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
         patch("pipeline.init_db") as init_db, \
         patch("pipeline.insert_holdings") as insert_holdings, \
@@ -81,23 +88,24 @@ def test_run_daily_scrape_all_success():
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = run_daily_scrape(":memory:")
 
-    assert scrape.call_count == 19
+    assert scrape.call_count == expected_count
     assert summary["date"] == "2026-06-22"  # data date from make_row, not date.today()
-    assert summary["total_etfs"] == 19
-    assert summary["moneydj_success"] == 19
+    assert summary["total_etfs"] == expected_count
+    assert summary["moneydj_success"] == expected_count
     assert summary["official_success"] == 0
     assert summary["failed"] == 0
-    assert summary["total_stock_rows"] == 19
-    assert summary["total_non_stock_rows"] == 19
+    assert summary["total_stock_rows"] == expected_count
+    assert summary["total_non_stock_rows"] == expected_count
     assert summary["failures"] == []
     init_db.assert_called_once_with(":memory:")
-    assert insert_holdings.call_count == 19
-    assert insert_non_stock_assets.call_count == 19
-    assert insert_scrape_run.call_count == 19
+    assert insert_holdings.call_count == expected_count
+    assert insert_non_stock_assets.call_count == expected_count
+    assert insert_scrape_run.call_count == expected_count
 
 
 @pytest.mark.asyncio
 async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
+    expected_count = _active_count()
     page = object()
     scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, source_type="moneydj_browser"))
 
@@ -108,23 +116,24 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
 
-    assert scraper.await_count == 19
+    assert scraper.await_count == expected_count
     assert [call.args[0] for call in scraper.await_args_list] == _active_codes()
     assert {call.args[1] for call in scraper.await_args_list} == {page}
-    assert summary["total_etfs"] == 19
-    assert summary["moneydj_success"] == 19
+    assert summary["total_etfs"] == expected_count
+    assert summary["moneydj_success"] == expected_count
     assert summary["official_success"] == 0
     assert summary["failed"] == 0
-    assert summary["total_stock_rows"] == 19
-    assert summary["total_non_stock_rows"] == 19
+    assert summary["total_stock_rows"] == expected_count
+    assert summary["total_non_stock_rows"] == expected_count
     init_db.assert_called_once_with(":memory:")
-    assert insert_holdings.call_count == 19
-    assert insert_non_stock_assets.call_count == 19
-    assert insert_scrape_run.call_count == 19
+    assert insert_holdings.call_count == expected_count
+    assert insert_non_stock_assets.call_count == expected_count
+    assert insert_scrape_run.call_count == expected_count
 
 
 def test_run_daily_scrape_some_fail():
     failed_codes = set(_active_codes()[:2])
+    expected_count = _active_count()
 
     def fake_scrape(code):
         if code in failed_codes:
@@ -138,16 +147,17 @@ def test_run_daily_scrape_some_fail():
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
-    assert summary["total_etfs"] == 19
+    assert summary["total_etfs"] == expected_count
     assert summary["moneydj_success"] == 0
-    assert summary["official_success"] == 17
-    assert summary["failed"] == 2
-    assert len(summary["failures"]) == 2
+    assert summary["official_success"] == expected_count - len(failed_codes)
+    assert summary["failed"] == len(failed_codes)
+    assert len(summary["failures"]) == len(failed_codes)
     assert {failure["etf_code"] for failure in summary["failures"]} == failed_codes
     assert all(failure["reason"] == "blocked" for failure in summary["failures"])
 
 
 def test_run_daily_scrape_saves_to_db():
+    expected_count = _active_count()
     with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
         summary = run_daily_scrape(":memory:")
 
@@ -157,13 +167,14 @@ def test_run_daily_scrape_saves_to_db():
             "SELECT COUNT(*) FROM etf_daily_non_stock_assets"
         ).fetchone()[0]
 
-    assert summary["total_stock_rows"] == 19
-    assert summary["total_non_stock_rows"] == 19
-    assert holding_count == 19
-    assert non_stock_count == 19
+    assert summary["total_stock_rows"] == expected_count
+    assert summary["total_non_stock_rows"] == expected_count
+    assert holding_count == expected_count
+    assert non_stock_count == expected_count
 
 
 def test_run_daily_scrape_logs_scrape_runs():
+    expected_count = _active_count()
     with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
         run_daily_scrape(":memory:")
 
@@ -176,7 +187,7 @@ def test_run_daily_scrape_logs_scrape_runs():
             """
         ).fetchall()
 
-    assert len(rows) == 19
+    assert len(rows) == expected_count
     assert {row[1] for row in rows} == {"success"}
     assert {row[2] for row in rows} == {"moneydj_primary"}
     assert {row[3] for row in rows} == {1}
@@ -323,7 +334,7 @@ def test_scrape_run_uses_data_date_not_today():
         patch("pipeline.insert_scrape_run", side_effect=capture_run):
         run_daily_scrape(":memory:")
 
-    assert len(captured_runs) == 19
+    assert len(captured_runs) == _active_count()
     for run in captured_runs:
         assert run.date == date(2026, 6, 22), (
             f"Expected ScrapeRun date 2026-06-22 but got {run.date}. "
