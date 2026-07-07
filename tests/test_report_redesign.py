@@ -167,6 +167,61 @@ def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weigh
         )
 
 
+def insert_report_change(
+    date="2026-06-26",
+    *,
+    etf_code="00980A",
+    issuer="測試投信",
+    stock_code="2330",
+    stock_name="台積電",
+    prev_weight=1.0,
+    weight=2.0,
+    active_delta_pct=12.0,
+    position_change_type="confirmed_active_add",
+    active_direction="add",
+    is_active_add=1,
+    is_active_reduce=0,
+    is_new_position=0,
+    is_removed_position=0,
+    prev_rank=50,
+    rank=20,
+):
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_holding_changes (
+                date, etf_code, issuer, stock_code, stock_name, prev_date,
+                prev_weight_pct, weight_pct, weight_delta_1d, prev_shares, shares,
+                shares_delta_1d, active_shares_delta_1d, active_shares_delta_pct_1d,
+                prev_rank, rank, is_new_position, is_removed_position,
+                position_change_type, active_direction, is_active_add, is_active_reduce,
+                confidence, source_type, created_at
+            ) VALUES (?, ?, ?, ?, ?, '2026-06-25', ?, ?, ?, 1000, 1120,
+                120, 120, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
+            """,
+            (
+                date,
+                etf_code,
+                issuer,
+                stock_code,
+                stock_name,
+                prev_weight,
+                weight,
+                weight - prev_weight,
+                active_delta_pct,
+                prev_rank,
+                rank,
+                is_new_position,
+                is_removed_position,
+                position_change_type,
+                active_direction,
+                is_active_add,
+                is_active_reduce,
+                f"{date}T00:00:00",
+            ),
+        )
+
+
 def test_report_puts_data_quality_before_summary_and_shows_failed_etfs():
     db.init_db(":memory:")
     for etf_code in ETF_CODES[1:]:
@@ -208,3 +263,109 @@ def test_report_hides_tiny_removed_positions_by_default():
     assert "3363 上詮" in report
     assert "2317 鴻海" not in report
     assert "低權重移除已隱藏: 1" in report
+
+
+def test_new_positions_only_show_stocks_new_in_multiple_etfs_with_total_weight():
+    db.init_db(":memory:")
+    insert_report_change(
+        stock_code="2330",
+        stock_name="台積電",
+        etf_code="00980A",
+        weight=1.25,
+        prev_weight=0.0,
+        is_new_position=1,
+        position_change_type="new_position",
+    )
+    insert_report_change(
+        stock_code="2330",
+        stock_name="台積電",
+        etf_code="00981A",
+        weight=0.75,
+        prev_weight=0.0,
+        is_new_position=1,
+        position_change_type="new_position",
+    )
+    insert_report_change(
+        stock_code="2454",
+        stock_name="聯發科",
+        etf_code="00982A",
+        weight=3.00,
+        prev_weight=0.0,
+        is_new_position=1,
+        position_change_type="new_position",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "2330 台積電" in report
+    assert "總權重 2.00%" in report
+    assert "2檔ETF" in report
+    assert "00980A, 00981A" in report
+    assert "2454 聯發科" not in report
+
+
+def test_exposure_movers_exclude_passive_and_small_active_delta_rows():
+    db.init_db(":memory:")
+    insert_report_change(
+        stock_code="2330",
+        stock_name="台積電",
+        etf_code="00980A",
+        weight=3.0,
+        prev_weight=1.0,
+        active_delta_pct=15.0,
+        position_change_type="confirmed_active_add",
+    )
+    insert_report_change(
+        stock_code="2317",
+        stock_name="鴻海",
+        etf_code="00981A",
+        weight=4.0,
+        prev_weight=1.0,
+        active_delta_pct=25.0,
+        position_change_type="passive_weight_increase",
+        active_direction="none",
+        is_active_add=0,
+    )
+    insert_report_change(
+        stock_code="2454",
+        stock_name="聯發科",
+        etf_code="00982A",
+        weight=5.0,
+        prev_weight=1.0,
+        active_delta_pct=9.99,
+        position_change_type="confirmed_active_add",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "2330 台積電" in report
+    assert "2317 鴻海" not in report
+    assert "2454 聯發科" not in report
+
+
+def test_manager_signal_report_only_displays_scores_at_least_six_in_magnitude():
+    db.init_db(":memory:")
+    ensure_signal_table()
+    insert_signal(stock_code="2330", stock_name="台積電", signal_score=6)
+    insert_signal(stock_code="2454", stock_name="聯發科", signal_score=5)
+    insert_signal(
+        stock_code="2303",
+        stock_name="聯電",
+        signal_type="consensus_reduce_3d",
+        signal_score=-6,
+        action_label="Reduce Watch",
+    )
+    insert_signal(
+        stock_code="3711",
+        stock_name="日月光投控",
+        signal_type="consensus_reduce_3d",
+        signal_score=-5,
+        action_label="Reduce Watch",
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "2330 台積電" in report
+    assert "2303 聯電" in report
+    assert "2454 聯發科" not in report
+    assert "3711 日月光投控" not in report
