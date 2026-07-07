@@ -1,5 +1,3 @@
-from datetime import datetime
-from pathlib import Path
 from unittest.mock import patch
 
 import db
@@ -31,15 +29,8 @@ def _insert_scrape_run(code, *, run_date="2026-07-07", data_date="2026-07-06", s
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                run_date,
-                data_date,
-                code,
-                status,
-                "moneydj_primary",
-                1 if status == "success" else 0,
-                0,
-                0,
-                0,
+                run_date, data_date, code, status, "moneydj_primary",
+                1 if status == "success" else 0, 0, 0, 0,
                 1 if status == "success" else 0,
                 1 if status == "success" else 0,
                 0,
@@ -111,6 +102,32 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
     assert summary["reports_overwritten"] is True
     assert (tmp_path / "taiwan_active_etf_signal_report_2026-07-07.txt").read_text(encoding="utf-8") == "updated signal report"
     assert (tmp_path / "traction_raw_2026-07-07.txt").read_text(encoding="utf-8") == "updated traction report"
+
+
+def test_retry_stale_etfs_failed_retry_does_not_count_as_improvement(tmp_path):
+    db.init_db(":memory:")
+    _seed_etf("00401A")
+    _insert_scrape_run("00401A", data_date="2026-07-06")
+
+    retry_summary = {
+        "date": "2026-07-07",
+        "total_etfs": 1,
+        "failed": 1,
+        "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
+        "failures": [{"etf_code": "00401A", "reason": "timeout"}],
+    }
+
+    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", return_value=retry_summary), \
+        patch("retry_stale_scrapes.detect_holding_changes") as changes, \
+        patch("retry_stale_scrapes.generate_signal_report") as signal_report:
+        summary = retry_stale_etfs(db_path=":memory:", run_date="2026-07-07", report_dir=tmp_path)
+
+    assert summary["stale_before"] == 1
+    assert summary["stale_after"] == 1
+    assert summary["improved"] is False
+    assert summary["reports_overwritten"] is False
+    changes.assert_not_called()
+    signal_report.assert_not_called()
 
 
 def test_retry_stale_etfs_does_not_overwrite_when_stale_count_does_not_drop(tmp_path):
