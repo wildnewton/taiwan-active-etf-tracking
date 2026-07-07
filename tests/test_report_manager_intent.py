@@ -168,6 +168,8 @@ def test_report_limits_manager_intent_radar_to_five_day_rows():
 
 def test_report_applies_priority_sort_before_limiting_manager_intent_rows():
     db.init_db(":memory:")
+    # Regression: the SQL query must not LIMIT by gross score before the report
+    # priority sort can preserve higher-priority rotation rows.
     for idx in range(8):
         insert_rollup(
             stock_code=f"80{idx:02d}",
