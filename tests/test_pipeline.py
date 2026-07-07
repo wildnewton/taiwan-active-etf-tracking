@@ -18,6 +18,10 @@ def _active_count():
     return len(_active_codes())
 
 
+def _patch_active_etfs():
+    return patch("pipeline._active_etfs_for_run", return_value=TEST_ETFS)
+
+
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None):
     return {
         "date": "2026/06/22",
@@ -81,7 +85,8 @@ def make_failure(reason="all sources failed"):
 
 def test_run_daily_scrape_all_success():
     expected_count = _active_count()
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
         patch("pipeline.init_db") as init_db, \
         patch("pipeline.insert_holdings") as insert_holdings, \
         patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
@@ -109,7 +114,8 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
     page = object()
     scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, source_type="moneydj_browser"))
 
-    with patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db") as init_db, \
         patch("pipeline.insert_holdings") as insert_holdings, \
         patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
@@ -140,7 +146,8 @@ def test_run_daily_scrape_some_fail():
             return make_failure("blocked")
         return make_success(code, source_type="official_fallback")
 
-    with patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
         patch("pipeline.init_db"), \
         patch("pipeline.insert_holdings"), \
         patch("pipeline.insert_non_stock_assets"), \
@@ -158,7 +165,8 @@ def test_run_daily_scrape_some_fail():
 
 def test_run_daily_scrape_saves_to_db():
     expected_count = _active_count()
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
         summary = run_daily_scrape(":memory:")
 
     with db._connect() as conn:
@@ -175,7 +183,8 @@ def test_run_daily_scrape_saves_to_db():
 
 def test_run_daily_scrape_logs_scrape_runs():
     expected_count = _active_count()
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
         run_daily_scrape(":memory:")
 
     with db._connect() as conn:
@@ -307,7 +316,8 @@ def test_insert_scrape_run_replaces_failure_with_success():
 
 def test_run_daily_scrape_uses_data_date_not_today():
     """Summary date should be the data date from scraper rows, not date.today()."""
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
         patch("pipeline.init_db"), \
         patch("pipeline.insert_holdings"), \
         patch("pipeline.insert_non_stock_assets"), \
@@ -327,7 +337,8 @@ def test_scrape_run_uses_data_date_not_today():
     def capture_run(run):
         captured_runs.append(run)
 
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
         patch("pipeline.init_db"), \
         patch("pipeline.insert_holdings"), \
         patch("pipeline.insert_non_stock_assets"), \
@@ -344,7 +355,8 @@ def test_scrape_run_uses_data_date_not_today():
 
 def test_run_daily_scrape_warns_when_data_date_differs_from_today():
     """Pipeline should warn when 資料日期 != today."""
-    with patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
+    with _patch_active_etfs(), \
+        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)), \
         patch("pipeline.init_db"), \
         patch("pipeline.insert_holdings"), \
         patch("pipeline.insert_non_stock_assets"), \
