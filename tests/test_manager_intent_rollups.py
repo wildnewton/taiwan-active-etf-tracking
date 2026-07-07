@@ -7,13 +7,15 @@ import db
 from manager_intent import generate_manager_intent_rollups
 
 
-ETF_ISSUERS = {
-    "00980A": "野村",
-    "00981A": "野村",
-    "00982A": "統一",
-    "00984A": "台新",
-    "00985A": "群益",
+ETF_ROWS = {
+    "00980A": {"issuer": "野村", "retired": 0},
+    "00981A": {"issuer": "野村", "retired": 0},
+    "00982A": {"issuer": "統一", "retired": 0},
+    "00984A": {"issuer": "台新", "retired": 0},
+    "00985A": {"issuer": "群益", "retired": 0},
+    "00999A": {"issuer": "退休投信", "retired": 1},
 }
+ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
 
 
@@ -28,15 +30,22 @@ def restore_default_db_after_test():
 
 def seed_universe():
     with db._connect() as conn:
-        for etf_code, issuer in ETF_ISSUERS.items():
+        for etf_code, row in ETF_ROWS.items():
             conn.execute(
                 """
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
                     first_seen_date, last_active_date, created_at, updated_at
-                ) VALUES (?, ?, ?, 'TWSE', NULL, 0, '2026-06-01', '2026-06-26', ?, ?)
+                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', '2026-06-26', ?, ?)
                 """,
-                (etf_code, f"Test {etf_code}", issuer, "2026-06-01T00:00:00", "2026-06-01T00:00:00"),
+                (
+                    etf_code,
+                    f"Test {etf_code}",
+                    row["issuer"],
+                    row["retired"],
+                    "2026-06-01T00:00:00",
+                    "2026-06-01T00:00:00",
+                ),
             )
 
 
@@ -91,6 +100,8 @@ def insert_change(
     active_direction="add",
     active_delta=100.0,
     active_delta_pct=10.0,
+    consecutive_active_add_days=0,
+    consecutive_active_reduce_days=0,
 ):
     issuer = ETF_ISSUERS[etf_code]
     if is_active_reduce or is_removed_position:
@@ -110,9 +121,10 @@ def insert_change(
                 shares_delta_1d, active_shares_delta_1d, active_shares_delta_pct_1d,
                 prev_rank, rank, is_new_position, is_removed_position,
                 position_change_type, active_direction, is_active_add, is_active_reduce,
+                consecutive_active_add_days, consecutive_active_reduce_days,
                 confidence, source_type, created_at
             ) VALUES (?, ?, ?, ?, ?, '2026-06-21', 1.0, 2.0, 1.0, 1000, 1100,
-                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
+                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
             """,
             (
                 date,
@@ -128,6 +140,8 @@ def insert_change(
                 active_direction,
                 is_active_add,
                 is_active_reduce,
+                consecutive_active_add_days,
+                consecutive_active_reduce_days,
                 f"{date}T00:00:00",
             ),
         )
@@ -286,3 +300,118 @@ def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
     assert rows[0] > 0
     assert rows[1] == 1
     assert rows[2]
+
+
+def test_retired_etf_events_are_excluded_before_scoring():
+    setup_db()
+    insert_eligible_history(etfs=("00980A", "00999A"))
+    insert_change("2026-06-26", "00980A", is_active_add=1)
+    insert_change("2026-06-26", "00999A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    stock_row = get_rollup()
+
+    assert stock_row["cum_active_buy_score"] == 2.0
+    assert stock_row["cum_active_sell_score"] == 0.0
+    assert stock_row["sell_etf_count"] == 0
+
+
+def test_consecutive_active_add_score_replaces_base_score_instead_of_adding_bonus_per_row():
+    setup_db()
+    insert_eligible_history(etfs=("00980A",))
+    for date in ("2026-06-24", "2026-06-25", "2026-06-26"):
+        insert_change(date, "00980A", is_active_add=1, consecutive_active_add_days=3)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["cum_active_buy_score"] == 4.5
+    assert row["gross_active_score"] == 4.5
+
+
+def test_unsupported_window_raises_clear_error():
+    setup_db()
+    insert_eligible_history(etfs=("00980A",))
+
+    with pytest.raises(ValueError, match="Unsupported manager intent window"):
+        generate_manager_intent_rollups("2026-06-26", windows=(7,))
+
+
+def test_insufficient_eligible_days_classifies_as_insufficient_data():
+    setup_db()
+    insert_eligible_history(etfs=("00980A",), dates=["2026-06-25", "2026-06-26"])
+    insert_change("2026-06-26", "00980A", is_active_add=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["eligible_days"] == 2
+    assert row["intent_direction"] == "neutral"
+    assert row["primary_intent_state"] == "insufficient_data"
+    assert json.loads(row["intent_pattern_tags_json"]) == ["insufficient_data"]
+
+
+def test_zero_events_for_eligible_stock_classifies_as_neutral():
+    setup_db()
+    insert_eligible_history(etfs=("00980A",))
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["eligible_days"] == 5
+    assert row["gross_active_score"] == 0.0
+    assert row["intent_direction"] == "neutral"
+    assert row["primary_intent_state"] == "neutral"
+    assert json.loads(row["intent_pattern_tags_json"]) == []
+
+
+def test_high_activity_unclear_when_same_issuer_offsets_without_rotation_classification():
+    setup_db()
+    insert_eligible_history(etfs=("00980A", "00981A"))
+    insert_change("2026-06-25", "00980A", is_active_add=1)
+    insert_change("2026-06-25", "00981A", is_active_add=1)
+    insert_change("2026-06-26", "00980A", is_active_reduce=1)
+    insert_change("2026-06-26", "00981A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["gross_active_score"] == 8.0
+    assert row["net_to_gross"] == 0.0
+    assert row["intent_direction"] == "unclear"
+    assert row["primary_intent_state"] == "high_activity_unclear"
+    assert json.loads(row["intent_pattern_tags_json"]) == ["high_gross_low_net"]
+
+
+def test_cross_fund_rotation_metrics_and_classification_for_balanced_same_issuer_offset():
+    setup_db()
+    insert_eligible_history(etfs=("00980A", "00981A"))
+    insert_change("2026-06-26", "00980A", is_active_add=1)
+    insert_change("2026-06-26", "00981A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["rotation_buy_etf_count"] == 1
+    assert row["rotation_sell_etf_count"] == 1
+    assert row["cross_fund_offset_ratio"] == 1.0
+    assert row["intent_direction"] == "rotation"
+    assert row["primary_intent_state"] == "cross_fund_rotation"
+    assert json.loads(row["intent_pattern_tags_json"]) == ["cross_fund_rotation"]
+
+
+def test_cross_fund_rotation_with_positive_net_keeps_rotation_accumulation_state():
+    setup_db()
+    insert_eligible_history(etfs=("00980A", "00981A"))
+    insert_change("2026-06-25", "00980A", is_active_add=1)
+    insert_change("2026-06-26", "00981A", is_active_add=1)
+    insert_change("2026-06-26", "00980A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["net_active_score"] == 2.0
+    assert row["cross_fund_offset_ratio"] == 0.5
+    assert row["intent_direction"] == "rotation_accumulation"
+    assert row["primary_intent_state"] == "cross_fund_rotation_accumulation"
+    assert json.loads(row["intent_pattern_tags_json"]) == ["cross_fund_rotation", "rotation_net_accumulation"]

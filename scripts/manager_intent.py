@@ -15,8 +15,10 @@ import db
 
 METRIC_VERSION = "manager_intent_mvp_v1"
 DEFAULT_WINDOWS = (5, 10)
+SUPPORTED_WINDOWS = set(DEFAULT_WINDOWS)
 MIN_ELIGIBLE_DAYS = 3
 NET_TO_GROSS_DIRECTIONAL = 0.25
+CROSS_FUND_OFFSET_RATIO_THRESHOLD = 0.5
 HIGH_GROSS_THRESHOLDS = {5: 8.0, 10: 12.0}
 POSITIVE_THRESHOLDS = {5: 4.0, 10: 6.0}
 NEGATIVE_THRESHOLDS = {5: -4.0, 10: -6.0}
@@ -25,8 +27,8 @@ BASE_ACTIVE_ADD_SCORE = 2.0
 BASE_ACTIVE_REDUCE_SCORE = -2.0
 NEW_POSITION_SCORE = 4.0
 REMOVED_POSITION_SCORE = -4.0
-CONSECUTIVE_ACTIVE_ADD_BONUS = 1.5
-CONSECUTIVE_ACTIVE_REDUCE_BONUS = -1.5
+CONSECUTIVE_ACTIVE_ADD_SCORE = 1.5
+CONSECUTIVE_ACTIVE_REDUCE_SCORE = -1.5
 
 _INSERT_SQL = """
 INSERT OR REPLACE INTO manager_intent_rollups (
@@ -65,6 +67,7 @@ def generate_manager_intent_rollups(target_date: str | None = None, windows: Ite
         return {"ok": False, "date": None, "rows": 0, "reason": "no holding changes"}
 
     windows = tuple(int(window) for window in windows)
+    _validate_windows(windows)
     built_at = datetime.now(timezone.utc).isoformat()
     rows = []
     for window_days in windows:
@@ -83,6 +86,15 @@ def generate_manager_intent_rollups(target_date: str | None = None, windows: Ite
         "rows": len(rows),
         "built_at": built_at,
     }
+
+
+def _validate_windows(windows: tuple[int, ...]) -> None:
+    unsupported = sorted({window for window in windows if window not in SUPPORTED_WINDOWS})
+    if unsupported:
+        raise ValueError(
+            "Unsupported manager intent window(s): "
+            f"{unsupported}. Supported windows: {sorted(SUPPORTED_WINDOWS)}"
+        )
 
 
 def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) -> list[dict]:
@@ -154,14 +166,16 @@ def _change_events(conn, window_dates: list[str]) -> list[dict]:
     rows = _dict_rows(
         conn,
         f"""
-        SELECT date, etf_code, issuer, stock_code, stock_name,
-               is_new_position, is_removed_position,
-               is_active_add, is_active_reduce,
-               position_change_type, active_direction,
-               active_shares_delta_1d, active_shares_delta_pct_1d,
-               consecutive_active_add_days, consecutive_active_reduce_days
-        FROM etf_holding_changes
-        WHERE date IN ({_placeholders(window_dates)})
+        SELECT h.date, h.etf_code, h.issuer, h.stock_code, h.stock_name,
+               h.is_new_position, h.is_removed_position,
+               h.is_active_add, h.is_active_reduce,
+               h.position_change_type, h.active_direction,
+               h.active_shares_delta_1d, h.active_shares_delta_pct_1d,
+               h.consecutive_active_add_days, h.consecutive_active_reduce_days
+        FROM etf_holding_changes h
+        JOIN etf_universe u ON h.etf_code = u.code
+        WHERE h.date IN ({_placeholders(window_dates)})
+          AND u.retired = 0
         """,
         window_dates,
     )
@@ -295,6 +309,8 @@ def _empty_metric(stock_name=None) -> dict:
     return {
         "stock_name": stock_name,
         "daily_scores": defaultdict(float),
+        "daily_buy_etfs": defaultdict(set),
+        "daily_sell_etfs": defaultdict(set),
         "cum_active_buy_score": 0.0,
         "cum_active_sell_score": 0.0,
         "buy_etfs": set(),
@@ -313,24 +329,23 @@ def _event_score(event: dict) -> float:
     if event.get("is_removed_position") or position_change_type == "removed_position":
         return REMOVED_POSITION_SCORE
     if event.get("is_active_add") or active_direction == "add" or "active_add" in position_change_type:
-        score = BASE_ACTIVE_ADD_SCORE
         if (event.get("consecutive_active_add_days") or 0) >= 3:
-            score += CONSECUTIVE_ACTIVE_ADD_BONUS
-        return score
+            return CONSECUTIVE_ACTIVE_ADD_SCORE
+        return BASE_ACTIVE_ADD_SCORE
     if event.get("is_active_reduce") or active_direction == "reduce" or "active_reduce" in position_change_type:
-        score = BASE_ACTIVE_REDUCE_SCORE
         if (event.get("consecutive_active_reduce_days") or 0) >= 3:
-            score += CONSECUTIVE_ACTIVE_REDUCE_BONUS
-        return score
+            return CONSECUTIVE_ACTIVE_REDUCE_SCORE
+        return BASE_ACTIVE_REDUCE_SCORE
     return 0.0
 
 
 def _apply_event(metric: dict, event: dict, issuer: str, score: float) -> None:
     date = event["date"]
+    etf_code = event.get("etf_code")
     metric["daily_scores"][date] += score
     evidence = {
         "date": date,
-        "etf_code": event.get("etf_code"),
+        "etf_code": etf_code,
         "issuer": issuer,
         "score": score,
         "position_change_type": event.get("position_change_type"),
@@ -339,12 +354,14 @@ def _apply_event(metric: dict, event: dict, issuer: str, score: float) -> None:
     metric["evidence"].append(evidence)
     if score > 0:
         metric["cum_active_buy_score"] += score
-        metric["buy_etfs"].add(event.get("etf_code"))
+        metric["buy_etfs"].add(etf_code)
         metric["buy_issuers"].add(issuer)
+        metric["daily_buy_etfs"][date].add(etf_code)
     else:
         metric["cum_active_sell_score"] += abs(score)
-        metric["sell_etfs"].add(event.get("etf_code"))
+        metric["sell_etfs"].add(etf_code)
         metric["sell_issuers"].add(issuer)
+        metric["daily_sell_etfs"][date].add(etf_code)
 
 
 def _rollup_row(
@@ -374,8 +391,7 @@ def _rollup_row(
     sell_etf_count = len(metric["sell_etfs"])
     buy_issuer_count = len(metric["buy_issuers"])
     sell_issuer_count = len(metric["sell_issuers"])
-    rotation_buy_etf_count = buy_etf_count if entity_level == "issuer_stock" and buy_etf_count and sell_etf_count else 0
-    rotation_sell_etf_count = sell_etf_count if entity_level == "issuer_stock" and buy_etf_count and sell_etf_count else 0
+    rotation_buy_etf_count, rotation_sell_etf_count = _rotation_etf_counts(metric, entity_level)
     cross_fund_offset_ratio = _offset_ratio(buy_score, sell_score) if rotation_buy_etf_count and rotation_sell_etf_count else None
     classification = _classify(
         entity_level=entity_level,
@@ -388,6 +404,9 @@ def _rollup_row(
         sell_etf_count=sell_etf_count,
         buy_issuer_count=buy_issuer_count,
         sell_issuer_count=sell_issuer_count,
+        rotation_buy_etf_count=rotation_buy_etf_count,
+        rotation_sell_etf_count=rotation_sell_etf_count,
+        cross_fund_offset_ratio=cross_fund_offset_ratio,
     )
     return {
         "date": target_date,
@@ -425,6 +444,19 @@ def _rollup_row(
     }
 
 
+def _rotation_etf_counts(metric: dict, entity_level: str) -> tuple[int, int]:
+    if entity_level != "issuer_stock":
+        return 0, 0
+    rotation_buy_etfs = set()
+    rotation_sell_etfs = set()
+    for date in set(metric["daily_buy_etfs"]) & set(metric["daily_sell_etfs"]):
+        buys = metric["daily_buy_etfs"][date]
+        sells = metric["daily_sell_etfs"][date]
+        rotation_buy_etfs.update(buy for buy in buys if any(sell != buy for sell in sells))
+        rotation_sell_etfs.update(sell for sell in sells if any(buy != sell for buy in buys))
+    return len(rotation_buy_etfs), len(rotation_sell_etfs)
+
+
 def _classify(
     *,
     entity_level: str,
@@ -437,6 +469,9 @@ def _classify(
     sell_etf_count: int,
     buy_issuer_count: int,
     sell_issuer_count: int,
+    rotation_buy_etf_count: int,
+    rotation_sell_etf_count: int,
+    cross_fund_offset_ratio: float | None,
 ) -> dict:
     if eligible_days < MIN_ELIGIBLE_DAYS:
         return _classification("neutral", "insufficient_data", ["insufficient_data"], "low")
@@ -456,6 +491,23 @@ def _classify(
         and abs_net_to_gross <= NET_TO_GROSS_DIRECTIONAL
     ):
         return _classification("contested", "contested", ["issuer_disagreement", "high_gross_low_net"], "medium")
+
+    if _is_cross_fund_rotation(rotation_buy_etf_count, rotation_sell_etf_count, cross_fund_offset_ratio):
+        if net_to_gross >= NET_TO_GROSS_DIRECTIONAL:
+            return _classification(
+                "rotation_accumulation",
+                "cross_fund_rotation_accumulation",
+                ["cross_fund_rotation", "rotation_net_accumulation"],
+                "medium",
+            )
+        if net_to_gross <= -NET_TO_GROSS_DIRECTIONAL:
+            return _classification(
+                "rotation_distribution",
+                "cross_fund_rotation_distribution",
+                ["cross_fund_rotation", "rotation_net_distribution"],
+                "medium",
+            )
+        return _classification("rotation", "cross_fund_rotation", ["cross_fund_rotation"], "medium")
 
     if (
         net_score >= positive_threshold
@@ -477,6 +529,15 @@ def _classify(
     return _classification("neutral", "neutral", [], "low")
 
 
+def _is_cross_fund_rotation(rotation_buy_etf_count: int, rotation_sell_etf_count: int, cross_fund_offset_ratio: float | None) -> bool:
+    return (
+        rotation_buy_etf_count > 0
+        and rotation_sell_etf_count > 0
+        and cross_fund_offset_ratio is not None
+        and cross_fund_offset_ratio >= CROSS_FUND_OFFSET_RATIO_THRESHOLD
+    )
+
+
 def _classification(intent_direction: str, primary_intent_state: str, tags: list[str], confidence: str) -> dict:
     return {
         "intent_direction": intent_direction,
@@ -487,9 +548,7 @@ def _classification(intent_direction: str, primary_intent_state: str, tags: list
 
 
 def _window_threshold(thresholds: dict[int, float], window_days: int) -> float:
-    if window_days <= 5:
-        return thresholds[5]
-    return thresholds[10]
+    return thresholds[window_days]
 
 
 def _offset_ratio(buy_score: float, sell_score: float) -> float | None:
