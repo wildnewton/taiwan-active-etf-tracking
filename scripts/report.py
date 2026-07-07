@@ -15,6 +15,9 @@ _TOP_RANK_CUTOFF = 20
 _MIN_NEW_POSITION_ETF_COUNT = 2
 _MIN_EXPOSURE_ACTIVE_DELTA_PCT = 10.0
 _SIGNIFICANT_SIGNAL_SCORE = 6.0
+_MANAGER_INTENT_WINDOW = 5
+_MANAGER_INTENT_LIMIT = 8
+_EXCLUDED_MANAGER_INTENT_STATES = {"neutral", "insufficient_data"}
 
 
 FRESHNESS_ORDER = {
@@ -37,12 +40,23 @@ FRESHNESS_LABELS = {
 }
 
 
+_MANAGER_INTENT_PRIORITY = {
+    "cross_fund_rotation_accumulation": 0,
+    "cross_fund_rotation_distribution": 1,
+    "cross_fund_rotation": 2,
+    "accumulation": 3,
+    "distribution": 4,
+    "contested": 5,
+    "high_activity_unclear": 6,
+}
+
+
 def generate_signal_report(signal_date=None) -> str:
     """Generate a concise, decision-grade daily report.
 
     The report intentionally separates data trust, manager-action signals,
-    exposure movement, and low-materiality noise so users do not read every
-    weight change as an active manager trade.
+    manager-intent rollups, exposure movement, and low-materiality noise so users
+    do not read every weight change as an active manager trade.
     """
     now = datetime.now(CST)
     data_date = signal_date or _get_latest_holdings_date()
@@ -84,8 +98,10 @@ def generate_signal_report(signal_date=None) -> str:
     if signals:
         lines.extend(_render_manager_signals(signals))
 
-    # Future manager-intent radar can be inserted here, before exposure movers,
-    # without changing the existing data-quality and signal sections.
+    manager_intents = _get_manager_intent_rollups(data_date)
+    if manager_intents:
+        lines.extend(_render_manager_intent_radar(manager_intents))
+
     top_movers = _get_top_movers(data_date, limit=10)
     lines.extend(_render_exposure_movers(top_movers))
 
@@ -166,6 +182,81 @@ def _render_manager_signals(signals: list[dict]) -> list[str]:
         lines.append("  無可排序的管理人訊號")
     lines.append("")
     return lines
+
+
+def _render_manager_intent_radar(rows: list[dict]) -> list[str]:
+    lines = ["═══ 🧠 Manager Intent Radar ═══"]
+    sections = [
+        ("🔥 Accumulation patterns", lambda row: row.get("primary_intent_state") in {"accumulation", "cross_fund_rotation_accumulation"}),
+        ("❄️ Distribution patterns", lambda row: row.get("primary_intent_state") in {"distribution", "cross_fund_rotation_distribution"}),
+        ("🔄 Cross-fund rotation / unclear", lambda row: row.get("primary_intent_state") == "cross_fund_rotation"),
+        ("⚡ Contested / unclear", lambda row: row.get("primary_intent_state") in {"contested", "high_activity_unclear"}),
+    ]
+    emitted = set()
+    for title, predicate in sections:
+        section_rows = [row for row in rows if predicate(row)]
+        if not section_rows:
+            continue
+        lines.append(title)
+        for row in section_rows[:4]:
+            emitted.add(_manager_intent_key(row))
+            lines.append(f"  {_format_manager_intent_line(row)}")
+    remaining = len([row for row in rows if _manager_intent_key(row) not in emitted])
+    if remaining > 0:
+        lines.append(f"  ... 另有 {remaining} 個管理人意圖候選")
+    lines.append("")
+    return lines
+
+
+def _format_manager_intent_line(row: dict) -> str:
+    entity = "stock-level"
+    if row.get("entity_level") == "issuer_stock":
+        entity = f"issuer: {row.get('issuer') or row.get('issuer_key') or 'unknown'}"
+    label = _manager_intent_label(row)
+    net = row.get("net_active_score") or 0.0
+    gross = row.get("gross_active_score") or 0.0
+    offset = row.get("cross_fund_offset_ratio")
+    offset_text = f" | offset {offset:.0%}" if offset is not None else ""
+    day_text = f" | buy/sell days {row.get('buy_days') or 0}/{row.get('sell_days') or 0}"
+    interpretation = _manager_intent_interpretation(row)
+    return (
+        f"{row.get('stock_code')} {row.get('stock_name') or ''} | {entity} | {label} | "
+        f"net {net:+.1f} / gross {gross:.1f}{offset_text}{day_text} | "
+        f"pattern consistent with {interpretation} | conf={row.get('confidence') or 'low'}"
+    )
+
+
+def _manager_intent_label(row: dict) -> str:
+    state = row.get("primary_intent_state") or "unknown"
+    labels = {
+        "accumulation": "accumulation",
+        "distribution": "distribution",
+        "cross_fund_rotation_accumulation": "cross-fund rotation accumulation",
+        "cross_fund_rotation_distribution": "cross-fund rotation distribution",
+        "cross_fund_rotation": "cross-fund rotation / unclear",
+        "contested": "issuer disagreement / contested",
+        "high_activity_unclear": "high activity unclear",
+    }
+    return labels.get(state, state.replace("_", " "))
+
+
+def _manager_intent_interpretation(row: dict) -> str:
+    state = row.get("primary_intent_state") or ""
+    if state == "cross_fund_rotation_accumulation":
+        return "same-issuer fund-level rotation while net exposure increased"
+    if state == "cross_fund_rotation_distribution":
+        return "same-issuer fund-level rotation while net exposure decreased"
+    if state == "cross_fund_rotation":
+        return "same-issuer fund-level rotation; net direction unclear"
+    if state == "accumulation":
+        return "broad active accumulation"
+    if state == "distribution":
+        return "broad active distribution"
+    if state == "contested":
+        return "different issuers disagreeing"
+    if state == "high_activity_unclear":
+        return "high gross activity with low directional clarity"
+    return state.replace("_", " ")
 
 
 def _render_exposure_movers(top_movers: list[dict]) -> list[str]:
@@ -298,9 +389,7 @@ def _get_previous_holdings_date(current_date):
     if not current_date:
         return None
     with _using_row_factory(None) as conn:
-        row = conn.execute(
-            "SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)
-        ).fetchone()
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)).fetchone()
     return row[0] if row and row[0] else None
 
 
@@ -405,6 +494,48 @@ def _get_change_summary(data_date):
         return row if row else None
     except sqlite3.OperationalError:
         return None
+
+
+def _get_manager_intent_rollups(data_date, limit=_MANAGER_INTENT_LIMIT):
+    if not data_date:
+        return []
+    try:
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                """SELECT *
+                   FROM manager_intent_rollups
+                   WHERE date = ?
+                     AND window_days = ?
+                     AND primary_intent_state NOT IN ('neutral', 'insufficient_data')
+                   ORDER BY gross_active_score DESC,
+                            ABS(net_active_score) DESC,
+                            stock_code,
+                            issuer_key
+                   LIMIT ?""",
+                (data_date, _MANAGER_INTENT_WINDOW, limit),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return sorted(rows, key=_manager_intent_sort_key)
+
+
+def _manager_intent_sort_key(row):
+    return (
+        _MANAGER_INTENT_PRIORITY.get(row.get("primary_intent_state"), 99),
+        -abs(row.get("net_active_score") or 0),
+        -(row.get("gross_active_score") or 0),
+        row.get("stock_code") or "",
+        row.get("issuer_key") or "",
+    )
+
+
+def _manager_intent_key(row):
+    return (
+        row.get("window_days"),
+        row.get("entity_level"),
+        row.get("stock_code"),
+        row.get("issuer_key") or "",
+    )
 
 
 def _get_top_movers(data_date, limit=10):
@@ -657,10 +788,7 @@ def _get_signals(data_date):
         return []
     try:
         with _using_row_factory(_dict_factory) as conn:
-            rows = conn.execute(
-                "SELECT * FROM etf_manager_signals WHERE date = ?",
-                (data_date,),
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM etf_manager_signals WHERE date = ?", (data_date,)).fetchall()
         return sorted([row for row in rows if _is_significant_signal(row)], key=_signal_sort_key)
     except sqlite3.OperationalError:
         return []
