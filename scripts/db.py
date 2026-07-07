@@ -108,11 +108,13 @@ def init_db(db_path):
         conn.execute("CREATE TABLE IF NOT EXISTS etf_holding_changes (date TEXT NOT NULL, etf_code TEXT NOT NULL, issuer TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, prev_date TEXT, prev_weight_pct REAL, weight_pct REAL, weight_delta_1d REAL, weight_delta_pct_1d REAL, prev_shares REAL, shares REAL, shares_delta_1d REAL, shares_delta_pct_1d REAL, etf_scale_factor REAL, expected_shares REAL, active_shares_delta_1d REAL, active_shares_delta_pct_1d REAL, prev_rank INTEGER, rank INTEGER, rank_delta_1d INTEGER, is_new_position INTEGER DEFAULT 0, is_removed_position INTEGER DEFAULT 0, weight_delta_3d REAL, weight_delta_5d REAL, weight_delta_10d REAL, shares_delta_3d REAL, shares_delta_5d REAL, shares_delta_10d REAL, consecutive_add_days INTEGER DEFAULT 0, consecutive_reduce_days INTEGER DEFAULT 0, consecutive_active_add_days INTEGER DEFAULT 0, consecutive_active_reduce_days INTEGER DEFAULT 0, position_change_type TEXT DEFAULT 'unchanged', active_direction TEXT DEFAULT 'none', active_delta_source TEXT DEFAULT 'shares', is_active_add INTEGER DEFAULT 0, is_active_reduce INTEGER DEFAULT 0, is_passive_weight_change INTEGER DEFAULT 0, is_mixed_weight_share_signal INTEGER DEFAULT 0, is_flow_scaled_change INTEGER DEFAULT 0, flow_adjusted_direction TEXT DEFAULT 'none', confidence TEXT DEFAULT 'normal', classification_version TEXT NOT NULL DEFAULT 'v1', source_type TEXT, created_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code))")
         _ensure_change_columns(conn)
         _ensure_change_diagnostics_table(conn)
+        _ensure_manager_intent_rollups_table(conn)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_holdings_date_etf ON etf_daily_holdings(date, etf_code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_holdings_stock_date ON etf_daily_holdings(stock_code, date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_changes_stock_date ON etf_holding_changes(stock_code, date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_etf_universe_retired ON etf_universe(retired, code)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_change_diagnostics_date ON etf_change_diagnostics(date, prev_date, status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_manager_intent_rollups_date ON manager_intent_rollups(date, window_days, entity_level)")
 
 
 def _create_etf_universe_table(conn):
@@ -195,6 +197,48 @@ def _ensure_change_columns(conn):
 
 def _ensure_change_diagnostics_table(conn):
     conn.execute("CREATE TABLE IF NOT EXISTS etf_change_diagnostics (date TEXT NOT NULL, prev_date TEXT NOT NULL, etf_code TEXT NOT NULL, status TEXT NOT NULL, reason TEXT, current_source_type TEXT, previous_source_type TEXT, current_source_family TEXT, previous_source_family TEXT, current_stock_count INTEGER, previous_stock_count INTEGER, current_total_weight REAL, previous_total_weight REAL, current_shares_coverage REAL, previous_shares_coverage REAL, current_quality_score REAL, previous_quality_score REAL, overlap_ratio REAL, size_ratio REAL, created_at TEXT NOT NULL, PRIMARY KEY (date, prev_date, etf_code))")
+
+
+def _ensure_manager_intent_rollups_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS manager_intent_rollups (
+            date TEXT NOT NULL,
+            window_days INTEGER NOT NULL,
+            entity_level TEXT NOT NULL,
+            stock_code TEXT NOT NULL,
+            stock_name TEXT,
+            issuer TEXT,
+            issuer_key TEXT NOT NULL DEFAULT '',
+            eligible_days INTEGER NOT NULL,
+            buy_days INTEGER NOT NULL,
+            sell_days INTEGER NOT NULL,
+            buy_day_pct REAL,
+            sell_day_pct REAL,
+            cum_active_buy_score REAL NOT NULL,
+            cum_active_sell_score REAL NOT NULL,
+            net_active_score REAL NOT NULL,
+            gross_active_score REAL NOT NULL,
+            net_to_gross REAL,
+            buy_etf_count INTEGER NOT NULL,
+            sell_etf_count INTEGER NOT NULL,
+            buy_issuer_count INTEGER NOT NULL,
+            sell_issuer_count INTEGER NOT NULL,
+            rotation_buy_etf_count INTEGER NOT NULL,
+            rotation_sell_etf_count INTEGER NOT NULL,
+            cross_fund_offset_ratio REAL,
+            intent_direction TEXT NOT NULL,
+            primary_intent_state TEXT NOT NULL,
+            intent_pattern_tags_json TEXT NOT NULL,
+            confidence TEXT NOT NULL,
+            metric_version TEXT NOT NULL,
+            evidence_json TEXT,
+            built_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (date, window_days, entity_level, stock_code, issuer_key)
+        )
+        """
+    )
 
 
 def insert_holdings(rows):
