@@ -1,6 +1,8 @@
 import json
 import math
 
+import pytest
+
 import db
 from manager_intent import generate_manager_intent_rollups
 
@@ -13,6 +15,15 @@ ETF_ISSUERS = {
     "00985A": "群益",
 }
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
+
+
+@pytest.fixture(autouse=True)
+def restore_default_db_after_test():
+    yield
+    if db._MEMORY_CONN is not None:
+        db._MEMORY_CONN.close()
+        db._MEMORY_CONN = None
+    db._DB_PATH = db.DEFAULT_DB_PATH
 
 
 def seed_universe():
