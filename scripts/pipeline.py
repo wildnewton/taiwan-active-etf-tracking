@@ -36,7 +36,7 @@ async def run_daily_scrape_with_browser_async(
     if page is not None:
         return await _run_scrape_async(
             db_path,
-            _active_etfs_for_run(),
+            None,
             lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
         )
 
@@ -50,7 +50,7 @@ async def run_daily_scrape_with_browser_async(
                 browser_page = await context.new_page()
                 return await _run_scrape_async(
                     db_path,
-                    _active_etfs_for_run(),
+                    None,
                     lambda etf_code: scrape_holdings_with_browser_async(
                         etf_code,
                         browser_page,
@@ -126,8 +126,10 @@ def _run_scrape_sync(db_path: str, etfs: list[dict], scrape_fn: ScrapeFn, alread
     return summary
 
 
-async def _run_scrape_async(db_path: str, etfs: list[dict], scrape_fn: AsyncScrapeFn) -> dict:
+async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: AsyncScrapeFn) -> dict:
     init_db(db_path)
+    if etfs is None:
+        etfs = _active_etfs_for_run()
     run_date = date.today()
     summary = _new_summary(run_date, len(etfs))
 
