@@ -22,13 +22,21 @@ def run_daily_scrape_with_browser(
     return asyncio.run(run_daily_scrape_with_browser_async(db_path))
 
 
+def run_selected_scrape_with_browser(
+    db_path: str,
+    etf_codes: list[str],
+) -> dict:
+    return asyncio.run(run_selected_scrape_with_browser_async(db_path, etf_codes))
+
+
 async def run_daily_scrape_with_browser_async(
     db_path: str = "data/active_etf_holdings.sqlite",
     page=None,
 ) -> dict:
     if page is not None:
-        return await _run_daily_scrape_async(
+        return await _run_scrape_async(
             db_path,
+            _active_etfs_for_run(),
             lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
         )
 
@@ -40,8 +48,44 @@ async def run_daily_scrape_with_browser_async(
             context = await browser.new_context(locale="zh-TW")
             try:
                 browser_page = await context.new_page()
-                return await _run_daily_scrape_async(
+                return await _run_scrape_async(
                     db_path,
+                    _active_etfs_for_run(),
+                    lambda etf_code: scrape_holdings_with_browser_async(
+                        etf_code,
+                        browser_page,
+                    ),
+                )
+            finally:
+                await context.close()
+        finally:
+            await browser.close()
+
+
+async def run_selected_scrape_with_browser_async(
+    db_path: str,
+    etf_codes: list[str],
+    page=None,
+) -> dict:
+    selected_etfs = [{"code": code} for code in etf_codes]
+    if page is not None:
+        return await _run_scrape_async(
+            db_path,
+            selected_etfs,
+            lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+        )
+
+    from playwright.async_api import async_playwright
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        try:
+            context = await browser.new_context(locale="zh-TW")
+            try:
+                browser_page = await context.new_page()
+                return await _run_scrape_async(
+                    db_path,
+                    selected_etfs,
                     lambda etf_code: scrape_holdings_with_browser_async(
                         etf_code,
                         browser_page,
@@ -61,10 +105,16 @@ def _active_etfs_for_run() -> list[dict]:
 def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     init_db(db_path)
     active_etfs = _active_etfs_for_run()
-    run_date = date.today()
-    summary = _new_summary(run_date, len(active_etfs))
+    return _run_scrape_sync(db_path, active_etfs, scrape_fn, already_initialized=True)
 
-    for etf in active_etfs:
+
+def _run_scrape_sync(db_path: str, etfs: list[dict], scrape_fn: ScrapeFn, already_initialized: bool = False) -> dict:
+    if not already_initialized:
+        init_db(db_path)
+    run_date = date.today()
+    summary = _new_summary(run_date, len(etfs))
+
+    for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
         result = scrape_fn(etf_code)
@@ -76,13 +126,12 @@ def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     return summary
 
 
-async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dict:
+async def _run_scrape_async(db_path: str, etfs: list[dict], scrape_fn: AsyncScrapeFn) -> dict:
     init_db(db_path)
-    active_etfs = _active_etfs_for_run()
     run_date = date.today()
-    summary = _new_summary(run_date, len(active_etfs))
+    summary = _new_summary(run_date, len(etfs))
 
-    for etf in active_etfs:
+    for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
         result = await scrape_fn(etf_code)
