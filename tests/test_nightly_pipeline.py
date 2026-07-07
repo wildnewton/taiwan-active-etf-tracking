@@ -8,23 +8,48 @@ SCRIPT = PROJECT_ROOT / "scripts" / "nightly_pipeline.py"
 DISCOVERY = {"inserted": [], "reactivated": [], "updated": [], "retired": [], "active_total": 19}
 COMPLETE_SCRAPE = {
     "date": "2026-06-26",
-    "data_date": "2026-06-26",
     "total_etfs": 19,
     "moneydj_success": 19,
     "official_success": 0,
     "failed": 0,
     "failures": [],
     "moneydj_warnings": [],
+    "data_freshness": {"fresh": 19, "stale": 0, "unknown": 0},
+    "stale_etfs": [],
+    "unknown_date_etfs": [],
+    "data_date_min": "2026-06-26",
+    "data_date_max": "2026-06-26",
+}
+STALE_SCRAPE = {
+    "date": "2026-06-26",
+    "total_etfs": 19,
+    "moneydj_success": 19,
+    "official_success": 0,
+    "failed": 0,
+    "failures": [],
+    "moneydj_warnings": [],
+    "data_freshness": {"fresh": 5, "stale": 14, "unknown": 0},
+    "stale_etfs": [
+        {"etf_code": "00401A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
+        {"etf_code": "00404A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
+    ],
+    "unknown_date_etfs": [],
+    "data_date_min": "2026-06-25",
+    "data_date_max": "2026-06-26",
 }
 PARTIAL_SCRAPE = {
     "date": "2026-06-26",
-    "data_date": "2026-06-26",
     "total_etfs": 19,
     "moneydj_success": 13,
     "official_success": 0,
     "failed": 6,
     "failures": [{"etf_code": "00401A", "reason": "timeout"}],
     "moneydj_warnings": [],
+    "data_freshness": {"fresh": 13, "stale": 0, "unknown": 0},
+    "stale_etfs": [],
+    "unknown_date_etfs": [],
+    "data_date_min": "2026-06-26",
+    "data_date_max": "2026-06-26",
 }
 NO_SKIP_CHANGES = {
     "ok": True, "date": "2026-06-26", "previous_date": "2026-06-25",
@@ -178,6 +203,25 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
     assert "00401A" in out, f"Expected failing ETF code in output:\n{out}"
 
 
+def test_warns_when_stale_etfs_make_report_provisional(capsys, tmp_path):
+    with patch("db.init_db"), \
+         patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+         patch("pipeline.run_daily_scrape_with_browser", return_value=STALE_SCRAPE), \
+         patch("changes.detect_holding_changes", return_value=WITH_SKIP_CHANGES), \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+         patch("signals.generate_manager_signals", return_value={}), \
+         patch("report.generate_signal_report", return_value=""), \
+         patch("traction_analysis.generate_traction_report", return_value=""):
+        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+    out = capsys.readouterr().out
+    assert "Data freshness" in out
+    assert "fresh 5" in out and "stale 14" in out
+    assert "PROVISIONAL REPORT" in out
+    assert "5/19" in out
+    assert "00401A" in out and "2026-06-25" in out
+
+
 def test_warns_when_skipped_etfs(capsys, tmp_path):
     with patch("db.init_db"), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
@@ -209,3 +253,4 @@ def test_no_warning_when_complete(capsys, tmp_path):
     out = capsys.readouterr().out
     assert "預期" not in out, f"Unexpected completeness warning:\n{out}"
     assert "跳過" not in out, f"Unexpected skip warning:\n{out}"
+    assert "PROVISIONAL REPORT" not in out, f"Unexpected stale-data warning:\n{out}"

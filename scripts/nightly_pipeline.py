@@ -108,12 +108,21 @@ def main():
             print(f"    Rows: {w['rows']}, Weight: {w['weight']:.2f}%")
             print(f"    URL: {w['url']}")
 
-    from datetime import date as date_cls
-    today_str = date_cls.today().isoformat()
-    data_date = scrape_summary.get("data_date")
-    if data_date and data_date != today_str:
-        print(f"\n⚠️ 資料日期 ≠ 今天：資料日期 {data_date}，今天 {today_str}")
-        print(f"  所有持倉和 scrape run 都使用資料日期 {data_date}")
+    freshness = scrape_summary.get("data_freshness") or {}
+    fresh = freshness.get("fresh", 0)
+    stale = freshness.get("stale", 0)
+    unknown = freshness.get("unknown", 0)
+    if fresh or stale or unknown:
+        print(f"\nData freshness: fresh {fresh} / stale {stale} / unknown {unknown}")
+        if scrape_summary.get("data_date_min") or scrape_summary.get("data_date_max"):
+            print(f"Data date range: {scrape_summary.get('data_date_min') or 'unknown'} ~ {scrape_summary.get('data_date_max') or 'unknown'}")
+        if stale > 0:
+            print(f"PROVISIONAL REPORT: {fresh}/{total_etfs or '?'} ETFs have {scrape_summary.get('date')} data")
+            for item in scrape_summary.get("stale_etfs", [])[:10]:
+                print(f"  stale: {item.get('etf_code')} data_date={item.get('data_date')}")
+        if unknown > 0:
+            unknown_codes = [item.get("etf_code") for item in scrape_summary.get("unknown_date_etfs", []) if item.get("etf_code")]
+            print(f"Unknown source dates: {', '.join(unknown_codes)}")
 
     print("Step 3/7: Detecting holding changes...")
     change_summary = detect_holding_changes()

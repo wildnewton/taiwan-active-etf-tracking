@@ -48,6 +48,7 @@ class ScrapeResult:
 @dataclass
 class ScrapeRun:
     date: date
+    data_date: Optional[date]
     etf_code: str
     status: str
     primary_source: str

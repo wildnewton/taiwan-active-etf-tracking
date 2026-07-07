@@ -1,6 +1,6 @@
 import asyncio
 from datetime import date, datetime
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Optional
 
 from db import init_db, insert_holdings, insert_non_stock_assets, insert_scrape_run
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
@@ -61,49 +61,42 @@ def _active_etfs_for_run() -> list[dict]:
 def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     init_db(db_path)
     active_etfs = _active_etfs_for_run()
-    today = date.today()
-    summary = _new_summary(today, len(active_etfs))
-    data_date = None
+    run_date = date.today()
+    summary = _new_summary(run_date, len(active_etfs))
 
     for etf in active_etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
         result = scrape_fn(etf_code)
         finished_at = datetime.now()
-        if data_date is None and result["ok"] is True:
-            data_date = _extract_data_date(result, today)
-            summary["data_date"] = data_date.isoformat()
-        _record_result(summary, etf_code, data_date or today, started_at, finished_at, result)
+        etf_data_date = _extract_data_date(result) if result["ok"] is True else None
+        _record_result(summary, etf_code, run_date, etf_data_date, started_at, finished_at, result)
 
-    summary["date"] = (data_date or today).isoformat()
+    _finalize_data_date_range(summary)
     return summary
 
 
 async def _run_daily_scrape_async(db_path: str, scrape_fn: AsyncScrapeFn) -> dict:
     init_db(db_path)
     active_etfs = _active_etfs_for_run()
-    today = date.today()
-    summary = _new_summary(today, len(active_etfs))
-    data_date = None
+    run_date = date.today()
+    summary = _new_summary(run_date, len(active_etfs))
 
     for etf in active_etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
         result = await scrape_fn(etf_code)
         finished_at = datetime.now()
-        if data_date is None and result["ok"] is True:
-            data_date = _extract_data_date(result, today)
-            summary["data_date"] = data_date.isoformat()
-        _record_result(summary, etf_code, data_date or today, started_at, finished_at, result)
+        etf_data_date = _extract_data_date(result) if result["ok"] is True else None
+        _record_result(summary, etf_code, run_date, etf_data_date, started_at, finished_at, result)
 
-    summary["date"] = (data_date or today).isoformat()
+    _finalize_data_date_range(summary)
     return summary
 
 
-def _new_summary(today: date, total_etfs: int) -> dict:
+def _new_summary(run_date: date, total_etfs: int) -> dict:
     return {
-        "date": today.isoformat(),
-        "data_date": None,
+        "date": run_date.isoformat(),
         "total_etfs": total_etfs,
         "moneydj_success": 0,
         "official_success": 0,
@@ -112,30 +105,37 @@ def _new_summary(today: date, total_etfs: int) -> dict:
         "total_non_stock_rows": 0,
         "failures": [],
         "moneydj_warnings": [],
+        "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
+        "stale_etfs": [],
+        "unknown_date_etfs": [],
+        "data_date_min": None,
+        "data_date_max": None,
+        "_known_data_dates": [],
     }
 
 
-def _extract_data_date(result: dict, fallback: date) -> date:
+def _extract_data_date(result: dict) -> Optional[date]:
     rows = result.get("all_rows") or result.get("stock_rows") or []
     for row in rows:
-        parsed = _parse_row_date(row.get("date"), fallback)
-        if parsed != fallback:
+        parsed = _parse_row_date(row.get("date"))
+        if parsed is not None:
             return parsed
-    return fallback
+    return None
 
 
 def _record_result(
     summary: dict,
     etf_code: str,
-    today: date,
+    run_date: date,
+    data_date: Optional[date],
     started_at: datetime,
     finished_at: datetime,
     result: dict,
 ) -> None:
     if result["ok"] is True:
-        stock_rows = [_to_holding_row(row, today) for row in result["stock_rows"]]
+        stock_rows = [_to_holding_row(row, run_date) for row in result["stock_rows"]]
         non_stock_rows = [
-            _to_non_stock_asset_row(row, today) for row in result["non_stock_rows"]
+            _to_non_stock_asset_row(row, run_date) for row in result["non_stock_rows"]
         ]
         insert_holdings(stock_rows)
         insert_non_stock_assets(non_stock_rows)
@@ -147,12 +147,52 @@ def _record_result(
         elif result["source_type"] == "official_fallback":
             summary["official_success"] += 1
             _check_moneydj_warning(summary, etf_code)
+        _record_freshness(summary, etf_code, run_date, data_date, result)
     else:
         summary["failed"] += 1
         summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
         _check_moneydj_warning(summary, etf_code)
 
-    insert_scrape_run(_build_scrape_run(etf_code, today, started_at, finished_at, result))
+    insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
+
+
+def _record_freshness(summary: dict, etf_code: str, run_date: date, data_date: Optional[date], result: dict) -> None:
+    source_type = result.get("source_type") or "unknown"
+    if data_date is None:
+        summary["data_freshness"]["unknown"] += 1
+        summary["unknown_date_etfs"].append({
+            "etf_code": etf_code,
+            "source_type": source_type,
+            "reason": "missing_or_unparseable_source_date",
+        })
+        return
+
+    summary["_known_data_dates"].append(data_date)
+    if data_date == run_date:
+        summary["data_freshness"]["fresh"] += 1
+    elif data_date < run_date:
+        summary["data_freshness"]["stale"] += 1
+        summary["stale_etfs"].append({
+            "etf_code": etf_code,
+            "data_date": data_date.isoformat(),
+            "source_type": source_type,
+            "reason": "source_date_before_run_date",
+        })
+    else:
+        summary["data_freshness"]["unknown"] += 1
+        summary["unknown_date_etfs"].append({
+            "etf_code": etf_code,
+            "source_type": source_type,
+            "reason": "source_date_after_run_date",
+        })
+
+
+def _finalize_data_date_range(summary: dict) -> None:
+    known_dates = summary.pop("_known_data_dates", [])
+    if not known_dates:
+        return
+    summary["data_date_min"] = min(known_dates).isoformat()
+    summary["data_date_max"] = max(known_dates).isoformat()
 
 
 def _check_moneydj_warning(summary: dict, etf_code: str) -> None:
@@ -173,7 +213,7 @@ def _check_moneydj_warning(summary: dict, etf_code: str) -> None:
 
 def _to_holding_row(row: dict, default_date: date) -> HoldingRow:
     return HoldingRow(
-        date=_parse_row_date(row.get("date"), default_date),
+        date=_parse_row_date(row.get("date")) or default_date,
         etf_code=row["etf_code"],
         asset_name=row["asset_name"],
         asset_type=row["asset_type"],
@@ -190,7 +230,7 @@ def _to_holding_row(row: dict, default_date: date) -> HoldingRow:
 
 def _to_non_stock_asset_row(row: dict, default_date: date) -> NonStockAssetRow:
     return NonStockAssetRow(
-        date=_parse_row_date(row.get("date"), default_date),
+        date=_parse_row_date(row.get("date")) or default_date,
         etf_code=row["etf_code"],
         asset_name=row["asset_name"],
         asset_type=row["asset_type"],
@@ -205,6 +245,7 @@ def _to_non_stock_asset_row(row: dict, default_date: date) -> NonStockAssetRow:
 def _build_scrape_run(
     etf_code: str,
     scrape_date: date,
+    data_date: Optional[date],
     started_at: datetime,
     finished_at: datetime,
     result: dict,
@@ -212,6 +253,7 @@ def _build_scrape_run(
     source_type = result.get("source_type", "")
     return ScrapeRun(
         date=scrape_date,
+        data_date=data_date,
         etf_code=etf_code,
         status="success" if result["ok"] else "failed",
         primary_source=source_type or "none",
@@ -231,15 +273,15 @@ def _build_scrape_run(
     )
 
 
-def _parse_row_date(value, default_date: date) -> date:
+def _parse_row_date(value) -> Optional[date]:
     if isinstance(value, date):
         return value
     if not value:
-        return default_date
+        return None
 
     for fmt in ("%Y/%m/%d", "%Y-%m-%d"):
         try:
             return datetime.strptime(value, fmt).date()
         except ValueError:
             continue
-    return default_date
+    return None

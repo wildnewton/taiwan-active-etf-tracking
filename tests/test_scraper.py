@@ -1,19 +1,43 @@
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 from scraper import scrape_holdings, scrape_holdings_with_browser, _MONEYDJ_RETRY_DELAYS
 
 
-def make_result(ok=True, source_type="moneydj_primary", reason="ok"):
+class FixedDate(date):
+    @classmethod
+    def today(cls):
+        return cls(2026, 7, 7)
+
+
+def make_result(ok=True, source_type="moneydj_primary", reason="ok", row_date=None):
+    rows = []
+    if row_date is not None:
+        rows = [
+            {
+                "date": row_date,
+                "etf_code": "00980A",
+                "asset_name": "台積電(2330.TW)",
+                "asset_type": "stock",
+                "stock_code": "2330",
+                "stock_name": "台積電",
+                "shares": 1000,
+                "weight_pct": 10.0,
+                "source_url": "https://example.test",
+                "source_type": source_type,
+                "extraction_method": "requests_bs4",
+            }
+        ]
     return {
         "ok": ok,
         "reason": reason,
-        "all_rows": [],
-        "stock_rows": [],
+        "all_rows": rows,
+        "stock_rows": rows,
         "non_stock_rows": [],
         "source_url": "https://example.test",
         "source_type": source_type,
-        "total_weight_all_rows": 0.0,
-        "total_weight_stock_rows": 0.0,
+        "total_weight_all_rows": 10.0 if ok else 0.0,
+        "total_weight_stock_rows": 10.0 if ok else 0.0,
     }
 
 
@@ -37,6 +61,37 @@ def test_scrape_holdings_moneydj_primary():
     moneydj.assert_called_once_with("00980A")
     official.assert_not_called()
     sleep.assert_not_called()
+
+
+def test_scrape_holdings_moneydj_stale_uses_fresh_official():
+    stale_moneydj = make_result(ok=True, source_type="moneydj_primary", row_date="2026/07/06")
+    fresh_official = make_result(ok=True, source_type="official_fallback", row_date="2026/07/07")
+
+    with patch("scraper.date", FixedDate), \
+        patch("scraper.scrape_moneydj", return_value=stale_moneydj), \
+        patch("scraper.scrape_official_static", return_value=fresh_official) as official, \
+        patch("time.sleep"):
+        result = scrape_holdings("00980A")
+
+    assert result["ok"] is True
+    assert result["source_type"] == "official_fallback"
+    assert result["stock_rows"][0]["date"] == "2026/07/07"
+    official.assert_called_once_with("00980A")
+
+
+def test_scrape_holdings_moneydj_stale_keeps_moneydj_when_official_not_fresh():
+    stale_moneydj = make_result(ok=True, source_type="moneydj_primary", row_date="2026/07/06")
+    stale_official = make_result(ok=True, source_type="official_fallback", row_date="2026/07/06")
+
+    with patch("scraper.date", FixedDate), \
+        patch("scraper.scrape_moneydj", return_value=stale_moneydj), \
+        patch("scraper.scrape_official_static", return_value=stale_official), \
+        patch("time.sleep"):
+        result = scrape_holdings("00980A")
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert result["stock_rows"][0]["date"] == "2026/07/06"
 
 
 def test_scrape_holdings_retry_then_succeeds():
@@ -120,6 +175,29 @@ def test_scrape_with_browser_retry_then_moneydj_primary():
     official_browser.assert_not_called()
     official_static.assert_not_called()
     assert sleep.call_count == 2
+
+
+def test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser():
+    page = AsyncMock()
+    stale_moneydj = make_result(ok=True, source_type="moneydj_primary", row_date="2026/07/06")
+    fresh_official = make_result(ok=True, source_type="official_fallback", row_date="2026/07/07")
+
+    with patch("scraper.date", FixedDate), \
+        patch("scraper.get_etf_config", return_value={"official_method": "api"}), \
+        patch("scraper.scrape_moneydj", return_value=stale_moneydj) as moneydj, \
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock()) as browser, \
+        patch("scraper.scrape_official_with_browser", new=AsyncMock(return_value=fresh_official)) as official_browser, \
+        patch("scraper.scrape_official_static") as official_static, \
+        patch("time.sleep"):
+        result = scrape_holdings_with_browser("00980A", page)
+
+    assert result["ok"] is True
+    assert result["source_type"] == "official_fallback"
+    assert result["stock_rows"][0]["date"] == "2026/07/07"
+    moneydj.assert_called_once_with("00980A")
+    browser.assert_not_called()
+    official_browser.assert_awaited_once_with("00980A", page)
+    official_static.assert_not_called()
 
 
 def test_scrape_with_browser_retry_all_fail_then_browser():
