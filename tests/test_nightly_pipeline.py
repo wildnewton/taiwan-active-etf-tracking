@@ -215,9 +215,9 @@ def test_warns_when_stale_etfs_make_report_provisional(capsys, tmp_path):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
-    assert "資料新鮮度" in out
+    assert "Data freshness" in out
     assert "fresh 5" in out and "stale 14" in out
-    assert "暫定報告" in out
+    assert "PROVISIONAL REPORT" in out
     assert "5/19" in out
     assert "00401A" in out and "2026-06-25" in out
 
@@ -253,4 +253,4 @@ def test_no_warning_when_complete(capsys, tmp_path):
     out = capsys.readouterr().out
     assert "預期" not in out, f"Unexpected completeness warning:\n{out}"
     assert "跳過" not in out, f"Unexpected skip warning:\n{out}"
-    assert "暫定報告" not in out, f"Unexpected stale-data warning:\n{out}"
+    assert "PROVISIONAL REPORT" not in out, f"Unexpected stale-data warning:\n{out}"
