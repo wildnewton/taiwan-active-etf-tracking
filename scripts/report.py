@@ -12,6 +12,9 @@ CST = timezone(timedelta(hours=8))
 _MATERIAL_POSITION_WEIGHT = 0.5
 _CORE_POSITION_WEIGHT = 2.0
 _TOP_RANK_CUTOFF = 20
+_MIN_NEW_POSITION_ETF_COUNT = 2
+_MIN_EXPOSURE_ACTIVE_DELTA_PCT = 10.0
+_SIGNIFICANT_SIGNAL_SCORE = 6.0
 
 
 FRESHNESS_ORDER = {
@@ -81,6 +84,8 @@ def generate_signal_report(signal_date=None) -> str:
     if signals:
         lines.extend(_render_manager_signals(signals))
 
+    # Future manager-intent radar can be inserted here, before exposure movers,
+    # without changing the existing data-quality and signal sections.
     top_movers = _get_top_movers(data_date, limit=10)
     lines.extend(_render_exposure_movers(top_movers))
 
@@ -133,6 +138,7 @@ def _render_data_quality(quality: dict) -> list[str]:
 
 
 def _render_manager_signals(signals: list[dict]) -> list[str]:
+    signals = [row for row in signals if _is_significant_signal(row)]
     sections = [
         ("🔥 Fresh consensus", lambda row: _is_consensus(row) and _freshness(row) == "new"),
         ("🔁 Reversals", lambda row: _freshness(row) == "reversal"),
@@ -191,9 +197,14 @@ def _render_new_removed_positions(new_positions: list[dict], removed_positions: 
         grouped = _group_positions(new_positions)
         for stock_code, entries in grouped.items():
             etf_list = ", ".join(e["etf_code"] for e in entries)
+            etf_count = len({e["etf_code"] for e in entries})
             max_weight = max(e["weight_pct"] for e in entries)
+            total_weight = sum(e["weight_pct"] or 0.0 for e in entries)
             stock_name = entries[0].get("stock_name") or ""
-            lines.append(f"  ➕ {stock_code} {stock_name} 最大 {max_weight:.2f}% ({etf_list})")
+            lines.append(
+                f"  ➕ {stock_code} {stock_name} 總權重 {total_weight:.2f}% | "
+                f"最大 {max_weight:.2f}% | {etf_count}檔ETF ({etf_list})"
+            )
         if hidden_counts["new"]:
             lines.append(f"  低權重新增已隱藏: {hidden_counts['new']}")
         lines.append("")
@@ -411,9 +422,12 @@ def _get_top_movers(data_date, limit=10):
                    WHERE date = ?
                      AND is_new_position = 0
                      AND is_removed_position = 0
+                     AND position_change_type NOT IN ('passive_weight_increase', 'passive_weight_decrease')
+                     AND active_shares_delta_pct_1d IS NOT NULL
+                     AND ABS(active_shares_delta_pct_1d) >= ?
                    ORDER BY ABS(weight_delta_1d) DESC
                    LIMIT ?""",
-                (data_date, limit),
+                (data_date, _MIN_EXPOSURE_ACTIVE_DELTA_PCT, limit),
             ).fetchall()
         return rows
     except sqlite3.OperationalError:
@@ -426,13 +440,23 @@ def _get_new_positions(data_date):
     try:
         with _using_row_factory(_dict_factory) as conn:
             return conn.execute(
-                """SELECT etf_code, stock_code, stock_name, weight_pct, shares, rank
-                   FROM etf_holding_changes
-                   WHERE date = ?
-                     AND is_new_position = 1
-                     AND (weight_pct >= ? OR (rank IS NOT NULL AND rank <= ?))
-                   ORDER BY weight_pct DESC""",
-                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF),
+                """WITH material_new AS (
+                       SELECT etf_code, stock_code, stock_name, weight_pct, shares, rank
+                       FROM etf_holding_changes
+                       WHERE date = ?
+                         AND is_new_position = 1
+                         AND (weight_pct >= ? OR (rank IS NOT NULL AND rank <= ?))
+                   )
+                   SELECT etf_code, stock_code, stock_name, weight_pct, shares, rank
+                   FROM material_new
+                   WHERE stock_code IN (
+                       SELECT stock_code
+                       FROM material_new
+                       GROUP BY stock_code
+                       HAVING COUNT(DISTINCT etf_code) >= ?
+                   )
+                   ORDER BY stock_code, weight_pct DESC""",
+                (data_date, _MATERIAL_POSITION_WEIGHT, _TOP_RANK_CUTOFF, _MIN_NEW_POSITION_ETF_COUNT),
             ).fetchall()
     except sqlite3.OperationalError:
         return []
@@ -637,12 +661,17 @@ def _get_signals(data_date):
                 "SELECT * FROM etf_manager_signals WHERE date = ?",
                 (data_date,),
             ).fetchall()
-        return sorted(rows, key=_signal_sort_key)
+        return sorted([row for row in rows if _is_significant_signal(row)], key=_signal_sort_key)
     except sqlite3.OperationalError:
         return []
 
 
+def _is_significant_signal(row: dict) -> bool:
+    return abs(row.get("signal_score") or 0) >= _SIGNIFICANT_SIGNAL_SCORE
+
+
 def _signal_summary(signals: list[dict]) -> dict:
+    signals = [row for row in signals if _is_significant_signal(row)]
     return {
         "fresh_consensus": sum(1 for row in signals if _is_consensus(row) and _freshness(row) == "new"),
         "reversals": sum(1 for row in signals if _freshness(row) == "reversal"),
