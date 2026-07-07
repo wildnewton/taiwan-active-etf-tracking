@@ -39,4 +39,16 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: |
+          set +e
+          PYTHONPATH=. pytest -q > pytest.log 2>&1
+          status=$?
+          cat pytest.log
+          exit $status
+
+      - name: Upload pytest log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-log
+          path: pytest.log
