@@ -164,3 +164,39 @@ def test_report_limits_manager_intent_radar_to_five_day_rows():
     report = generate_signal_report("2026-06-26")
 
     assert "Manager Intent Radar" not in report
+
+
+def test_report_applies_priority_sort_before_limiting_manager_intent_rows():
+    db.init_db(":memory:")
+    for idx in range(8):
+        insert_rollup(
+            stock_code=f"80{idx:02d}",
+            stock_name=f"高分股{idx}",
+            issuer="多頭投信",
+            issuer_key=f"多頭投信{idx}",
+            buy_score=20.0 + idx,
+            sell_score=0.0,
+            primary_state="accumulation",
+            intent_direction="accumulation",
+            tags=["broad_manager_accumulation"],
+            rotation_buy_etf_count=0,
+            rotation_sell_etf_count=0,
+            offset_ratio=None,
+        )
+    insert_rollup(
+        stock_code="2330",
+        stock_name="台積電",
+        issuer="野村",
+        issuer_key="野村",
+        buy_score=6.0,
+        sell_score=2.0,
+        primary_state="cross_fund_rotation_accumulation",
+        intent_direction="rotation_accumulation",
+        tags=["cross_fund_rotation", "rotation_net_accumulation"],
+    )
+
+    report = generate_signal_report("2026-06-26")
+
+    assert "2330 台積電" in report
+    assert "cross-fund rotation accumulation" in report
+    assert "高分股0" not in report
