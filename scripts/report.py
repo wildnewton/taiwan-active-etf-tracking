@@ -958,3 +958,35 @@ SIGNAL_SECTIONS = [
     ("F. Consecutive reductions", lambda row: row["signal_type"] == "consecutive_reduce_3d"),
     ("G. Removed core positions", lambda row: row["signal_type"] == "removed_core_position"),
 ]
+
+
+def generate_daily_report(summary: dict) -> str:
+    """Generate a human-readable daily report from pipeline summary."""
+    now = datetime.now(CST)
+    lines = [
+        "📊 台灣主動 ETF 每日持倉報告",
+        f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST",
+        "",
+        f"**數據日期**: {summary.get('date', 'N/A')}",
+        f"**ETF 總數**: {summary['total_etfs']}",
+        "",
+        "**抓取結果**:",
+        f"  ✅ MoneyDJ 成功: {summary['moneydj_success']}",
+        f"  ✅ 官方網站成功: {summary['official_success']}",
+        f"  ❌ 失敗: {summary['failed']}",
+        "",
+        "**數據量**:",
+        f"  股票持倉行數: {summary['total_stock_rows']}",
+        f"  非股票資產行數: {summary['total_non_stock_rows']}",
+    ]
+    return "\n".join(lines)
+
+
+def get_latest_signal_date():
+    """Return the latest date with manager signals, or None if unavailable."""
+    try:
+        with _using_row_factory(None) as conn:
+            row = conn.execute("SELECT MAX(date) FROM etf_manager_signals").fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row[0] if row and row[0] else None
