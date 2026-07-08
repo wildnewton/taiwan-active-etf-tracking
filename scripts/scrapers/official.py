@@ -303,7 +303,10 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
     source_url = config["url"]
 
     await page.goto(source_url, wait_until="load", timeout=60000)
-    await page.wait_for_selector("table", timeout=10000)
+    try:
+        await page.wait_for_selector("table", timeout=10000)
+    except Exception:
+        return _failed_result(source_url, "Uni-President holdings table not found")
 
     tables = await page.query_selector_all("table")
     table_data = []
