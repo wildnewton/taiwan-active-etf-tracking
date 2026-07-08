@@ -660,6 +660,34 @@ async def test_scrape_capital_playwright_no_api_intercepted(mock_config):
     assert "not intercepted" in result["reason"]
 
 
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_capital_playwright_uses_domcontentloaded_not_networkidle(mock_config):
+    """Capital Fund page uses domcontentloaded to avoid Imperva CDN timeout."""
+    mock_config.return_value = {
+        "url": CAPITAL_URL, "method": "api",
+        "issuer": "Capital", "internal_id": "399", "official_logic": "buyback",
+    }
+    page = _make_mock_page(
+        responses=[("https://www.capitalfund.com.tw/CFWeb/api/etf/buyback", CAPITAL_API_JSON_RICH)]
+    )
+
+    goto_kwargs = {}
+
+    async def goto_side_effect(*a, **kw):
+        nonlocal goto_kwargs
+        goto_kwargs = kw
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    await scrape_capital_playwright("00982A", page)
+
+    assert goto_kwargs.get("wait_until") == "domcontentloaded", (
+        f"Expected wait_until='domcontentloaded' but got '{goto_kwargs.get('wait_until')}'"
+    )
+
+
 # -- scrape_nomura_stealth --
 
 @pytest.mark.asyncio
