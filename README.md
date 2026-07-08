@@ -24,7 +24,7 @@ The cron wrapper is `scripts/nightly-cron.sh`. It resolves the project directory
 ├── data/
 │   └── etf_universe_seed.json       # bootstrap ETF universe metadata
 ├── scripts/
-│   ├── backfill_changes.py          # maintenance script for backfilling change rows
+│   ├── backfill_changes.py          # maintenance script for backfilling change rows and derived layers
 │   ├── changes.py                   # holding change detection
 │   ├── config.py                    # URL/config helpers
 │   ├── db.py                        # SQLite schema and persistence helpers
@@ -95,6 +95,57 @@ PYTHONPATH=scripts python scripts/nightly_pipeline.py \
   --report-dir reports
 ```
 
+## Backfilling changes and derived signals
+
+Use `scripts/backfill_changes.py` when stored holdings already exist but change detection, manager-intent rollups, or manager signals need to be rebuilt after logic changes. The script does not scrape holdings and does not generate reports.
+
+Backfill changes plus all derived layers for a date range:
+
+```bash
+PYTHONPATH=scripts python scripts/backfill_changes.py \
+  --db data/active_etf_holdings.sqlite \
+  --from-date 2026-07-01 \
+  --to-date 2026-07-08 \
+  --all-derived
+```
+
+Backfill only change-detection rows:
+
+```bash
+PYTHONPATH=scripts python scripts/backfill_changes.py \
+  --db data/active_etf_holdings.sqlite \
+  --from-date 2026-07-01 \
+  --to-date 2026-07-08
+```
+
+Backfill changes and only manager-intent rollups:
+
+```bash
+PYTHONPATH=scripts python scripts/backfill_changes.py \
+  --db data/active_etf_holdings.sqlite \
+  --from-date 2026-07-01 \
+  --to-date 2026-07-08 \
+  --regenerate-manager-intent
+```
+
+Backfill changes and only manager signals:
+
+```bash
+PYTHONPATH=scripts python scripts/backfill_changes.py \
+  --db data/active_etf_holdings.sqlite \
+  --from-date 2026-07-01 \
+  --to-date 2026-07-08 \
+  --regenerate-signals
+```
+
+For each eligible date, the order is:
+
+```text
+detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
+```
+
+The previous comparison date is taken from the full holdings history, not only from the requested date range. Use maintenance scripts with care against a backed-up database when rewriting historical data.
+
 ## Running tests
 
 Run the full suite:
@@ -133,7 +184,7 @@ Source-specific implementations live under `scripts/scrapers/`.
 
 ## Maintenance scripts
 
-- `scripts/backfill_changes.py`: rebuilds change-detection rows when data did not reach the DB or needs regeneration.
+- `scripts/backfill_changes.py`: rebuilds change-detection rows and, optionally, manager-intent rollups and manager signals from stored holdings.
 - `scripts/traction_analysis.py`: generates nightly traction analysis output.
 
 Use maintenance scripts with care against a backed-up database when changing historical data.
