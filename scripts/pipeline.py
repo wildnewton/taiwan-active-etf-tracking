@@ -151,10 +151,12 @@ async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: As
 
 
 def _coerce_run_date(value) -> Optional[date]:
-    if value is None or isinstance(value, date):
-        return value
+    if value is None:
+        return None
     if isinstance(value, str):
         return datetime.strptime(value, "%Y-%m-%d").date()
+    if all(hasattr(value, attr) for attr in ("year", "month", "day", "isoformat")):
+        return value
     raise TypeError("run_date must be a date, ISO date string, or None")
 
 
