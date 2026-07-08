@@ -303,6 +303,7 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
     source_url = config["url"]
 
     await page.goto(source_url, wait_until="load", timeout=60000)
+    await page.wait_for_selector("table", timeout=10000)
 
     tables = await page.query_selector_all("table")
     table_data = []
@@ -390,7 +391,7 @@ def _is_capital_buyback_response(response) -> bool:
 
 
 def _is_nomura_assets_response(response) -> bool:
-    return "GetFundAssets" in _response_url(response)
+    return "getfundassets" in _response_url(response).lower()
 
 
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
