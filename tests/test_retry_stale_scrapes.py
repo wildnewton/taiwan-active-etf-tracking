@@ -95,7 +95,7 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
         patch("retry_stale_scrapes.generate_traction_report", return_value="updated traction report") as traction_report:
         summary = retry_stale_etfs(db_path=db_path, run_date="2026-07-07", report_dir=tmp_path)
 
-    scrape.assert_called_once_with(db_path, ["00401A", "00402A"])
+    scrape.assert_called_once_with(db_path, ["00401A", "00402A"], run_date="2026-07-07")
     changes.assert_called_once_with(current_date="2026-07-07")
     intent.assert_called_once_with("2026-07-07")
     signals.assert_called_once()
