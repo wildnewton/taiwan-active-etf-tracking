@@ -291,6 +291,24 @@ async def test_uni_president_waits_for_table_after_load(mock_config):
     page.wait_for_selector.assert_awaited_once_with("table", timeout=10000)
 
 
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_uni_president_table_wait_timeout_returns_clean_failure(mock_config):
+    mock_config.return_value = {
+        "url": UNI_PRESIDENT_URL,
+        "method": "playwright",
+        "issuer": "Uni-President",
+        "official_logic": "table_parse",
+    }
+    page = _mock_page()
+    page.wait_for_selector.side_effect = _Timeout("table timeout")
+
+    result = await scrape_uni_president_playwright("00981A", page)
+
+    assert result["ok"] is False
+    assert "holdings table not found" in result["reason"]
+
+
 def test_official_scraper_has_no_runtime_networkidle_waits():
     official_py = Path(__file__).resolve().parent.parent / "scripts" / "scrapers" / "official.py"
 
