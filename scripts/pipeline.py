@@ -25,8 +25,9 @@ def run_daily_scrape_with_browser(
 def run_selected_scrape_with_browser(
     db_path: str,
     etf_codes: list[str],
+    run_date: date | str | None = None,
 ) -> dict:
-    return asyncio.run(run_selected_scrape_with_browser_async(db_path, etf_codes))
+    return asyncio.run(run_selected_scrape_with_browser_async(db_path, etf_codes, run_date=_coerce_run_date(run_date)))
 
 
 async def run_daily_scrape_with_browser_async(
@@ -66,13 +67,16 @@ async def run_selected_scrape_with_browser_async(
     db_path: str,
     etf_codes: list[str],
     page=None,
+    run_date: date | str | None = None,
 ) -> dict:
     selected_etfs = [{"code": code} for code in etf_codes]
+    run_date = _coerce_run_date(run_date)
     if page is not None:
         return await _run_scrape_async(
             db_path,
             selected_etfs,
             lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+            run_date=run_date,
         )
 
     from playwright.async_api import async_playwright
@@ -90,6 +94,7 @@ async def run_selected_scrape_with_browser_async(
                         etf_code,
                         browser_page,
                     ),
+                    run_date=run_date,
                 )
             finally:
                 await context.close()
@@ -126,11 +131,11 @@ def _run_scrape_sync(db_path: str, etfs: list[dict], scrape_fn: ScrapeFn, alread
     return summary
 
 
-async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: AsyncScrapeFn) -> dict:
+async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: AsyncScrapeFn, run_date: date | None = None) -> dict:
     init_db(db_path)
     if etfs is None:
         etfs = _active_etfs_for_run()
-    run_date = date.today()
+    run_date = run_date or date.today()
     summary = _new_summary(run_date, len(etfs))
 
     for etf in etfs:
@@ -143,6 +148,14 @@ async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: As
 
     _finalize_data_date_range(summary)
     return summary
+
+
+def _coerce_run_date(value) -> Optional[date]:
+    if value is None or isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    raise TypeError("run_date must be a date, ISO date string, or None")
 
 
 def _new_summary(run_date: date, total_etfs: int) -> dict:
