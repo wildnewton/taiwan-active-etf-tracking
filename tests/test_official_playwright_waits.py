@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from scrapers.official import (
+    _is_nomura_assets_response,
     scrape_capital_playwright,
     scrape_mega_playwright,
     scrape_nomura_stealth,
@@ -45,6 +46,37 @@ _CAPITAL_STOCKS = [
 ]
 CAPITAL_API_JSON = json.dumps({"data": {"pcf": {"date2": "2026-06-18"}, "stocks": _CAPITAL_STOCKS}})
 
+_NOMURA_ROWS = [
+    ["2330", "台灣積體電路製造", "704000", "9.58"],
+    ["2308", "台達電子工業", "475000", "5.54"],
+    ["2454", "聯發科技", "188000", "4.55"],
+    ["2317", "鴻海精密工業", "500000", "5.20"],
+    ["2382", "廣達電腦", "300000", "4.80"],
+    ["2881", "富邦金融控股", "400000", "4.30"],
+    ["2882", "國泰金融控股", "350000", "4.10"],
+    ["2891", "中國信託金融控股", "500000", "3.90"],
+    ["3711", "日月光投控", "200000", "3.50"],
+    ["2412", "中華電信", "250000", "3.30"],
+    ["3034", "聯詠科技", "150000", "3.10"],
+    ["2395", "研華科技", "120000", "2.90"],
+    ["3008", "大立光電", "50000", "2.70"],
+    ["2002", "中國鋼鐵", "600000", "2.50"],
+    ["1301", "台灣塑膠工業", "300000", "2.40"],
+    ["1303", "南亞塑膠工業", "280000", "2.30"],
+    ["3045", "台灣大哥大", "200000", "2.20"],
+    ["6505", "台塑石化", "250000", "2.10"],
+    ["5880", "合作金庫金融控股", "400000", "2.00"],
+    ["5871", "中租控股", "100000", "1.90"],
+]
+NOMURA_API_JSON = json.dumps({
+    "Entries": {
+        "Data": {
+            "FundAsset": {"NavDate": "2026-06-22"},
+            "Table": [{"TableTitle": "股票", "Rows": _NOMURA_ROWS}],
+        }
+    }
+})
+
 
 class _Response:
     def __init__(self, url, body):
@@ -64,6 +96,7 @@ def _mock_page(response_url=None, response_body=None, body_text=""):
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
     page.wait_for_response = AsyncMock()
+    page.wait_for_selector = AsyncMock()
     page.remove_listener = Mock()
 
     callbacks = {}
@@ -153,6 +186,27 @@ async def test_capital_still_fails_cleanly_when_buyback_response_times_out(mock_
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
+async def test_nomura_waits_for_bounded_assets_response_after_navigation(mock_config):
+    mock_config.return_value = {
+        "url": NOMURA_URL,
+        "method": "stealth_api",
+        "issuer": "Nomura",
+        "official_logic": "GetFundAssets",
+    }
+    page = _mock_page(
+        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_body=NOMURA_API_JSON,
+    )
+
+    result = await scrape_nomura_stealth("00980A", page)
+
+    assert result["ok"] is True
+    page.wait_for_response.assert_awaited_once()
+    page.wait_for_timeout.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
 async def test_nomura_removes_response_listener_when_navigation_raises(mock_config):
     mock_config.return_value = {
         "url": NOMURA_URL,
@@ -167,6 +221,12 @@ async def test_nomura_removes_response_listener_when_navigation_raises(mock_conf
         await scrape_nomura_stealth("00980A", page)
 
     assert page.remove_listener.called
+
+
+def test_nomura_assets_response_predicate_is_case_insensitive():
+    response = _Response("https://www.nomurafunds.com.tw/api/getfundassets", "{}")
+
+    assert _is_nomura_assets_response(response) is True
 
 
 @pytest.mark.asyncio
@@ -213,6 +273,22 @@ async def test_uni_president_playwright_does_not_use_networkidle(mock_config):
     await scrape_uni_president_playwright("00981A", page)
 
     assert goto_kwargs.get("wait_until") != "networkidle"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_uni_president_waits_for_table_after_load(mock_config):
+    mock_config.return_value = {
+        "url": UNI_PRESIDENT_URL,
+        "method": "playwright",
+        "issuer": "Uni-President",
+        "official_logic": "table_parse",
+    }
+    page = _mock_page()
+
+    await scrape_uni_president_playwright("00981A", page)
+
+    page.wait_for_selector.assert_awaited_once_with("table", timeout=10000)
 
 
 def test_official_scraper_has_no_runtime_networkidle_waits():
