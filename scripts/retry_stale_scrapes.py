@@ -1,5 +1,11 @@
-"""Retry stale ETF scrape rows for a single report date."""
+"""Retry stale ETF scrape rows for a single report date.
+
+The command re-scrapes stale rows for the requested report date, then reruns
+same-date derived layers and overwrites the date-only primary reports only when
+at least one retried ETF becomes fresh.
+"""
 import argparse
+import json
 from pathlib import Path
 
 import db
@@ -58,7 +64,7 @@ def retry_stale_etfs(
         }
 
     etf_codes = [row["etf_code"] for row in stale_rows]
-    retry_summary = run_selected_scrape_with_browser(db_path, etf_codes)
+    retry_summary = run_selected_scrape_with_browser(db_path, etf_codes, run_date=run_date)
     fresh_after_retry = retry_summary.get("data_freshness", {}).get("fresh", 0)
     stale_after = max(stale_before - fresh_after_retry, 0)
     improved = stale_after < stale_before
@@ -129,7 +135,7 @@ def main():
     args = parser.parse_args()
 
     summary = retry_stale_etfs(db_path=args.db, run_date=args.run_date, report_dir=args.report_dir)
-    print(summary)
+    print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
 
 
 if __name__ == "__main__":
