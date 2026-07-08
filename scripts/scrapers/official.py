@@ -22,6 +22,7 @@ EXTRACTION_METHOD_STATIC = "requests_bs4"
 EXTRACTION_METHOD_API = "playwright_api_intercept"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
 EXTRACTION_METHOD_STEALTH = "stealth_playwright_api"
+_API_RESPONSE_TIMEOUT_MS = 10_000
 
 TWSE_URL_TEMPLATE = (
     "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?{code}="
@@ -217,16 +218,27 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
 
     async def on_response(response):
         nonlocal buyback_body
-        if "buyback" in response.url.lower() and "capitalfund" in response.url.lower():
+        if _is_capital_buyback_response(response):
             try:
                 buyback_body = await response.text()
             except Exception:
                 pass
 
     page.on("response", on_response)
-    await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
-    await page.wait_for_timeout(5000)
-    page.remove_listener("response", on_response)
+    try:
+        await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+        if not buyback_body:
+            try:
+                response = await page.wait_for_response(
+                    _is_capital_buyback_response,
+                    timeout=_API_RESPONSE_TIMEOUT_MS,
+                )
+                if not buyback_body:
+                    buyback_body = await response.text()
+            except Exception:
+                pass
+    finally:
+        page.remove_listener("response", on_response)
 
     if not buyback_body:
         return _failed_result(source_url, "Capital buyback API not intercepted")
@@ -243,16 +255,27 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
 
     async def on_response(response):
         nonlocal assets_body
-        if "GetFundAssets" in response.url:
+        if _is_nomura_assets_response(response):
             try:
                 assets_body = await response.text()
             except Exception:
                 pass
 
     page.on("response", on_response)
-    await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
-    await page.wait_for_timeout(8000)
-    page.remove_listener("response", on_response)
+    try:
+        await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+        if not assets_body:
+            try:
+                response = await page.wait_for_response(
+                    _is_nomura_assets_response,
+                    timeout=_API_RESPONSE_TIMEOUT_MS,
+                )
+                if not assets_body:
+                    assets_body = await response.text()
+            except Exception:
+                pass
+    finally:
+        page.remove_listener("response", on_response)
 
     if not assets_body:
         return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
@@ -266,7 +289,7 @@ async def scrape_mega_playwright(etf_code: str, page) -> dict:
     config = get_official_config(etf_code)
     source_url = config["url"]
 
-    await page.goto(source_url, wait_until="networkidle", timeout=60000)
+    await page.goto(source_url, wait_until="load", timeout=60000)
     await page.wait_for_timeout(3000)
     body_text = await page.locator("body").inner_text()
 
@@ -279,7 +302,7 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
     config = get_official_config(etf_code)
     source_url = config["url"]
 
-    await page.goto(source_url, wait_until="networkidle", timeout=60000)
+    await page.goto(source_url, wait_until="load", timeout=60000)
 
     tables = await page.query_selector_all("table")
     table_data = []
@@ -355,6 +378,15 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
 
 
 # Internal helpers
+
+def _is_capital_buyback_response(response) -> bool:
+    url = response.url.lower()
+    return "capitalfund" in url and "buyback" in url
+
+
+def _is_nomura_assets_response(response) -> bool:
+    return "GetFundAssets" in response.url
+
 
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
