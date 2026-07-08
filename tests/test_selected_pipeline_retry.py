@@ -66,6 +66,7 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
 
 @pytest.mark.asyncio
 async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date():
+    """Regression: retrying a prior report date must not depend on date.today()."""
     from pipeline import run_selected_scrape_with_browser_async
 
     page = object()
