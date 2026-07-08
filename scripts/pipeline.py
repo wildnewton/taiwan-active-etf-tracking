@@ -25,7 +25,7 @@ def run_daily_scrape_with_browser(
 def run_selected_scrape_with_browser(
     db_path: str,
     etf_codes: list[str],
-    run_date: date | str | None = None,
+    run_date=None,
 ) -> dict:
     return asyncio.run(run_selected_scrape_with_browser_async(db_path, etf_codes, run_date=_coerce_run_date(run_date)))
 
@@ -67,7 +67,7 @@ async def run_selected_scrape_with_browser_async(
     db_path: str,
     etf_codes: list[str],
     page=None,
-    run_date: date | str | None = None,
+    run_date=None,
 ) -> dict:
     selected_etfs = [{"code": code} for code in etf_codes]
     run_date = _coerce_run_date(run_date)
@@ -131,7 +131,7 @@ def _run_scrape_sync(db_path: str, etfs: list[dict], scrape_fn: ScrapeFn, alread
     return summary
 
 
-async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: AsyncScrapeFn, run_date: date | None = None) -> dict:
+async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: AsyncScrapeFn, run_date=None) -> dict:
     init_db(db_path)
     if etfs is None:
         etfs = _active_etfs_for_run()
@@ -150,7 +150,7 @@ async def _run_scrape_async(db_path: str, etfs: list[dict] | None, scrape_fn: As
     return summary
 
 
-def _coerce_run_date(value) -> Optional[date]:
+def _coerce_run_date(value):
     if value is None:
         return None
     if isinstance(value, str):
