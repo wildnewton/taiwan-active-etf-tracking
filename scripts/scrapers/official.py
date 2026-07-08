@@ -224,8 +224,8 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
                 pass
 
     page.on("response", on_response)
-    await page.goto(source_url, wait_until="networkidle", timeout=60000)
-    await page.wait_for_timeout(3000)
+    await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+    await page.wait_for_timeout(5000)
     page.remove_listener("response", on_response)
 
     if not buyback_body:
