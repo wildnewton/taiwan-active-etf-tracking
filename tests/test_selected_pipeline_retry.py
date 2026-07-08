@@ -62,3 +62,30 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
     assert insert_holdings.call_count == 2
     assert insert_non_stock_assets.call_count == 2
     assert insert_scrape_run.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date():
+    from pipeline import run_selected_scrape_with_browser_async
+
+    page = object()
+    requested_codes = ["00401A"]
+    scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, row_date="2026/07/06"))
+
+    with patch("pipeline.date", FixedDate), \
+        patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+        patch("pipeline.init_db"), \
+        patch("pipeline.insert_holdings"), \
+        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        summary = await run_selected_scrape_with_browser_async(
+            ":memory:",
+            requested_codes,
+            page=page,
+            run_date=date(2026, 7, 6),
+        )
+
+    assert summary["date"] == "2026-07-06"
+    assert summary["data_freshness"] == {"fresh": 1, "stale": 0, "unknown": 0}
+    assert insert_scrape_run.call_args.args[0].date == date(2026, 7, 6)
+    assert insert_scrape_run.call_args.args[0].data_date == date(2026, 7, 6)
