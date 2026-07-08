@@ -97,6 +97,12 @@ def retry_stale_etfs(
 
 
 def _overwrite_reports(db_path: str, run_date: str, report_dir: str | Path) -> dict:
+    """Overwrite date-only primary reports after successful same-date retry.
+
+    The nightly pipeline writes these same date-only primary filenames plus
+    timestamped archives. Retry intentionally overwrites only the primary files;
+    it does not create another archive.
+    """
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
 
