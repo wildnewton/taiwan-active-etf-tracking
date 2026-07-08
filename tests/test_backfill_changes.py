@@ -1,8 +1,13 @@
 import sqlite3
+from pathlib import Path
 from unittest.mock import patch
 
+import backfill_changes as backfill_module
 import db
 from backfill_changes import backfill_changes, holding_dates, _parse_args
+
+
+README = Path(__file__).resolve().parent.parent / "README.md"
 
 
 def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
@@ -241,6 +246,18 @@ def test_parse_args_all_derived_enables_derived_flag():
     args = _parse_args(["--all-derived"])
 
     assert args.all_derived is True
+
+
+def test_backfill_usage_is_documented_in_script_and_readme():
+    script_doc = backfill_module.__doc__ or ""
+    readme_text = README.read_text(encoding="utf-8")
+
+    for text in (script_doc, readme_text):
+        assert "scripts/backfill_changes.py" in text
+        assert "--all-derived" in text
+        assert "--regenerate-manager-intent" in text
+        assert "--regenerate-signals" in text
+        assert "--from-date" in text and "--to-date" in text
 
 
 def test_backfill_skips_first_available_date_when_no_previous_date():
