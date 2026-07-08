@@ -233,7 +233,7 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
                     _is_capital_buyback_response,
                     timeout=_API_RESPONSE_TIMEOUT_MS,
                 )
-                if not buyback_body:
+                if not buyback_body and _is_capital_buyback_response(response):
                     buyback_body = await response.text()
             except Exception:
                 pass
@@ -270,7 +270,7 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
                     _is_nomura_assets_response,
                     timeout=_API_RESPONSE_TIMEOUT_MS,
                 )
-                if not assets_body:
+                if not assets_body and _is_nomura_assets_response(response):
                     assets_body = await response.text()
             except Exception:
                 pass
@@ -379,13 +379,18 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
 
 # Internal helpers
 
+def _response_url(response) -> str:
+    url = getattr(response, "url", "")
+    return url if isinstance(url, str) else ""
+
+
 def _is_capital_buyback_response(response) -> bool:
-    url = response.url.lower()
+    url = _response_url(response).lower()
     return "capitalfund" in url and "buyback" in url
 
 
 def _is_nomura_assets_response(response) -> bool:
-    return "GetFundAssets" in response.url
+    return "GetFundAssets" in _response_url(response)
 
 
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
