@@ -36,6 +36,7 @@ The cron wrapper is `scripts/nightly-cron.sh`. It resolves the project directory
 │   ├── nightly_pipeline.py          # production nightly workflow
 │   ├── pipeline.py                  # scrape pipeline
 │   ├── report.py                    # report generation
+│   ├── retry_stale_scrapes.py       # targeted stale-ETF retry workflow
 │   ├── scraper.py                   # scrape router / decision tree
 │   ├── scrapers/                    # source-specific scraper implementations
 │   ├── signals.py                   # manager signal generation
@@ -95,6 +96,27 @@ PYTHONPATH=scripts python scripts/nightly_pipeline.py \
   --db data/active_etf_holdings.sqlite \
   --report-dir reports
 ```
+
+## 21:00 stale-data watchdog
+
+After the 20:00 report job, the 21:00 watchdog should retry only stale ETFs for that report date. It should not re-scrape the full universe.
+
+Recommended command:
+
+```bash
+PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
+  --db data/active_etf_holdings.sqlite \
+  --date "$(date +%F)" \
+  --report-dir reports
+```
+
+Watchdog prompt expectations:
+
+- retry only stale ETFs selected by `scripts/retry_stale_scrapes.py`
+- treat the report as provisional while `data_freshness.stale > 0` or `stale_etfs` is non-empty
+- distinguish stale `data_date` from unknown `data_date`
+- overwrite date-only primary reports only after improvement
+- do not make all-universe claims when freshness is partial
 
 ## Backfilling changes and derived signals
 
@@ -186,6 +208,7 @@ Source-specific implementations live under `scripts/scrapers/`.
 ## Maintenance scripts
 
 - `scripts/backfill_changes.py`: rebuilds change-detection rows and, optionally, manager-intent rollups and manager signals from stored holdings.
+- `scripts/retry_stale_scrapes.py`: retries stale ETF scrape rows for one report date and overwrites date-only primary reports only after freshness improves.
 - `scripts/traction_analysis.py`: generates nightly traction analysis output.
 
 Use maintenance scripts with care against a backed-up database when changing historical data.
