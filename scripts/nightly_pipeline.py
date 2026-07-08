@@ -6,8 +6,8 @@ Runs the full workflow:
   3. Holding change detection
   4. Manager intent rollup generation
   5. Manager signal generation
-  6. Daily signal report → timestamped file
-  7. Traction analysis (active_add/reduce flow) → timestamped file
+  6. Daily signal report → date-only primary file + timestamped archive
+  7. Traction analysis (active_add/reduce flow) → date-only primary file + timestamped archive
 
 Usage:
     python3 scripts/nightly_pipeline.py
@@ -152,26 +152,36 @@ def main():
     report_dir.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = report_dir / f"taiwan_active_etf_signal_report_{stamp}.txt"
+    report_date = change_summary.get("date") or scrape_summary.get("date") or datetime.now().strftime("%Y-%m-%d")
+    report_path = report_dir / f"taiwan_active_etf_signal_report_{report_date}.txt"
+    report_archive_path = report_dir / f"taiwan_active_etf_signal_report_{stamp}.txt"
     report_path.write_text(report_text, encoding="utf-8")
+    report_archive_path.write_text(report_text, encoding="utf-8")
 
     print("Step 7/7: Generating traction analysis (raw data)...")
     traction_path = None
+    traction_archive_path = None
     try:
         traction_raw = generate_traction_report(
             db_path=args.db,
             window_days=10,
         )
-        traction_path = report_dir / f"traction_raw_{stamp}.txt"
+        traction_path = report_dir / f"traction_raw_{report_date}.txt"
+        traction_archive_path = report_dir / f"traction_raw_{stamp}.txt"
         traction_path.write_text(traction_raw, encoding="utf-8")
+        traction_archive_path.write_text(traction_raw, encoding="utf-8")
         print(f"Traction raw data written to: {traction_path}")
+        print(f"Traction raw archive written to: {traction_archive_path}")
     except Exception as exc:
         print(f"⚠️ Traction analysis failed (non-fatal): {exc}")
 
     print("Nightly Taiwan active ETF pipeline complete")
     print(f"Signal report: {report_path}")
+    print(f"Signal report archive: {report_archive_path}")
     if traction_path:
         print(f"Traction data: {traction_path}")
+    if traction_archive_path:
+        print(f"Traction data archive: {traction_archive_path}")
 
 
 if __name__ == "__main__":

@@ -161,7 +161,7 @@ def test_manager_intent_summary_is_printed(capsys, tmp_path):
     assert "42" in out
 
 
-def test_script_writes_report_file(tmp_path):
+def test_script_writes_primary_and_archive_report_files(tmp_path):
     db_path = str(tmp_path / "test.sqlite3")
     report_dir = str(tmp_path / "reports")
 
@@ -177,14 +177,21 @@ def test_script_writes_report_file(tmp_path):
         _run_main(db_path, report_dir)
 
         reports = list(Path(report_dir).glob("*.txt"))
-        assert len(reports) == 2, f"Expected 2 report files, got {len(reports)}: {[r.name for r in reports]}"
         names = [r.name for r in reports]
-        signal_files = [n for n in names if "taiwan_active_etf_signal_report_" in n]
-        traction_files = [n for n in names if "traction_raw_" in n]
-        assert len(signal_files) == 1, f"Expected 1 signal report, got {signal_files}"
-        assert len(traction_files) == 1, f"Expected 1 traction raw, got {traction_files}"
-        signal_path = [r for r in reports if "taiwan_active_etf_signal_report_" in r.name][0]
-        assert signal_path.read_text(encoding="utf-8") == "Signal report text"
+        assert "taiwan_active_etf_signal_report_2026-06-26.txt" in names
+        assert "traction_raw_2026-06-26.txt" in names
+        archive_signal_files = [
+            n for n in names
+            if n.startswith("taiwan_active_etf_signal_report_2026") and n != "taiwan_active_etf_signal_report_2026-06-26.txt"
+        ]
+        archive_traction_files = [
+            n for n in names
+            if n.startswith("traction_raw_2026") and n != "traction_raw_2026-06-26.txt"
+        ]
+        assert len(archive_signal_files) == 1, f"Expected 1 archive signal report, got {archive_signal_files}"
+        assert len(archive_traction_files) == 1, f"Expected 1 archive traction raw, got {archive_traction_files}"
+        assert (Path(report_dir) / "taiwan_active_etf_signal_report_2026-06-26.txt").read_text(encoding="utf-8") == "Signal report text"
+        assert (Path(report_dir) / "traction_raw_2026-06-26.txt").read_text(encoding="utf-8") == "Traction raw text"
 
 
 def test_warns_when_incomplete_scrape(capsys, tmp_path):
