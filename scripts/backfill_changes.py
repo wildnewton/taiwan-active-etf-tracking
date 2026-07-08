@@ -1,3 +1,36 @@
+"""Backfill ETF holding changes and derived manager-intent/signals.
+
+Use this script after changing change-detection, manager-intent, or signal logic
+when existing DB rows need to be rebuilt from stored holdings. It does not scrape
+holdings and it does not generate reports.
+
+Common usage:
+
+    PYTHONPATH=scripts python scripts/backfill_changes.py \
+      --db data/active_etf_holdings.sqlite \
+      --from-date 2026-07-01 \
+      --to-date 2026-07-08 \
+      --all-derived
+
+Options:
+
+- --from-date / --to-date limit the holding dates to rebuild.
+- --regenerate-manager-intent rebuilds manager_intent_rollups after successful
+  change detection for each date.
+- --regenerate-signals rebuilds etf_manager_signals after successful change
+  detection for each date.
+- --all-derived is shorthand for --regenerate-manager-intent plus
+  --regenerate-signals.
+
+Backfill order for each eligible date is:
+
+    detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
+
+The previous comparison date is taken from the full holdings history, not only
+from the requested date range. Use a backed-up database when rewriting historical
+rows.
+"""
+
 import argparse
 import json
 from pathlib import Path
