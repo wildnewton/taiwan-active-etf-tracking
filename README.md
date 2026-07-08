@@ -11,9 +11,10 @@ The production workflow is `scripts/nightly_pipeline.py`. It runs the full seque
 1. Discover and reconcile the active ETF universe.
 2. Run the browser-enabled holdings scrape.
 3. Detect holding changes.
-4. Generate manager signals.
-5. Write the signal report.
-6. Write traction analysis raw data.
+4. Generate manager-intent rollups.
+5. Generate manager signals.
+6. Write the signal report.
+7. Write traction analysis raw data.
 
 The cron wrapper is `scripts/nightly-cron.sh`. It resolves the project directory relative to the script location, writes logs to `logs/nightly_pipeline.log`, and runs the nightly pipeline with the project database and report directory.
 
