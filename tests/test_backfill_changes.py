@@ -1,7 +1,8 @@
 import sqlite3
+from unittest.mock import patch
 
 import db
-from backfill_changes import backfill_changes, holding_dates
+from backfill_changes import backfill_changes, holding_dates, _parse_args
 
 
 def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
@@ -167,6 +168,79 @@ def test_backfill_is_idempotent_and_can_regenerate_signals():
     assert first["processed_dates"] == second["processed_dates"] == ["2026-06-24"]
     assert count_changes() == first_count == 6
     assert signal_types() == first_signals == ["new_core_position"]
+
+
+def test_backfill_can_regenerate_manager_intent_and_signals_in_order():
+    db.init_db(":memory:")
+    seed_previous_day()
+    seed_scaled_current_day()
+    events = []
+
+    def fake_intent(date):
+        events.append(("intent", date))
+        return {"ok": True, "date": date, "rows": 12}
+
+    def fake_signals(date):
+        events.append(("signals", date))
+        return {"ok": True, "date": date, "signals": 3}
+
+    with patch("backfill_changes.generate_manager_intent_rollups", side_effect=fake_intent), \
+        patch("backfill_changes.generate_manager_signals", side_effect=fake_signals):
+        summary = backfill_changes(
+            from_date="2026-06-24",
+            to_date="2026-06-24",
+            regenerate_manager_intent=True,
+            regenerate_signals=True,
+        )
+
+    assert events == [("intent", "2026-06-24"), ("signals", "2026-06-24")]
+    assert summary["manager_intent_dates"] == ["2026-06-24"]
+    assert summary["manager_intent_rows"] == 12
+    assert summary["regenerated_signal_dates"] == ["2026-06-24"]
+    assert summary["signal_rows"] == 3
+
+
+def test_backfill_all_derived_enables_manager_intent_and_signals():
+    db.init_db(":memory:")
+    seed_previous_day()
+    seed_scaled_current_day()
+
+    with patch("backfill_changes.generate_manager_intent_rollups", return_value={"ok": True, "rows": 5}) as intent, \
+        patch("backfill_changes.generate_manager_signals", return_value={"ok": True, "signals": 2}) as signals:
+        summary = backfill_changes(
+            from_date="2026-06-24",
+            to_date="2026-06-24",
+            all_derived=True,
+        )
+
+    intent.assert_called_once_with("2026-06-24")
+    signals.assert_called_once_with("2026-06-24")
+    assert summary["manager_intent_rows"] == 5
+    assert summary["signal_rows"] == 2
+
+
+def test_backfill_does_not_regenerate_derived_layers_when_changes_fail():
+    db.init_db(":memory:")
+    seed_previous_day("2026-06-23")
+    insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5)
+
+    with patch("backfill_changes.generate_manager_intent_rollups") as intent, \
+        patch("backfill_changes.generate_manager_signals") as signals:
+        summary = backfill_changes(
+            from_date="2026-06-24",
+            to_date="2026-06-24",
+            all_derived=True,
+        )
+
+    assert summary["processed_dates"] == []
+    intent.assert_not_called()
+    signals.assert_not_called()
+
+
+def test_parse_args_all_derived_enables_derived_flag():
+    args = _parse_args(["--all-derived"])
+
+    assert args.all_derived is True
 
 
 def test_backfill_skips_first_available_date_when_no_previous_date():
