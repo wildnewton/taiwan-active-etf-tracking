@@ -13,6 +13,7 @@ import time
 from datetime import date, datetime
 from inspect import isawaitable
 
+import db
 from config import get_etf_config
 from scrapers.moneydj import scrape_moneydj
 from scrapers.moneydj_browser import scrape_moneydj_browser
@@ -33,6 +34,9 @@ FAILED_RESULT = {
 
 _MONEYDJ_RETRIES = 10
 _MONEYDJ_RETRY_DELAYS = []  # Fibonacci * 2: 2, 2, 4, 6, 10, 16, 26, 42, 68
+_ROW_COUNT_HISTORY_DAYS = 5
+_LOW_ROW_COUNT_THRESHOLD = 0.6
+_MONEYDJ_SOURCE_TYPES = {"moneydj_primary", "moneydj_browser"}
 
 
 def _build_retry_delays(max_attempts: int) -> list[float]:
@@ -72,15 +76,16 @@ def scrape_holdings(etf_code: str) -> dict:
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        official_candidate = None
         if _is_stale_result(moneydj_result, date.today()):
-            official_result = scrape_official_static(etf_code)
-            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
-                return _with_source_type(official_result, "official_fallback")
-        return moneydj_result
+            official_candidate = _official_fallback_static(etf_code)
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+                return official_candidate
+        return _maybe_replace_low_row_count_sync(etf_code, moneydj_result, official_candidate)
 
-    official_result = scrape_official_static(etf_code)
+    official_result = _official_fallback_static(etf_code)
     if official_result["ok"] is True:
-        return _with_source_type(official_result, "official_fallback")
+        return official_result
 
     return FAILED_RESULT.copy()
 
@@ -105,21 +110,23 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        official_candidate = None
         if _is_stale_result(moneydj_result, date.today()):
-            official_result = await _official_fallback_with_browser(etf_code, page)
-            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
-                return official_result
-        return moneydj_result
+            official_candidate = await _official_fallback_with_browser(etf_code, page)
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+                return official_candidate
+        return await _maybe_replace_low_row_count_async(etf_code, moneydj_result, page, official_candidate)
 
     # 2. MoneyDJ browser
     browser_result = await scrape_moneydj_browser(etf_code, page)
     if browser_result["ok"] is True:
         browser_result = _with_source_type(browser_result, "moneydj_browser")
+        official_candidate = None
         if _is_stale_result(browser_result, date.today()):
-            official_result = await _official_fallback_with_browser(etf_code, page)
-            if official_result["ok"] is True and _is_fresh_result(official_result, date.today()):
-                return official_result
-        return browser_result
+            official_candidate = await _official_fallback_with_browser(etf_code, page)
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+                return official_candidate
+        return await _maybe_replace_low_row_count_async(etf_code, browser_result, page, official_candidate)
 
     # 3-4. Official fallbacks after MoneyDJ failure.
     official_result = await _official_fallback_with_browser(etf_code, page)
@@ -136,10 +143,148 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
         if official_browser["ok"] is True:
             return _with_source_type(official_browser, "official_fallback")
 
+    return _official_fallback_static(etf_code)
+
+
+def _official_fallback_static(etf_code: str) -> dict:
     official_result = scrape_official_static(etf_code)
     if official_result["ok"] is True:
         return _with_source_type(official_result, "official_fallback")
-    return FAILED_RESULT.copy()
+    return official_result
+
+
+def get_historical_mean_stock_row_count(etf_code: str, source_type: str, limit: int = _ROW_COUNT_HISTORY_DAYS):
+    """Return recent historical mean stock row count for one ETF/source.
+
+    Only stored successful snapshots have rows in etf_daily_holdings, so grouped
+    row counts naturally exclude missing/zero-row dates.
+    """
+    with db._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT stock_count
+            FROM (
+                SELECT date, COUNT(*) AS stock_count
+                FROM etf_daily_holdings
+                WHERE etf_code = ? AND source_type = ?
+                GROUP BY date
+                ORDER BY date DESC
+                LIMIT ?
+            )
+            """,
+            (etf_code, source_type, limit),
+        ).fetchall()
+    if not rows:
+        return None
+    return sum(row[0] for row in rows) / len(rows)
+
+
+def _maybe_replace_low_row_count_sync(etf_code: str, moneydj_result: dict, official_candidate: dict | None = None) -> dict:
+    validation = _row_count_validation(etf_code, moneydj_result)
+    if not validation["low_confidence"]:
+        return moneydj_result
+
+    official_result = official_candidate or _official_fallback_static(etf_code)
+    return _select_low_row_count_result(moneydj_result, official_result, validation)
+
+
+async def _maybe_replace_low_row_count_async(etf_code: str, moneydj_result: dict, page, official_candidate: dict | None = None) -> dict:
+    validation = _row_count_validation(etf_code, moneydj_result)
+    if not validation["low_confidence"]:
+        return moneydj_result
+
+    official_result = official_candidate or await _official_fallback_with_browser(etf_code, page)
+    return _select_low_row_count_result(moneydj_result, official_result, validation)
+
+
+def _row_count_validation(etf_code: str, result: dict) -> dict:
+    source_type = result.get("source_type") or ""
+    current_stock_rows = len(result.get("stock_rows") or [])
+    historical_mean = None
+    minimum_expected = None
+    low_confidence = False
+
+    if source_type in _MONEYDJ_SOURCE_TYPES:
+        historical_mean = get_historical_mean_stock_row_count(etf_code, source_type)
+        if historical_mean:
+            minimum_expected = historical_mean * _LOW_ROW_COUNT_THRESHOLD
+            low_confidence = current_stock_rows < minimum_expected
+
+    return {
+        "low_confidence": low_confidence,
+        "source_type": source_type,
+        "moneydj_stock_rows": current_stock_rows,
+        "historical_mean_stock_rows": historical_mean,
+        "minimum_expected_stock_rows": minimum_expected,
+        "threshold_ratio": _LOW_ROW_COUNT_THRESHOLD,
+    }
+
+
+def _select_low_row_count_result(moneydj_result: dict, official_result: dict, validation: dict) -> dict:
+    moneydj_count = validation["moneydj_stock_rows"]
+    if official_result.get("ok") is not True:
+        return _with_row_count_warning(
+            moneydj_result,
+            validation,
+            "low_row_count_official_fallback_failed",
+            official_result=official_result,
+        )
+
+    official_count = len(official_result.get("stock_rows") or [])
+    if official_count == 0:
+        return _with_row_count_warning(
+            moneydj_result,
+            validation,
+            "low_row_count_official_fallback_zero_rows",
+            official_result=official_result,
+        )
+
+    if official_count == moneydj_count:
+        return _with_row_count_warning(
+            moneydj_result,
+            validation,
+            "low_row_count_confirmed_by_fallback",
+            official_result=official_result,
+        )
+
+    if official_count > moneydj_count:
+        minimum_expected = validation.get("minimum_expected_stock_rows") or 0.0
+        if official_count >= minimum_expected:
+            return official_result
+        return _with_row_count_warning(
+            official_result,
+            validation,
+            "low_row_count_official_fallback_still_low",
+            official_result=official_result,
+        )
+
+    return _with_row_count_warning(
+        moneydj_result,
+        validation,
+        "low_row_count_official_fallback_lower_row_count",
+        official_result=official_result,
+    )
+
+
+def _with_row_count_warning(result: dict, validation: dict, reason: str, official_result: dict | None = None) -> dict:
+    warning = {
+        "reason": reason,
+        "manual_inspection_required": True,
+        "moneydj_stock_rows": validation["moneydj_stock_rows"],
+        "official_stock_rows": len((official_result or {}).get("stock_rows") or []),
+        "historical_mean_stock_rows": validation.get("historical_mean_stock_rows"),
+        "minimum_expected_stock_rows": validation.get("minimum_expected_stock_rows"),
+        "threshold_ratio": validation.get("threshold_ratio"),
+    }
+    if official_result and official_result.get("ok") is not True:
+        warning["official_error"] = official_result.get("reason", "unknown")
+
+    return {
+        **result,
+        "warnings": [*(result.get("warnings") or []), reason],
+        "manual_inspection_required": True,
+        "row_count_warning": warning,
+    }
 
 
 def _result_data_date(result: dict):
