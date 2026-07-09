@@ -171,6 +171,7 @@ def _new_summary(run_date: date, total_etfs: int) -> dict:
         "total_non_stock_rows": 0,
         "failures": [],
         "moneydj_warnings": [],
+        "row_count_warnings": [],
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
         "unknown_date_etfs": [],
@@ -215,6 +216,7 @@ def _record_result(
             summary["official_success"] += 1
             _check_moneydj_warning(summary, etf_code)
         _record_freshness(summary, etf_code, run_date, data_date, result)
+        _record_row_count_warning(summary, etf_code, result)
     else:
         summary["failed"] += 1
         summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
@@ -222,6 +224,13 @@ def _record_result(
 
     if should_record_scrape_run:
         insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
+
+
+def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> None:
+    warning = result.get("row_count_warning")
+    if not warning:
+        return
+    summary["row_count_warnings"].append({"etf_code": etf_code, **warning})
 
 
 def _record_freshness(summary: dict, etf_code: str, run_date: date, data_date: Optional[date], result: dict) -> None:
