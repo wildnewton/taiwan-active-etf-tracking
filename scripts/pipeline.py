@@ -2,7 +2,7 @@ import asyncio
 from datetime import date, datetime
 from typing import Awaitable, Callable, Optional
 
-from db import init_db, insert_holdings, insert_non_stock_assets, insert_scrape_run
+from db import init_db, insert_scrape_run, replace_daily_snapshot
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings, scrape_holdings_with_browser_async
@@ -198,13 +198,14 @@ def _record_result(
     finished_at: datetime,
     result: dict,
 ) -> None:
+    should_record_scrape_run = True
     if result["ok"] is True:
         stock_rows = [_to_holding_row(row, run_date) for row in result["stock_rows"]]
         non_stock_rows = [
             _to_non_stock_asset_row(row, run_date) for row in result["non_stock_rows"]
         ]
-        insert_holdings(stock_rows)
-        insert_non_stock_assets(non_stock_rows)
+        write_result = replace_daily_snapshot(stock_rows, non_stock_rows)
+        should_record_scrape_run = write_result.get("inserted", False)
 
         summary["total_stock_rows"] += len(stock_rows)
         summary["total_non_stock_rows"] += len(non_stock_rows)
@@ -219,7 +220,8 @@ def _record_result(
         summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
         _check_moneydj_warning(summary, etf_code)
 
-    insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
+    if should_record_scrape_run:
+        insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
 
 
 def _record_freshness(summary: dict, etf_code: str, run_date: date, data_date: Optional[date], result: dict) -> None:
