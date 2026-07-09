@@ -249,6 +249,15 @@ def _select_low_row_count_result(moneydj_result: dict, official_result: dict, va
             official_result=official_result,
         )
 
+    stale_reason = _official_row_count_staleness_reason(moneydj_result, official_result)
+    if stale_reason:
+        return _with_row_count_warning(
+            moneydj_result,
+            validation,
+            stale_reason,
+            official_result=official_result,
+        )
+
     if official_count == moneydj_count:
         return _with_row_count_warning(
             moneydj_result,
@@ -276,6 +285,16 @@ def _select_low_row_count_result(moneydj_result: dict, official_result: dict, va
     )
 
 
+def _official_row_count_staleness_reason(moneydj_result: dict, official_result: dict) -> str | None:
+    moneydj_date = _result_data_date(moneydj_result)
+    official_date = _result_data_date(official_result)
+    if moneydj_date and official_date and official_date < moneydj_date:
+        return "low_row_count_official_fallback_stale"
+    if moneydj_date and official_date is None:
+        return "low_row_count_official_fallback_missing_date"
+    return None
+
+
 def _with_row_count_warning(result: dict, validation: dict, reason: str, official_result: dict | None = None) -> dict:
     warning = {
         "reason": reason,
@@ -286,8 +305,15 @@ def _with_row_count_warning(result: dict, validation: dict, reason: str, officia
         "minimum_expected_stock_rows": validation.get("minimum_expected_stock_rows"),
         "threshold_ratio": validation.get("threshold_ratio"),
     }
-    if official_result and official_result.get("ok") is not True:
-        warning["official_error"] = official_result.get("reason", "unknown")
+    if official_result:
+        official_data_date = _result_data_date(official_result)
+        if official_data_date:
+            warning["official_data_date"] = official_data_date.isoformat()
+        if official_result.get("ok") is not True:
+            warning["official_error"] = official_result.get("reason", "unknown")
+    moneydj_data_date = _result_data_date(result)
+    if moneydj_data_date:
+        warning["moneydj_data_date"] = moneydj_data_date.isoformat()
 
     return {
         **result,
