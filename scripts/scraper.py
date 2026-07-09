@@ -9,6 +9,7 @@ Priority:
 """
 
 import asyncio
+import sqlite3
 import time
 from datetime import date, datetime
 from inspect import isawaitable
@@ -157,23 +158,27 @@ def get_historical_mean_stock_row_count(etf_code: str, source_type: str, limit: 
     """Return recent historical mean stock row count for one ETF/source.
 
     Only stored successful snapshots have rows in etf_daily_holdings, so grouped
-    row counts naturally exclude missing/zero-row dates.
+    row counts naturally exclude missing/zero-row dates. A missing table means
+    the scraper is being used without an initialized DB, so validation is skipped.
     """
-    with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT stock_count
-            FROM (
-                SELECT date, COUNT(*) AS stock_count
-                FROM etf_daily_holdings
-                WHERE etf_code = ? AND source_type = ?
-                GROUP BY date
-                ORDER BY date DESC
-                LIMIT ?
-            )
-            """,
-            (etf_code, source_type, limit),
-        ).fetchall()
+    try:
+        with db._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT stock_count
+                FROM (
+                    SELECT date, COUNT(*) AS stock_count
+                    FROM etf_daily_holdings
+                    WHERE etf_code = ? AND source_type = ?
+                    GROUP BY date
+                    ORDER BY date DESC
+                    LIMIT ?
+                )
+                """,
+                (etf_code, source_type, limit),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return None
     if not rows:
         return None
     return sum(row[0] for row in rows) / len(rows)
