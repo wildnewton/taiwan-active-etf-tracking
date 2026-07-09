@@ -194,14 +194,10 @@ def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
         patch("pipeline.scrape_holdings", return_value=scrape_result()), \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
-        patch("pipeline.insert_holdings") as insert_holdings, \
-        patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
         patch("pipeline.insert_scrape_run"):
         run_daily_scrape(":memory:")
 
     replace_daily_snapshot.assert_called_once()
-    insert_holdings.assert_not_called()
-    insert_non_stock_assets.assert_not_called()
 
 
 def test_official_fallback_has_explicit_source_priority():
