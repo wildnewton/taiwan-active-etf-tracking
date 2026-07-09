@@ -37,6 +37,10 @@ def make_success(etf_code, row_date="2026/07/07"):
     }
 
 
+def _snapshot_write_ok(*args, **kwargs):
+    return {"inserted": True, "source_type": "moneydj_browser"}
+
+
 @pytest.mark.asyncio
 async def test_run_selected_scrape_with_browser_async_retries_only_requested_codes():
     from pipeline import run_selected_scrape_with_browser_async
@@ -48,8 +52,7 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
     with patch("pipeline.date", FixedDate), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db") as init_db, \
-        patch("pipeline.insert_holdings") as insert_holdings, \
-        patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = await run_selected_scrape_with_browser_async(":memory:", requested_codes, page=page)
 
@@ -59,8 +62,7 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
     assert summary["date"] == "2026-07-07"
     assert summary["total_etfs"] == 2
     assert summary["data_freshness"] == {"fresh": 2, "stale": 0, "unknown": 0}
-    assert insert_holdings.call_count == 2
-    assert insert_non_stock_assets.call_count == 2
+    assert replace_daily_snapshot.call_count == 2
     assert insert_scrape_run.call_count == 2
 
 
@@ -76,8 +78,7 @@ async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date(
     with patch("pipeline.date", FixedDate), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db"), \
-        patch("pipeline.insert_holdings"), \
-        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = await run_selected_scrape_with_browser_async(
             ":memory:",
