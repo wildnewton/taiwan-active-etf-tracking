@@ -158,9 +158,14 @@ def get_historical_mean_stock_row_count(etf_code: str, source_type: str, limit: 
     """Return recent historical mean stock row count for one ETF/source.
 
     Only stored successful snapshots have rows in etf_daily_holdings, so grouped
-    row counts naturally exclude missing/zero-row dates. A missing table means
-    the scraper is being used without an initialized DB, so validation is skipped.
+    row counts naturally exclude missing/zero-row dates. A missing table/path
+    means the scraper is being used without an initialized DB, so validation is
+    skipped.
     """
+    db_path = getattr(db, "_DB_PATH", None)
+    if db_path != ":memory:" and hasattr(db_path, "exists") and not db_path.exists():
+        return None
+
     try:
         with db._connect() as conn:
             rows = conn.execute(
