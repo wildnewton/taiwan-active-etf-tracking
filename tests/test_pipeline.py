@@ -101,14 +101,17 @@ def make_failure(reason="all sources failed"):
     }
 
 
+def _snapshot_write_ok(*args, **kwargs):
+    return {"inserted": True, "source_type": "moneydj_primary"}
+
+
 def test_run_daily_scrape_all_success():
     expected_count = _active_count()
     with _patch_run_date(), \
         _patch_active_etfs(), \
         patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
         patch("pipeline.init_db") as init_db, \
-        patch("pipeline.insert_holdings") as insert_holdings, \
-        patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = run_daily_scrape(":memory:")
 
@@ -128,8 +131,7 @@ def test_run_daily_scrape_all_success():
     assert summary["total_non_stock_rows"] == expected_count
     assert summary["failures"] == []
     init_db.assert_called_once_with(":memory:")
-    assert insert_holdings.call_count == expected_count
-    assert insert_non_stock_assets.call_count == expected_count
+    assert replace_daily_snapshot.call_count == expected_count
     assert insert_scrape_run.call_count == expected_count
 
 
@@ -143,8 +145,7 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
         _patch_active_etfs(), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db") as init_db, \
-        patch("pipeline.insert_holdings") as insert_holdings, \
-        patch("pipeline.insert_non_stock_assets") as insert_non_stock_assets, \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
         summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
 
@@ -161,8 +162,7 @@ async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
     assert summary["total_stock_rows"] == expected_count
     assert summary["total_non_stock_rows"] == expected_count
     init_db.assert_called_once_with(":memory:")
-    assert insert_holdings.call_count == expected_count
-    assert insert_non_stock_assets.call_count == expected_count
+    assert replace_daily_snapshot.call_count == expected_count
     assert insert_scrape_run.call_count == expected_count
 
 
@@ -179,8 +179,7 @@ def test_run_daily_scrape_some_fail():
         _patch_active_etfs(), \
         patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
         patch("pipeline.init_db"), \
-        patch("pipeline.insert_holdings"), \
-        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
@@ -288,11 +287,7 @@ def test_insert_scrape_run_no_duplicates():
 
 
 def test_insert_scrape_run_replaces_failure_with_success():
-    """A later success should overwrite an earlier failure for the same (date, etf_code).
-
-    This is the real-world scenario: run A fails 00400A (writes failure record),
-    run B succeeds 00400A (should REPLACE the failure with success).
-    """
+    """A later success should overwrite an earlier failure for the same (date, etf_code)."""
     from datetime import date, datetime
     from models import ScrapeRun
 
@@ -380,8 +375,7 @@ def test_scrape_run_records_per_etf_data_date_not_first_success_date():
         _patch_active_etfs(), \
         patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
         patch("pipeline.init_db"), \
-        patch("pipeline.insert_holdings"), \
-        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
         patch("pipeline.insert_scrape_run", side_effect=capture_run):
         summary = run_daily_scrape(":memory:")
 
@@ -418,8 +412,7 @@ def test_run_daily_scrape_reports_unknown_data_date_without_top_level_data_date(
         _patch_active_etfs(), \
         patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
         patch("pipeline.init_db"), \
-        patch("pipeline.insert_holdings"), \
-        patch("pipeline.insert_non_stock_assets"), \
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 

@@ -5,6 +5,7 @@ from typing import Optional
 
 import db
 from etf_universe import get_active_etf_count, get_etf_config
+from source_priority import source_priority
 
 
 _EPSILON = 1e-9
@@ -16,12 +17,6 @@ def _weekday_label(date_str: str) -> str:
     return _WEEKDAYS[datetime.strptime(date_str, '%Y-%m-%d').weekday()]
 _MIN_SCALE_SAMPLE_SIZE = 3
 _MIN_ACTIVE_DELTA_PCT = 1.0
-_SOURCE_PRIORITIES = {
-    "moneydj_primary": 40,
-    "moneydj_browser": 38,
-    "official_browser": 35,
-    "official_static": 30,
-}
 
 
 def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
@@ -207,7 +202,7 @@ def _source_family(source_type: str) -> str:
 
 
 def _source_quality_score(entry: dict) -> float:
-    priority = _SOURCE_PRIORITIES.get(entry["source_type"], 10)
+    priority = source_priority(entry["source_type"])
     stock_count_bonus = entry["stock_count"] * 2.0
     shares_bonus = entry["shares_coverage"] * 10.0
     total_weight = entry["total_weight"]
@@ -216,7 +211,7 @@ def _source_quality_score(entry: dict) -> float:
 
 
 def _source_sort_key(entry: dict):
-    return (entry["quality_score"], entry["stock_count"], _SOURCE_PRIORITIES.get(entry["source_type"], 10), entry["source_type"])
+    return (entry["quality_score"], entry["stock_count"], source_priority(entry["source_type"]), entry["source_type"])
 
 
 def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
