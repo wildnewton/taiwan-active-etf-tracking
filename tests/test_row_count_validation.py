@@ -1,8 +1,6 @@
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from pipeline import run_daily_scrape
 from scraper import scrape_holdings, scrape_holdings_with_browser
 
@@ -32,8 +30,8 @@ def make_stock_rows(etf_code="00984A", count=55, row_date="2026/07/08", source_t
     ]
 
 
-def make_result(ok=True, etf_code="00984A", count=55, source_type="moneydj_primary", reason="ok"):
-    rows = make_stock_rows(etf_code=etf_code, count=count, source_type=source_type) if ok else []
+def make_result(ok=True, etf_code="00984A", count=55, source_type="moneydj_primary", reason="ok", row_date="2026/07/08"):
+    rows = make_stock_rows(etf_code=etf_code, count=count, row_date=row_date, source_type=source_type) if ok else []
     return {
         "ok": ok,
         "reason": reason,
@@ -63,6 +61,25 @@ def test_low_moneydj_row_count_uses_official_when_official_recovers_rows():
     assert len(result["stock_rows"]) == 122
     assert "row_count_warning" not in result
     official_static.assert_called_once_with("00984A")
+
+
+def test_low_moneydj_row_count_keeps_moneydj_when_official_rows_are_stale():
+    moneydj = make_result(count=55, source_type="moneydj_primary", row_date="2026/07/08")
+    stale_official = make_result(count=122, source_type="official_fallback", row_date="2026/07/07")
+
+    with patch("scraper.date", FixedDate), \
+        patch("scraper.get_historical_mean_stock_row_count", return_value=115.0), \
+        patch("scraper.scrape_moneydj", return_value=moneydj), \
+        patch("scraper.scrape_official_static", return_value=stale_official), \
+        patch("time.sleep"):
+        result = scrape_holdings("00984A")
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert result["stock_rows"][0]["date"] == "2026/07/08"
+    assert result["row_count_warning"]["reason"] == "low_row_count_official_fallback_stale"
+    assert result["row_count_warning"]["official_data_date"] == "2026-07-07"
+    assert result["row_count_warning"]["moneydj_data_date"] == "2026-07-08"
 
 
 def test_low_moneydj_row_count_confirmed_by_same_nonzero_official_count_is_manual_inspection():
