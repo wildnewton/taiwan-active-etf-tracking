@@ -21,7 +21,8 @@ LOG_FILE="${LOG_DIR}/nightly_pipeline.log"
   # Unbuffered python3 so output flows continuously
   .venv/bin/python3 -u scripts/nightly_pipeline.py \
       --db data/active_etf_holdings.sqlite \
-      --report-dir reports 2>&1
+      --report-dir reports \
+      --skip-discovery 2>&1
 
   EXIT_CODE=$?
 

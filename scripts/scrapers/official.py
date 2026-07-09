@@ -243,7 +243,11 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
     if not buyback_body:
         return _failed_result(source_url, "Capital buyback API not intercepted")
 
-    all_rows = dedupe_rows(parse_capital_api(buyback_body, etf_code, source_url))
+    try:
+        all_rows = dedupe_rows(parse_capital_api(buyback_body, etf_code, source_url))
+    except Exception as exc:
+        return _failed_result(source_url, f"Capital API parse error: {exc}")
+
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
