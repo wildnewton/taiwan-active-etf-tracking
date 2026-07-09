@@ -114,6 +114,27 @@ def seed_scaled_current_day(date="2026-06-24"):
         insert_holding(date, "00980A", code, name, shares, weight)
 
 
+def test_backfill_uses_previous_valid_date_not_immediate_holding_date():
+    db.init_db(":memory:")
+    seed_previous_day("2026-07-06")
+    insert_holding("2026-07-07", "00980A", "2330", "台積電", 100, 10.0)
+    seed_scaled_current_day("2026-07-08")
+
+    calls = []
+
+    def fake_detect(current_date, previous_date):
+        calls.append((current_date, previous_date))
+        return {"ok": True, "rows": 1, "skipped_etfs": []}
+
+    with patch("backfill_changes.get_previous_valid_date", return_value="2026-07-06", create=True), \
+        patch("backfill_changes.detect_holding_changes", side_effect=fake_detect):
+        summary = backfill_changes(from_date="2026-07-08", to_date="2026-07-08")
+
+    assert calls == [("2026-07-08", "2026-07-06")]
+    assert summary["processed_dates"] == ["2026-07-08"]
+    assert summary["skipped_first_dates"] == []
+
+
 def test_holding_dates_are_sorted_and_range_filtered():
     db.init_db(":memory:")
     seed_previous_day("2026-06-22")

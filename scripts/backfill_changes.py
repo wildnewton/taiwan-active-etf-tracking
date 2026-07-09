@@ -26,9 +26,9 @@ Backfill order for each eligible date is:
 
     detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
 
-The previous comparison date is taken from the full holdings history, not only
-from the requested date range. Use a backed-up database when rewriting historical
-rows.
+The previous comparison date is selected with changes.get_previous_valid_date(),
+not only from the immediately preceding holdings date or the requested date range.
+Use a backed-up database when rewriting historical rows.
 """
 
 import argparse
@@ -36,7 +36,7 @@ import json
 from pathlib import Path
 
 import db
-from changes import detect_holding_changes
+from changes import detect_holding_changes, get_previous_valid_date
 from manager_intent import generate_manager_intent_rollups
 from signals import generate_manager_signals
 
@@ -79,9 +79,9 @@ def backfill_changes(
 ):
     """Recompute historical holding changes and optionally derived layers.
 
-    The previous date is taken from the full holdings history, not just the
+    The previous date is selected from the full valid-date history, not just the
     requested date range, so a range starting mid-history can still compare
-    against the immediately preceding holdings date.
+    against the proper preceding comparable holdings date.
     """
     if all_derived:
         regenerate_manager_intent = True
@@ -99,14 +99,15 @@ def backfill_changes(
     total_manager_intent_rows = 0
     total_signal_rows = 0
 
-    for index, current_date in enumerate(all_dates):
+    for current_date in all_dates:
         if current_date not in requested_dates:
             continue
-        if index == 0:
+
+        previous_date = get_previous_valid_date(current_date)
+        if not previous_date:
             skipped_first_dates.append(current_date)
             continue
 
-        previous_date = all_dates[index - 1]
         summary = detect_holding_changes(current_date, previous_date)
         skipped_etfs = summary.get("skipped_etfs") or []
         if skipped_etfs:
