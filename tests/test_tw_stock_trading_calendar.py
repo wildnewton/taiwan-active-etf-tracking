@@ -1,4 +1,3 @@
-import sqlite3
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
@@ -26,17 +25,18 @@ class TradingRunDate(date):
         return cls(TRADING_DATE.year, TRADING_DATE.month, TRADING_DATE.day)
 
 
-def _create_tw_stock_db(path):
-    with sqlite3.connect(path) as conn:
-        conn.execute("CREATE TABLE StockData (date TEXT NOT NULL, symbol TEXT NOT NULL)")
-        conn.executemany(
-            "INSERT INTO StockData (date, symbol) VALUES (?, ?)",
-            [
-                ("2026-06-26", "2330"),
-                ("2026-06-26", "2317"),
-                ("2026-06-29", "2330"),
-            ],
-        )
+def _write_params(path):
+    path.write_text(
+        """
+HOLIDAYS = {
+    2026: {
+        "TW": {"0619", "1009"},
+        "CN": set(),
+    }
+}
+""".strip(),
+        encoding="utf-8",
+    )
 
 
 def make_success(etf_code="00980A", row_date="2026/06/29"):
@@ -66,21 +66,22 @@ def make_success(etf_code="00980A", row_date="2026/06/29"):
     }
 
 
-def test_tw_stock_calendar_returns_latest_trading_day_on_or_before(tmp_path):
-    tw_db = tmp_path / "stocks.db"
-    _create_tw_stock_db(tw_db)
+def test_tw_stock_calendar_uses_params_holidays_and_weekends(tmp_path):
+    params_path = tmp_path / "params.py"
+    _write_params(params_path)
 
-    assert latest_tw_trading_day_on_or_before(date(2026, 6, 28), db_path=tw_db) == date(2026, 6, 26)
-    assert latest_tw_trading_day_on_or_before(date(2026, 6, 29), db_path=tw_db) == date(2026, 6, 29)
-    assert is_tw_trading_day(date(2026, 6, 28), db_path=tw_db) is False
-    assert is_tw_trading_day(date(2026, 6, 29), db_path=tw_db) is True
+    assert latest_tw_trading_day_on_or_before(date(2026, 6, 20), params_path=params_path) == date(2026, 6, 18)
+    assert latest_tw_trading_day_on_or_before(date(2026, 6, 29), params_path=params_path) == date(2026, 6, 29)
+    assert is_tw_trading_day(date(2026, 6, 19), params_path=params_path) is False
+    assert is_tw_trading_day(date(2026, 6, 20), params_path=params_path) is False
+    assert is_tw_trading_day(date(2026, 6, 29), params_path=params_path) is True
 
 
-def test_tw_stock_calendar_missing_db_returns_unknown(tmp_path):
-    missing = tmp_path / "missing.sqlite"
+def test_tw_stock_calendar_missing_params_returns_unknown(tmp_path):
+    missing = tmp_path / "missing_params.py"
 
-    assert latest_tw_trading_day_on_or_before(date(2026, 6, 28), db_path=missing) is None
-    assert is_tw_trading_day(date(2026, 6, 28), db_path=missing) is None
+    assert latest_tw_trading_day_on_or_before(date(2026, 6, 28), params_path=missing) is None
+    assert is_tw_trading_day(date(2026, 6, 28), params_path=missing) is None
 
 
 def test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day():
