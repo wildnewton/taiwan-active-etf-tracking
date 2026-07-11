@@ -1,5 +1,6 @@
 import importlib
 import sqlite3
+from unittest.mock import patch
 
 import pytest
 
@@ -294,10 +295,9 @@ def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
             "total_weight_stock_rows": 0.0,
         }
 
-    import pipeline
-
-    pipeline.scrape_holdings = fake_scrape
-    summary = run_daily_scrape(db_path)
+    with patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
+        patch("pipeline.latest_tw_trading_day_on_or_before", side_effect=lambda run_date: run_date):
+        summary = run_daily_scrape(db_path)
 
     assert "00980A" not in seen_codes
     assert len(seen_codes) == 18
