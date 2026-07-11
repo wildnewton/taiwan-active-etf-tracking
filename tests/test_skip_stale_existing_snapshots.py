@@ -1,6 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import patch
 
+import db
+from models import HoldingRow
 from pipeline import run_daily_scrape
 
 
@@ -110,3 +112,29 @@ def test_fresh_result_does_not_check_for_existing_stale_snapshot():
     assert summary["skipped_stale_existing"] == 0
     assert summary["stale_existing_etfs"] == []
     assert summary["data_freshness"] == {"fresh": 1, "stale": 0, "unknown": 0}
+
+
+def test_snapshot_exists_detects_existing_stock_snapshot():
+    db.init_db(":memory:")
+    assert db.snapshot_exists(date(2026, 6, 22), "00980A") is False
+
+    db.insert_holdings([
+        HoldingRow(
+            date=date(2026, 6, 22),
+            etf_code="00980A",
+            asset_name="台積電(2330.TW)",
+            asset_type="stock",
+            stock_code="2330",
+            stock_name="台積電",
+            shares=1000,
+            weight_pct=10.0,
+            source_url="https://example.test",
+            source_type="moneydj_primary",
+            extraction_method="requests_bs4",
+            scraped_at=datetime(2026, 6, 23, 19, 30),
+        )
+    ])
+
+    assert db.snapshot_exists(date(2026, 6, 22), "00980A") is True
+    assert db.snapshot_exists("2026-06-22", "00980A") is True
+    assert db.snapshot_exists(date(2026, 6, 23), "00980A") is False
