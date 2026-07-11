@@ -1,8 +1,10 @@
 import sqlite3
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from pipeline import run_daily_scrape
+import pytest
+
+from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
 from trading_calendar import is_tw_trading_day, latest_tw_trading_day_on_or_before
 
 
@@ -99,6 +101,28 @@ def test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day(
     assert summary["is_trading_day"] is False
     assert summary["skipped_non_trading_day"] == 2
     assert summary["skip_reason"] == "tw_stock_market_closed"
+
+
+@pytest.mark.asyncio
+async def test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day():
+    page = object()
+    scraper = AsyncMock()
+
+    with patch("pipeline.date", NonTradingRunDate), \
+        patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
+        patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+        patch("pipeline.init_db"), \
+        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
+        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
+
+    scraper.assert_not_called()
+    replace_daily_snapshot.assert_not_called()
+    insert_scrape_run.assert_not_called()
+    assert summary["expected_data_date"] == "2026-06-26"
+    assert summary["is_trading_day"] is False
+    assert summary["skipped_non_trading_day"] == 2
 
 
 def test_daily_scrape_runs_when_run_date_is_tw_trading_day():
