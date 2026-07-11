@@ -309,6 +309,23 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
         return {"inserted": True, "source_type": source_type}
 
 
+def snapshot_exists(date_value, etf_code):
+    """Return whether a holdings snapshot exists for one ETF/data date."""
+    date_value = _serialize(date_value)
+    with _connect() as conn:
+        holding = conn.execute(
+            "SELECT 1 FROM etf_daily_holdings WHERE date = ? AND etf_code = ? LIMIT 1",
+            (date_value, etf_code),
+        ).fetchone()
+        if holding:
+            return True
+        non_stock = conn.execute(
+            "SELECT 1 FROM etf_daily_non_stock_assets WHERE date = ? AND etf_code = ? LIMIT 1",
+            (date_value, etf_code),
+        ).fetchone()
+    return non_stock is not None
+
+
 def _snapshot_key(rows):
     keys = {(row["date"], row["etf_code"]) for row in rows}
     if len(keys) != 1:
