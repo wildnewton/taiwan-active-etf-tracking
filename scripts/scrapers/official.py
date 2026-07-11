@@ -529,7 +529,16 @@ def _parse_uni_president_holdings_date(body_text: str) -> str | None:
         r"(\d{4}/\d{2}/\d{2})",
         body_text,
     )
-    return labeled_date_match.group(1) if labeled_date_match else None
+    if labeled_date_match:
+        return labeled_date_match.group(1)
+
+    if re.search(r"(?:頁面|網頁|系統)?(?:產製|產生|生成|更新|查詢)(?:時間|日期)", body_text):
+        return None
+
+    unique_dates = set(re.findall(r"\d{4}/\d{2}/\d{2}", body_text))
+    if len(unique_dates) == 1:
+        return next(iter(unique_dates))
+    return None
 
 
 def _parse_float(value: str) -> float | None:
