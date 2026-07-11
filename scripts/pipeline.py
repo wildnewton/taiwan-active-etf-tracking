@@ -2,7 +2,7 @@ import asyncio
 from datetime import date, datetime
 from typing import Awaitable, Callable, Optional
 
-from db import init_db, insert_scrape_run, replace_daily_snapshot
+from db import init_db, insert_scrape_run, replace_daily_snapshot, snapshot_exists
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings, scrape_holdings_with_browser_async
@@ -167,6 +167,7 @@ def _new_summary(run_date: date, total_etfs: int) -> dict:
         "moneydj_success": 0,
         "official_success": 0,
         "failed": 0,
+        "skipped_stale_existing": 0,
         "total_stock_rows": 0,
         "total_non_stock_rows": 0,
         "failures": [],
@@ -174,6 +175,7 @@ def _new_summary(run_date: date, total_etfs: int) -> dict:
         "row_count_warnings": [],
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
+        "stale_existing_etfs": [],
         "unknown_date_etfs": [],
         "data_date_min": None,
         "data_date_max": None,
@@ -201,6 +203,22 @@ def _record_result(
 ) -> None:
     should_record_scrape_run = True
     if result["ok"] is True:
+        if _should_skip_stale_existing_snapshot(data_date, run_date, etf_code):
+            _record_freshness(summary, etf_code, run_date, data_date, result)
+            _record_stale_existing(summary, etf_code, data_date, result)
+            insert_scrape_run(
+                _build_scrape_run(
+                    etf_code,
+                    run_date,
+                    data_date,
+                    started_at,
+                    finished_at,
+                    result,
+                    status="skipped_stale_existing",
+                )
+            )
+            return
+
         stock_rows = [_to_holding_row(row, run_date) for row in result["stock_rows"]]
         non_stock_rows = [
             _to_non_stock_asset_row(row, run_date) for row in result["non_stock_rows"]
@@ -224,6 +242,22 @@ def _record_result(
 
     if should_record_scrape_run:
         insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
+
+
+def _should_skip_stale_existing_snapshot(data_date: Optional[date], run_date: date, etf_code: str) -> bool:
+    if data_date is None or data_date >= run_date:
+        return False
+    return snapshot_exists(data_date, etf_code)
+
+
+def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result: dict) -> None:
+    summary["skipped_stale_existing"] += 1
+    summary["stale_existing_etfs"].append({
+        "etf_code": etf_code,
+        "data_date": data_date.isoformat(),
+        "source_type": result.get("source_type") or "unknown",
+        "reason": "stale_snapshot_already_exists",
+    })
 
 
 def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> None:
@@ -326,25 +360,26 @@ def _build_scrape_run(
     started_at: datetime,
     finished_at: datetime,
     result: dict,
+    status: str | None = None,
 ) -> ScrapeRun:
     source_type = result.get("source_type", "")
     return ScrapeRun(
         date=scrape_date,
         data_date=data_date,
         etf_code=etf_code,
-        status="success" if result["ok"] else "failed",
+        status=status or ("success" if result["ok"] else "failed"),
         primary_source=source_type or "none",
-        primary_success=source_type == "moneydj_primary",
-        moneydj_browser_used=source_type == "moneydj_browser",
-        official_fallback_used=source_type == "official_fallback",
-        official_success=result["ok"] is True and source_type == "official_fallback",
+        primary_success=result["ok"] is True and source_type == "moneydj_primary" and status is None,
+        moneydj_browser_used=result["ok"] is True and source_type == "moneydj_browser" and status is None,
+        official_fallback_used=result["ok"] is True and source_type == "official_fallback" and status is None,
+        official_success=result["ok"] is True and source_type == "official_fallback" and status is None,
         rows_extracted=len(result.get("all_rows", [])),
         stock_rows_extracted=len(result.get("stock_rows", [])),
         non_stock_rows_extracted=len(result.get("non_stock_rows", [])),
         total_weight_all_rows=result.get("total_weight_all_rows", 0.0),
         total_weight_stock_rows=result.get("total_weight_stock_rows", 0.0),
         source_url=result.get("source_url") or None,
-        error=None if result["ok"] else result.get("reason"),
+        error=None if result["ok"] and status is None else result.get("reason"),
         started_at=started_at,
         finished_at=finished_at,
     )
