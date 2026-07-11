@@ -363,6 +363,12 @@ def _build_scrape_run(
     status: str | None = None,
 ) -> ScrapeRun:
     source_type = result.get("source_type", "")
+    error = None
+    if status == "skipped_stale_existing":
+        error = "stale_snapshot_already_exists"
+    elif result["ok"] is not True:
+        error = result.get("reason")
+
     return ScrapeRun(
         date=scrape_date,
         data_date=data_date,
@@ -379,7 +385,7 @@ def _build_scrape_run(
         total_weight_all_rows=result.get("total_weight_all_rows", 0.0),
         total_weight_stock_rows=result.get("total_weight_stock_rows", 0.0),
         source_url=result.get("source_url") or None,
-        error=None if result["ok"] and status is None else result.get("reason"),
+        error=error,
         started_at=started_at,
         finished_at=finished_at,
     )
