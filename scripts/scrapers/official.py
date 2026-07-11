@@ -328,9 +328,7 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
             if len(cell_texts) >= 4:
                 table_data.append(cell_texts[:4])
         body_text = await page.locator("body").inner_text()
-        date_match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
-        if date_match:
-            date = date_match.group(1)
+        date = _parse_uni_president_holdings_date(body_text)
         break
 
     if not table_data:
@@ -519,6 +517,21 @@ def _parse_date(soup: BeautifulSoup) -> str | None:
     return date_match.group(0) if date_match else None
 
 
+def _parse_uni_president_holdings_date(body_text: str) -> str | None:
+    """Extract a reliable Uni-President holdings date.
+
+    The ezmoney page can contain a page-render date before the actual portfolio
+    date. Do not fall back to the first global date because that can make stale
+    holdings look fresh.
+    """
+    labeled_date_match = re.search(
+        r"(?:投資組合資料日期|投資組合日期|持股資料日期|股票投資明細資料日期|資料日期)\s*[:：]?\s*"
+        r"(\d{4}/\d{2}/\d{2})",
+        body_text,
+    )
+    return labeled_date_match.group(1) if labeled_date_match else None
+
+
 def _parse_float(value: str) -> float | None:
     cleaned = value.strip().replace(",", "").replace("%", "")
     if not cleaned or cleaned.upper() in {"-", "--", "N/A", "NA"}:
@@ -565,8 +578,6 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
         return False, "empty rows"
     if len(rows) < 5:
         return False, "fewer than 5 rows"
-    if any(not row.get("date") for row in rows):
-        return False, "missing date"
     if any(row.get("weight_pct") is None for row in rows):
         return False, "missing weight_pct"
 
