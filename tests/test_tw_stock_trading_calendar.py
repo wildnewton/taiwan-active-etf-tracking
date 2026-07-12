@@ -77,6 +77,31 @@ def test_tw_stock_calendar_uses_params_holidays_and_weekends(tmp_path):
     assert is_tw_trading_day(date(2026, 6, 29), params_path=params_path) is True
 
 
+def test_tw_stock_calendar_uses_params_non_trading_day_overrides(tmp_path):
+    params_path = tmp_path / "params.py"
+    params_path.write_text(
+        """
+HOLIDAYS = {
+    2026: {
+        "TW": {"0619"},
+        "CN": set(),
+    }
+}
+NON_TRADING_DAYS = {
+    2026: {
+        "TW": {"0710"},
+        "CN": set(),
+    }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    assert latest_tw_trading_day_on_or_before(date(2026, 7, 10), params_path=params_path) == date(2026, 7, 9)
+    assert is_tw_trading_day(date(2026, 7, 10), params_path=params_path) is False
+    assert is_tw_trading_day(date(2026, 7, 13), params_path=params_path) is True
+
+
 def test_tw_stock_calendar_missing_params_returns_unknown(tmp_path):
     missing = tmp_path / "missing_params.py"
 
