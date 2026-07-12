@@ -1,4 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 import scraper
 from scraper import scrape_holdings
@@ -35,6 +37,20 @@ def make_result(rows, stock_rows=None, non_stock_rows=None):
         "source_type": "moneydj_primary",
         "total_weight_all_rows": sum(row["weight_pct"] or 0.0 for row in rows),
         "total_weight_stock_rows": sum(row["weight_pct"] or 0.0 for row in stock_rows),
+    }
+
+
+def make_failed_result():
+    return {
+        "ok": False,
+        "reason": "test failure",
+        "all_rows": [],
+        "stock_rows": [],
+        "non_stock_rows": [],
+        "source_url": "",
+        "source_type": "",
+        "total_weight_all_rows": 0.0,
+        "total_weight_stock_rows": 0.0,
     }
 
 
@@ -89,3 +105,72 @@ def test_min_weight_gate_applied_in_sync_scrape_path():
     assert result["total_weight_all_rows"] == 0.01
     assert result["total_weight_stock_rows"] == 0.01
     official_static.assert_not_called()
+
+
+def test_row_count_validation_uses_post_filter_stock_count():
+    tiny_rows = [
+        make_row(f"微量{i}", "stock", 0.009, f"10{i:02d}")
+        for i in range(6)
+    ]
+    kept_moneydj_rows = [
+        make_row(f"MoneyDJ保留{i}", "stock", 0.01, f"20{i:02d}")
+        for i in range(4)
+    ]
+    official_rows = [
+        make_row(f"官方保留{i}", "stock", 0.02, f"30{i:02d}")
+        for i in range(7)
+    ]
+    moneydj_result = make_result(tiny_rows + kept_moneydj_rows)
+    official_result = make_result(official_rows)
+
+    with patch("scraper.scrape_moneydj", return_value=moneydj_result), \
+        patch("scraper._is_stale_result", return_value=False), \
+        patch("scraper.get_historical_mean_stock_row_count", return_value=10), \
+        patch("scraper.scrape_official_static", return_value=official_result) as official_static, \
+        patch("time.sleep"):
+        result = scrape_holdings("00980A")
+
+    official_static.assert_called_once_with("00980A")
+    assert result["source_type"] == "official_fallback"
+    assert stock_codes(result["stock_rows"]) == [f"30{i:02d}" for i in range(7)]
+    assert "row_count_warning" not in result
+
+
+def test_min_weight_gate_applied_to_sync_official_fallback():
+    zero_weight = make_row("官方零權重", "stock", 0.0, "4000")
+    kept_stock = make_row("官方保留", "stock", 0.01, "4010")
+    official_result = make_result([zero_weight, kept_stock])
+
+    with patch("scraper.scrape_moneydj", return_value=make_failed_result()), \
+        patch("scraper.scrape_official_static", return_value=official_result), \
+        patch("time.sleep"):
+        result = scrape_holdings("00980A")
+
+    assert result["source_type"] == "official_fallback"
+    assert stock_codes(result["all_rows"]) == ["4010"]
+    assert stock_codes(result["stock_rows"]) == ["4010"]
+    assert result["total_weight_all_rows"] == 0.01
+    assert result["total_weight_stock_rows"] == 0.01
+
+
+@pytest.mark.asyncio
+async def test_min_weight_gate_applied_to_async_browser_path():
+    zero_weight = make_row("瀏覽器零權重", "stock", 0.0, "5000")
+    kept_stock = make_row("瀏覽器保留", "stock", 0.01, "5010")
+    browser_result = make_result([zero_weight, kept_stock])
+    browser_result["source_type"] = "moneydj_browser"
+    official_fallback = AsyncMock()
+
+    with patch("scraper._retry_moneydj", return_value=make_failed_result()), \
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)), \
+        patch("scraper._is_stale_result", return_value=False), \
+        patch("scraper.get_historical_mean_stock_row_count", return_value=None), \
+        patch("scraper._official_fallback_with_browser", new=official_fallback):
+        result = await scraper.scrape_holdings_with_browser_async("00980A", object())
+
+    assert result["source_type"] == "moneydj_browser"
+    assert stock_codes(result["all_rows"]) == ["5010"]
+    assert stock_codes(result["stock_rows"]) == ["5010"]
+    assert result["total_weight_all_rows"] == 0.01
+    assert result["total_weight_stock_rows"] == 0.01
+    official_fallback.assert_not_awaited()
