@@ -83,6 +83,16 @@ def main():
     scrape_summary = run_daily_scrape_with_browser(args.db)
     print(f"  Scrape summary: {scrape_summary}")
 
+    if scrape_summary.get("skip_reason") == "tw_stock_market_closed":
+        print(
+            "TW stock market closed on "
+            f"{scrape_summary.get('date')}; "
+            f"latest trading data date is {scrape_summary.get('expected_data_date') or 'unknown'}."
+        )
+        print("Skipping downstream steps because no new holdings data is expected.")
+        print("Nightly Taiwan active ETF pipeline complete")
+        return
+
     total_etfs = scrape_summary.get("total_etfs")
     moneydj_success = scrape_summary.get("moneydj_success", 0)
     official_success = scrape_summary.get("official_success", 0)
