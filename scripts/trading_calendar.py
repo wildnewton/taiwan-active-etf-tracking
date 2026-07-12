@@ -2,8 +2,8 @@
 
 The stock-market-data-update job updates its TW database later than the active
 ETF job, so the database contents cannot gate the ETF scrape.  Instead we reuse
-the same holiday list that the stock-market-data-update project uses to decide
-whether Taiwan is trading today.
+the same holiday and non-trading-day lists that the stock-market-data-update
+project uses to decide whether Taiwan is trading today.
 """
 
 import os
@@ -30,13 +30,13 @@ def latest_tw_trading_day_on_or_before(run_date, params_path: str | Path | None 
     treat None as "calendar unknown" rather than as a non-trading day.
     """
     run_date = _coerce_date(run_date)
-    holidays_by_year = _load_holidays(params_path)
-    if holidays_by_year is None:
+    calendar = _load_calendar(params_path)
+    if calendar is None:
         return None
 
     day = run_date
     for _ in range(10):
-        if _is_trading_day_with_holidays(day, holidays_by_year):
+        if _is_trading_day_with_calendar(day, calendar):
             return day
         day -= timedelta(days=1)
     return None
@@ -51,7 +51,7 @@ def is_tw_trading_day(run_date, params_path: str | Path | None = None) -> Option
     return latest == run_date
 
 
-def _load_holidays(params_path: str | Path | None = None) -> Optional[dict]:
+def _load_calendar(params_path: str | Path | None = None) -> Optional[dict]:
     path = Path(params_path).expanduser() if params_path is not None else stock_params_path()
     if not path.exists():
         return None
@@ -64,13 +64,31 @@ def _load_holidays(params_path: str | Path | None = None) -> Optional[dict]:
         return None
 
     holidays = namespace.get("HOLIDAYS")
-    return holidays if isinstance(holidays, dict) else None
+    if not isinstance(holidays, dict):
+        return None
+
+    non_trading_days = namespace.get("NON_TRADING_DAYS", {})
+    if not isinstance(non_trading_days, dict):
+        non_trading_days = {}
+
+    return {"HOLIDAYS": holidays, "NON_TRADING_DAYS": non_trading_days}
 
 
-def _is_trading_day_with_holidays(day: date, holidays_by_year: dict) -> bool:
-    year_holidays = holidays_by_year.get(day.year, {})
-    tw_holidays = year_holidays.get("TW", set()) if isinstance(year_holidays, dict) else set()
-    return day.weekday() < 5 and day.strftime("%m%d") not in set(tw_holidays)
+def _is_trading_day_with_calendar(day: date, calendar: dict) -> bool:
+    holidays_for_year = calendar["HOLIDAYS"].get(day.year, {})
+    overrides_for_year = calendar["NON_TRADING_DAYS"].get(day.year, {})
+    tw_holidays = holidays_for_year.get("TW", set()) if isinstance(holidays_for_year, dict) else set()
+    tw_overrides = overrides_for_year.get("TW", set()) if isinstance(overrides_for_year, dict) else set()
+    tw_non_trading_days = _coerce_mmdd_set(tw_holidays) | _coerce_mmdd_set(tw_overrides)
+    return day.weekday() < 5 and day.strftime("%m%d") not in tw_non_trading_days
+
+
+def _coerce_mmdd_set(value) -> set[str]:
+    if value is None:
+        return set()
+    if isinstance(value, str):
+        return {value}
+    return set(value)
 
 
 def _coerce_date(value) -> date:
