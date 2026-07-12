@@ -38,6 +38,7 @@ _MONEYDJ_RETRY_DELAYS = []  # Fibonacci * 2: 2, 2, 4, 6, 10, 16, 26, 42, 68
 _ROW_COUNT_HISTORY_DAYS = 5
 _LOW_ROW_COUNT_THRESHOLD = 0.6
 _MONEYDJ_SOURCE_TYPES = {"moneydj_primary", "moneydj_browser"}
+_MIN_WEIGHT_THRESHOLD = 0.01
 
 
 def _build_retry_delays(max_attempts: int) -> list[float]:
@@ -81,14 +82,14 @@ def scrape_holdings(etf_code: str) -> dict:
         if _is_stale_result(moneydj_result, date.today()):
             official_candidate = _official_fallback_static(etf_code)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
-                return official_candidate
-        return _maybe_replace_low_row_count_sync(etf_code, moneydj_result, official_candidate)
+                return _apply_min_weight_gate(official_candidate)
+        return _apply_min_weight_gate(_maybe_replace_low_row_count_sync(etf_code, moneydj_result, official_candidate))
 
     official_result = _official_fallback_static(etf_code)
     if official_result["ok"] is True:
-        return official_result
+        return _apply_min_weight_gate(official_result)
 
-    return FAILED_RESULT.copy()
+    return _apply_min_weight_gate(FAILED_RESULT.copy())
 
 
 def scrape_holdings_with_browser(etf_code: str, page) -> dict:
@@ -115,8 +116,9 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
         if _is_stale_result(moneydj_result, date.today()):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
-                return official_candidate
-        return await _maybe_replace_low_row_count_async(etf_code, moneydj_result, page, official_candidate)
+                return _apply_min_weight_gate(official_candidate)
+        result = await _maybe_replace_low_row_count_async(etf_code, moneydj_result, page, official_candidate)
+        return _apply_min_weight_gate(result)
 
     # 2. MoneyDJ browser
     browser_result = await scrape_moneydj_browser(etf_code, page)
@@ -126,15 +128,16 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
         if _is_stale_result(browser_result, date.today()):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
-                return official_candidate
-        return await _maybe_replace_low_row_count_async(etf_code, browser_result, page, official_candidate)
+                return _apply_min_weight_gate(official_candidate)
+        result = await _maybe_replace_low_row_count_async(etf_code, browser_result, page, official_candidate)
+        return _apply_min_weight_gate(result)
 
     # 3-4. Official fallbacks after MoneyDJ failure.
     official_result = await _official_fallback_with_browser(etf_code, page)
     if official_result["ok"] is True:
-        return official_result
+        return _apply_min_weight_gate(official_result)
 
-    return FAILED_RESULT.copy()
+    return _apply_min_weight_gate(FAILED_RESULT.copy())
 
 
 async def _official_fallback_with_browser(etf_code: str, page) -> dict:
@@ -370,6 +373,27 @@ def _with_source_type(result: dict, source_type: str) -> dict:
         "all_rows": rows,
         "stock_rows": stock_rows,
         "non_stock_rows": non_stock_rows,
+    }
+
+
+def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOLD) -> dict:
+    stock_rows = [
+        row for row in result.get("stock_rows", []) or []
+        if (row.get("weight_pct") or 0.0) >= threshold
+    ]
+    all_rows = [
+        row for row in result.get("all_rows", []) or []
+        if row.get("asset_type") != "stock" or (row.get("weight_pct") or 0.0) >= threshold
+    ]
+    non_stock_rows = list(result.get("non_stock_rows", []) or [])
+
+    return {
+        **result,
+        "all_rows": all_rows,
+        "stock_rows": stock_rows,
+        "non_stock_rows": non_stock_rows,
+        "total_weight_all_rows": sum(row.get("weight_pct") or 0.0 for row in all_rows),
+        "total_weight_stock_rows": sum(row.get("weight_pct") or 0.0 for row in stock_rows),
     }
 
 
