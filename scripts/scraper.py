@@ -73,7 +73,7 @@ def _retry_moneydj(etf_code: str) -> dict:
     return last_result
 
 
-def scrape_holdings(etf_code: str, target_date: date | None = None) -> dict:
+def scrape_holdings(etf_code: str, target_date: date) -> dict:
     """Scrape holdings without browser using the caller-provided freshness target."""
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
@@ -81,7 +81,7 @@ def scrape_holdings(etf_code: str, target_date: date | None = None) -> dict:
             _with_source_type(moneydj_result, "moneydj_primary")
         )
         official_candidate = None
-        if target_date is not None and _is_stale_result(moneydj_result, target_date):
+        if _is_stale_result(moneydj_result, target_date):
             official_candidate = _official_fallback_static(etf_code)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
@@ -97,7 +97,7 @@ def scrape_holdings(etf_code: str, target_date: date | None = None) -> dict:
 def scrape_holdings_with_browser(
     etf_code: str,
     page,
-    target_date: date | None = None,
+    target_date: date,
 ) -> dict:
     """Sync wrapper for the full browser decision tree.
 
@@ -116,7 +116,7 @@ def scrape_holdings_with_browser(
 async def scrape_holdings_with_browser_async(
     etf_code: str,
     page,
-    target_date: date | None = None,
+    target_date: date,
 ) -> dict:
     """Async browser-enabled full decision tree.
 
@@ -131,7 +131,7 @@ async def scrape_holdings_with_browser_async(
             _with_source_type(moneydj_result, "moneydj_primary")
         )
         official_candidate = None
-        if target_date is not None and _is_stale_result(moneydj_result, target_date):
+        if _is_stale_result(moneydj_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
@@ -149,7 +149,7 @@ async def scrape_holdings_with_browser_async(
             _with_source_type(browser_result, "moneydj_browser")
         )
         official_candidate = None
-        if target_date is not None and _is_stale_result(browser_result, target_date):
+        if _is_stale_result(browser_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate

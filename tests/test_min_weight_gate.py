@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -98,7 +99,7 @@ def test_min_weight_gate_applied_in_sync_scrape_path():
         patch("scraper.get_historical_mean_stock_row_count", return_value=None), \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=date(2026, 7, 10))
 
     assert stock_codes(result["all_rows"]) == ["3010"]
     assert stock_codes(result["stock_rows"]) == ["3010"]
@@ -128,7 +129,7 @@ def test_row_count_validation_uses_post_filter_stock_count():
         patch("scraper.get_historical_mean_stock_row_count", return_value=10), \
         patch("scraper.scrape_official_static", return_value=official_result) as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=date(2026, 7, 10))
 
     official_static.assert_called_once_with("00980A")
     assert result["source_type"] == "official_fallback"
@@ -144,7 +145,7 @@ def test_min_weight_gate_applied_to_sync_official_fallback():
     with patch("scraper.scrape_moneydj", return_value=make_failed_result()), \
         patch("scraper.scrape_official_static", return_value=official_result), \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=date(2026, 7, 10))
 
     assert result["source_type"] == "official_fallback"
     assert stock_codes(result["all_rows"]) == ["4010"]
@@ -166,7 +167,11 @@ async def test_min_weight_gate_applied_to_async_browser_path():
         patch("scraper._is_stale_result", return_value=False), \
         patch("scraper.get_historical_mean_stock_row_count", return_value=None), \
         patch("scraper._official_fallback_with_browser", new=official_fallback):
-        result = await scraper.scrape_holdings_with_browser_async("00980A", object())
+        result = await scraper.scrape_holdings_with_browser_async(
+            "00980A",
+            object(),
+            target_date=date(2026, 7, 10),
+        )
 
     assert result["source_type"] == "moneydj_browser"
     assert stock_codes(result["all_rows"]) == ["5010"]

@@ -102,12 +102,13 @@ async def run_selected_scrape_with_browser_async(
 def _browser_scrape_fn(page) -> AsyncScrapeFn:
     async def scrape_one(etf_code: str, target_date: date) -> dict:
         return await scrape_holdings_with_browser_async(
-  etf_code,
-  page,
-  target_date=target_date,
+            etf_code,
+            page,
+            target_date=target_date,
         )
 
     return scrape_one
+
 
 def _active_etfs_for_run() -> list[dict]:
     seed_etf_universe_from_file()

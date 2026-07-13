@@ -54,7 +54,7 @@ def test_scrape_holdings_moneydj_primary():
     with patch("scraper.scrape_moneydj", return_value=moneydj_result) as moneydj, \
         patch("scraper.scrape_official_static") as official, \
         patch("time.sleep") as sleep:
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -102,7 +102,7 @@ def test_scrape_holdings_retry_then_succeeds():
     with patch("scraper.scrape_moneydj", side_effect=[fail, fail, success]) as moneydj, \
         patch("scraper.scrape_official_static") as official, \
         patch("time.sleep") as sleep:
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -136,7 +136,7 @@ def test_scrape_holdings_retry_all_fail_goes_to_failed():
     with patch("scraper.scrape_moneydj", side_effect=[fail] * 10), \
         patch("scraper.scrape_official_static", return_value=official_result), \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result == {
         "ok": False,
@@ -166,7 +166,7 @@ def test_scrape_with_browser_retry_then_moneydj_primary():
         patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep") as sleep:
-        result = scrape_holdings_with_browser("00980A", page)
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -215,7 +215,7 @@ def test_scrape_with_browser_retry_all_fail_then_browser():
         patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep") as sleep:
-        result = scrape_holdings_with_browser("00980A", page)
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_browser"
@@ -235,7 +235,7 @@ def test_scrape_with_browser_first_try_immediate():
         patch("scraper.scrape_moneydj_browser", new=AsyncMock()) as browser, \
         patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
         patch("scraper.scrape_official_static") as official_static:
-        result = scrape_holdings_with_browser("00980A", page)
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
