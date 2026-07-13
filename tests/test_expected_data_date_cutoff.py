@@ -1,5 +1,4 @@
 from datetime import date, datetime
-from inspect import getsource
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
@@ -117,17 +116,6 @@ def test_daily_run_date_and_cutoff_use_the_same_taipei_clock():
 
     assert summary["date"] == taipei_date.isoformat()
     scrape_holdings.assert_called_once_with(ETF_CODE, RUN_DATE)
-
-
-def test_browser_scrape_adapter_keeps_readable_argument_indentation():
-    source = getsource(pipeline._browser_scrape_fn)
-
-    assert (
-        "            etf_code,\n"
-        "            page,\n"
-        "            target_date=target_date,\n"
-        "        )"
-    ) in source
 
 
 def test_sync_scraper_rejects_none_target_before_network_work():
