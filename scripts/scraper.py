@@ -38,6 +38,7 @@ _MONEYDJ_RETRY_DELAYS = []  # Fibonacci * 2: 2, 2, 4, 6, 10, 16, 26, 42, 68
 _ROW_COUNT_HISTORY_DAYS = 5
 _LOW_ROW_COUNT_THRESHOLD = 0.6
 _MONEYDJ_SOURCE_TYPES = {"moneydj_primary", "moneydj_browser"}
+_MIN_WEIGHT_THRESHOLD = 0.01
 
 
 def _build_retry_delays(max_attempts: int) -> list[float]:
@@ -76,7 +77,9 @@ def scrape_holdings(etf_code: str) -> dict:
     """Scrape holdings without browser. Tries MoneyDJ static then official static."""
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
-        moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _apply_min_weight_gate(
+            _with_source_type(moneydj_result, "moneydj_primary")
+        )
         official_candidate = None
         if _is_stale_result(moneydj_result, date.today()):
             official_candidate = _official_fallback_static(etf_code)
@@ -110,24 +113,38 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
     # 1. MoneyDJ static (fastest) — retries up to 3x for transient errors
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
-        moneydj_result = _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _apply_min_weight_gate(
+            _with_source_type(moneydj_result, "moneydj_primary")
+        )
         official_candidate = None
         if _is_stale_result(moneydj_result, date.today()):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
                 return official_candidate
-        return await _maybe_replace_low_row_count_async(etf_code, moneydj_result, page, official_candidate)
+        return await _maybe_replace_low_row_count_async(
+            etf_code,
+            moneydj_result,
+            page,
+            official_candidate,
+        )
 
     # 2. MoneyDJ browser
     browser_result = await scrape_moneydj_browser(etf_code, page)
     if browser_result["ok"] is True:
-        browser_result = _with_source_type(browser_result, "moneydj_browser")
+        browser_result = _apply_min_weight_gate(
+            _with_source_type(browser_result, "moneydj_browser")
+        )
         official_candidate = None
         if _is_stale_result(browser_result, date.today()):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
                 return official_candidate
-        return await _maybe_replace_low_row_count_async(etf_code, browser_result, page, official_candidate)
+        return await _maybe_replace_low_row_count_async(
+            etf_code,
+            browser_result,
+            page,
+            official_candidate,
+        )
 
     # 3-4. Official fallbacks after MoneyDJ failure.
     official_result = await _official_fallback_with_browser(etf_code, page)
@@ -142,7 +159,9 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
     if config["official_method"] in ("api", "stealth_api", "playwright"):
         official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
-            return _with_source_type(official_browser, "official_fallback")
+            return _apply_min_weight_gate(
+                _with_source_type(official_browser, "official_fallback")
+            )
 
     return _official_fallback_static(etf_code)
 
@@ -150,7 +169,9 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
 def _official_fallback_static(etf_code: str) -> dict:
     official_result = scrape_official_static(etf_code)
     if official_result["ok"] is True:
-        return _with_source_type(official_result, "official_fallback")
+        return _apply_min_weight_gate(
+            _with_source_type(official_result, "official_fallback")
+        )
     return official_result
 
 
@@ -370,6 +391,34 @@ def _with_source_type(result: dict, source_type: str) -> dict:
         "all_rows": rows,
         "stock_rows": stock_rows,
         "non_stock_rows": non_stock_rows,
+    }
+
+
+def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOLD) -> dict:
+    """Normalize holdings and recompute retained post-filter weight totals.
+
+    `total_weight_all_rows` and `total_weight_stock_rows` describe only rows kept
+    after the stock minimum-weight gate; they are not raw source-extracted totals.
+    Non-stock rows remain untouched because derivatives may have zero or negative
+    weights.
+    """
+    stock_rows = [
+        row for row in result.get("stock_rows", []) or []
+        if (row.get("weight_pct") or 0.0) >= threshold
+    ]
+    all_rows = [
+        row for row in result.get("all_rows", []) or []
+        if row.get("asset_type") != "stock" or (row.get("weight_pct") or 0.0) >= threshold
+    ]
+    non_stock_rows = list(result.get("non_stock_rows", []) or [])
+
+    return {
+        **result,
+        "all_rows": all_rows,
+        "stock_rows": stock_rows,
+        "non_stock_rows": non_stock_rows,
+        "total_weight_all_rows": sum(row.get("weight_pct") or 0.0 for row in all_rows),
+        "total_weight_stock_rows": sum(row.get("weight_pct") or 0.0 for row in stock_rows),
     }
 
 
