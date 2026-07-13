@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from inspect import getsource
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
@@ -94,6 +95,39 @@ def test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous
     scrape_holdings.assert_called_once_with(ETF_CODE, PREVIOUS_TRADING_DATE)
     assert summary["is_trading_day"] is True
     assert summary["skip_reason"] is None
+
+
+def test_daily_run_date_and_cutoff_use_the_same_taipei_clock():
+    taipei_run_at = datetime(2026, 7, 14, 0, 30, tzinfo=TAIPEI)
+    taipei_date = taipei_run_at.date()
+
+    with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=taipei_run_at), \
+        patch("pipeline.is_tw_trading_day", return_value=True), \
+        patch(
+            "pipeline.latest_tw_trading_day_on_or_before",
+            return_value=RUN_DATE,
+        ), \
+        patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
+        patch("pipeline.scrape_holdings", return_value=make_success(RUN_DATE)) as scrape_holdings, \
+        patch("pipeline.init_db"), \
+        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+        patch("pipeline.insert_scrape_run"):
+        summary = pipeline.run_daily_scrape(":memory:")
+
+    assert summary["date"] == taipei_date.isoformat()
+    scrape_holdings.assert_called_once_with(ETF_CODE, RUN_DATE)
+
+
+def test_browser_scrape_adapter_keeps_readable_argument_indentation():
+    source = getsource(pipeline._browser_scrape_fn)
+
+    assert (
+        "            etf_code,\n"
+        "            page,\n"
+        "            target_date=target_date,\n"
+        "        )"
+    ) in source
 
 
 def test_sync_scraper_rejects_none_target_before_network_work():
