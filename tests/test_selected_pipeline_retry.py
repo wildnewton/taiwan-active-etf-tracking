@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+import pipeline
 
 
 class FixedDate(date):
@@ -50,6 +52,11 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
     scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code))
 
     with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            FixedDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db") as init_db, \
         patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
@@ -76,6 +83,11 @@ async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date(
     scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code, row_date="2026/07/06"))
 
     with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            FixedDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \

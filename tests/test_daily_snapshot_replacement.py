@@ -2,6 +2,7 @@ from datetime import date, datetime
 from unittest.mock import patch
 
 import db
+import pipeline
 from models import HoldingRow, NonStockAssetRow
 from pipeline import run_daily_scrape
 
@@ -190,6 +191,11 @@ def test_snapshot_replacement_is_scoped_to_same_date_and_etf_only():
 
 def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
     with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            FixedDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00981A"}]), \
         patch("pipeline.scrape_holdings", return_value=scrape_result()), \
         patch("pipeline.init_db"), \

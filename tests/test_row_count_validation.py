@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
+import pipeline
 from pipeline import run_daily_scrape
 from scraper import scrape_holdings, scrape_holdings_with_browser
 
@@ -174,6 +175,11 @@ def test_pipeline_summary_surfaces_row_count_manual_inspection_warnings():
     }
 
     with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            FixedDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00984A"}]), \
         patch("pipeline.scrape_holdings", return_value=result), \
         patch("pipeline.init_db"), \

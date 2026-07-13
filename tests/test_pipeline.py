@@ -1,9 +1,11 @@
-from datetime import date
+from contextlib import contextmanager
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 import db
+import pipeline
 from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
 
 RUN_DATE = date(2026, 6, 22)
@@ -36,8 +38,18 @@ def _patch_active_etfs():
     return patch("pipeline._active_etfs_for_run", return_value=TEST_ETFS)
 
 
+@contextmanager
 def _patch_run_date(date_cls=FixedDate):
-    return patch("pipeline.date", date_cls)
+    run_at = datetime.combine(
+        date_cls.today(),
+        pipeline.DATA_AVAILABILITY_CUTOFF,
+        tzinfo=pipeline.TAIPEI_TIMEZONE,
+    )
+    with patch("pipeline.date", date_cls), patch(
+        "pipeline._current_run_at",
+        return_value=run_at,
+    ):
+        yield
 
 
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None, row_date="2026/06/22"):

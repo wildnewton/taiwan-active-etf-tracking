@@ -106,12 +106,13 @@ async def run_selected_scrape_with_browser_async(
 def _browser_scrape_fn(page) -> AsyncScrapeFn:
     async def scrape_one(etf_code: str, target_date: date) -> dict:
         return await scrape_holdings_with_browser_async(
-  etf_code,
-  page,
-  target_date=target_date,
+            etf_code,
+            page,
+            target_date=target_date,
         )
 
     return scrape_one
+
 
 def _active_etfs_for_run() -> list[dict]:
     seed_etf_universe_from_file()
@@ -133,12 +134,8 @@ def _run_scrape_sync(
 ) -> dict:
     if not already_initialized:
         init_db(db_path)
-    run_date = date.today()
-    run_at = _current_run_at().replace(
-        year=run_date.year,
-        month=run_date.month,
-        day=run_date.day,
-    )
+    run_at = _as_taipei_run_at(_current_run_at())
+    run_date = run_at.date()
     expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
@@ -171,12 +168,15 @@ async def _run_scrape_async(
     init_db(db_path)
     if etfs is None:
         etfs = _active_etfs_for_run()
-    run_date = run_date or date.today()
-    run_at = _current_run_at().replace(
-        year=run_date.year,
-        month=run_date.month,
-        day=run_date.day,
-    )
+    if run_date is None:
+        run_at = _as_taipei_run_at(_current_run_at())
+        run_date = run_at.date()
+    else:
+        run_at = datetime.combine(
+            run_date,
+            DATA_AVAILABILITY_CUTOFF,
+            tzinfo=TAIPEI_TIMEZONE,
+        )
     expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)

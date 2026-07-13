@@ -2,6 +2,7 @@ from datetime import date, datetime
 from unittest.mock import patch
 
 import db
+import pipeline
 from models import HoldingRow
 from pipeline import run_daily_scrape
 
@@ -54,6 +55,11 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
     captured_runs = []
 
     with patch("pipeline.date", RunDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            RunDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
         patch("pipeline.snapshot_exists", return_value=True) as snapshot_exists, \
@@ -82,6 +88,11 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
 
 def test_stale_result_without_existing_snapshot_writes_once():
     with patch("pipeline.date", RunDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            RunDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
         patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \
@@ -99,6 +110,11 @@ def test_stale_result_without_existing_snapshot_writes_once():
 
 def test_fresh_result_does_not_check_for_existing_stale_snapshot():
     with patch("pipeline.date", RunDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            RunDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/23")), \
         patch("pipeline.snapshot_exists") as snapshot_exists, \
