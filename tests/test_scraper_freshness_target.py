@@ -93,15 +93,15 @@ async def test_browser_scraper_uses_caller_target_for_official_fallback():
 @pytest.mark.asyncio
 async def test_daily_pipeline_passes_expected_data_date_to_browser_scraper():
     page = object()
-    scraper_mock = AsyncMock(return_value=make_result(TARGET_DATE))
 
     with patch("pipeline.date", FixedDate), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \
-        patch("pipeline.scrape_holdings_with_browser_async", scraper_mock), \
+        patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
         patch("pipeline.insert_scrape_run"):
+        scraper_mock.return_value = make_result(TARGET_DATE)
         await run_daily_scrape_with_browser_async(":memory:", page=page)
 
     scraper_mock.assert_awaited_once_with(ETF_CODE, page, target_date=TARGET_DATE)
@@ -111,12 +111,12 @@ async def test_daily_pipeline_passes_expected_data_date_to_browser_scraper():
 async def test_selected_pipeline_passes_explicit_run_date_as_target():
     page = object()
     explicit_run_date = date(2026, 7, 6)
-    scraper_mock = AsyncMock(return_value=make_result(explicit_run_date))
 
-    with patch("pipeline.scrape_holdings_with_browser_async", scraper_mock), \
+    with patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
         patch("pipeline.insert_scrape_run"):
+        scraper_mock.return_value = make_result(explicit_run_date)
         await run_selected_scrape_with_browser_async(
             ":memory:",
             [ETF_CODE],

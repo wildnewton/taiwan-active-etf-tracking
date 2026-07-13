@@ -9,8 +9,8 @@ from scraper import scrape_holdings, scrape_holdings_with_browser_async
 from trading_calendar import latest_tw_trading_day_on_or_before
 
 
-ScrapeFn = Callable[[str], dict]
-AsyncScrapeFn = Callable[[str], Awaitable[dict]]
+ScrapeFn = Callable[[str, date], dict]
+AsyncScrapeFn = Callable[[str, date], Awaitable[dict]]
 
 
 def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
@@ -39,7 +39,7 @@ async def run_daily_scrape_with_browser_async(
         return await _run_scrape_async(
             db_path,
             None,
-            lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+            _browser_scrape_fn(page),
         )
 
     from playwright.async_api import async_playwright
@@ -53,10 +53,7 @@ async def run_daily_scrape_with_browser_async(
                 return await _run_scrape_async(
                     db_path,
                     None,
-                    lambda etf_code: scrape_holdings_with_browser_async(
-                        etf_code,
-                        browser_page,
-                    ),
+                    _browser_scrape_fn(browser_page),
                 )
             finally:
                 await context.close()
@@ -76,7 +73,7 @@ async def run_selected_scrape_with_browser_async(
         return await _run_scrape_async(
             db_path,
             selected_etfs,
-            lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+            _browser_scrape_fn(page),
             run_date=run_date,
             use_trading_calendar=False,
         )
@@ -92,10 +89,7 @@ async def run_selected_scrape_with_browser_async(
                 return await _run_scrape_async(
                     db_path,
                     selected_etfs,
-                    lambda etf_code: scrape_holdings_with_browser_async(
-                        etf_code,
-                        browser_page,
-                    ),
+                    _browser_scrape_fn(browser_page),
                     run_date=run_date,
                     use_trading_calendar=False,
                 )
@@ -104,6 +98,16 @@ async def run_selected_scrape_with_browser_async(
         finally:
             await browser.close()
 
+
+def _browser_scrape_fn(page) -> AsyncScrapeFn:
+    async def scrape_one(etf_code: str, target_date: date) -> dict:
+        return await scrape_holdings_with_browser_async(
+  etf_code,
+  page,
+  target_date=target_date,
+        )
+
+    return scrape_one
 
 def _active_etfs_for_run() -> list[dict]:
     seed_etf_universe_from_file()
@@ -134,10 +138,11 @@ def _run_scrape_sync(
         _finalize_data_date_range(summary)
         return summary
 
+    freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
-        result = scrape_fn(etf_code)
+        result = scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
         etf_data_date = _extract_data_date(result) if result["ok"] is True else None
         _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)
@@ -165,10 +170,11 @@ async def _run_scrape_async(
         _finalize_data_date_range(summary)
         return summary
 
+    freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
-        result = await scrape_fn(etf_code)
+        result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
         etf_data_date = _extract_data_date(result) if result["ok"] is True else None
         _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)

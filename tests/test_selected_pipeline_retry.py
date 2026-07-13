@@ -47,7 +47,7 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
 
     page = object()
     requested_codes = ["00401A", "00402A"]
-    scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code))
+    scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code))
 
     with patch("pipeline.date", FixedDate), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
@@ -73,7 +73,7 @@ async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date(
 
     page = object()
     requested_codes = ["00401A"]
-    scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, row_date="2026/07/06"))
+    scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code, row_date="2026/07/06"))
 
     with patch("pipeline.date", FixedDate), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \

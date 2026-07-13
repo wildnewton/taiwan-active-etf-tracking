@@ -73,17 +73,17 @@ def _retry_moneydj(etf_code: str) -> dict:
     return last_result
 
 
-def scrape_holdings(etf_code: str) -> dict:
-    """Scrape holdings without browser. Tries MoneyDJ static then official static."""
+def scrape_holdings(etf_code: str, target_date: date | None = None) -> dict:
+    """Scrape holdings without browser using the caller-provided freshness target."""
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _apply_min_weight_gate(
             _with_source_type(moneydj_result, "moneydj_primary")
         )
         official_candidate = None
-        if _is_stale_result(moneydj_result, date.today()):
+        if target_date is not None and _is_stale_result(moneydj_result, target_date):
             official_candidate = _official_fallback_static(etf_code)
-            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
         return _maybe_replace_low_row_count_sync(etf_code, moneydj_result, official_candidate)
 
@@ -94,16 +94,30 @@ def scrape_holdings(etf_code: str) -> dict:
     return FAILED_RESULT.copy()
 
 
-def scrape_holdings_with_browser(etf_code: str, page) -> dict:
+def scrape_holdings_with_browser(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     """Sync wrapper for the full browser decision tree.
 
     Use this from synchronous code when no event loop is running. Async callers
     should call scrape_holdings_with_browser_async directly.
     """
-    return _run_async(scrape_holdings_with_browser_async(etf_code, page))
+    return _run_async(
+        scrape_holdings_with_browser_async(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
+    )
 
 
-async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
+async def scrape_holdings_with_browser_async(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     """Async browser-enabled full decision tree.
 
     MoneyDJ static → MoneyDJ browser → Official browser → Official static → Fail.
@@ -117,9 +131,9 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
             _with_source_type(moneydj_result, "moneydj_primary")
         )
         official_candidate = None
-        if _is_stale_result(moneydj_result, date.today()):
+        if target_date is not None and _is_stale_result(moneydj_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
-            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
         return await _maybe_replace_low_row_count_async(
             etf_code,
@@ -135,9 +149,9 @@ async def scrape_holdings_with_browser_async(etf_code: str, page) -> dict:
             _with_source_type(browser_result, "moneydj_browser")
         )
         official_candidate = None
-        if _is_stale_result(browser_result, date.today()):
+        if target_date is not None and _is_stale_result(browser_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
-            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, date.today()):
+            if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
         return await _maybe_replace_low_row_count_async(
             etf_code,

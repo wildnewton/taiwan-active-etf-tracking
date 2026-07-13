@@ -71,7 +71,7 @@ def test_scrape_holdings_moneydj_stale_uses_fresh_official():
         patch("scraper.scrape_moneydj", return_value=stale_moneydj), \
         patch("scraper.scrape_official_static", return_value=fresh_official) as official, \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"
@@ -87,7 +87,7 @@ def test_scrape_holdings_moneydj_stale_keeps_moneydj_when_official_not_fresh():
         patch("scraper.scrape_moneydj", return_value=stale_moneydj), \
         patch("scraper.scrape_official_static", return_value=stale_official), \
         patch("time.sleep"):
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -119,7 +119,7 @@ def test_scrape_holdings_retry_all_fail_goes_to_official():
     with patch("scraper.scrape_moneydj", side_effect=[fail] * 10) as moneydj, \
         patch("scraper.scrape_official_static", return_value=official_result) as official, \
         patch("time.sleep") as sleep:
-        result = scrape_holdings("00980A")
+        result = scrape_holdings("00980A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"
@@ -189,7 +189,11 @@ def test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser():
         patch("scraper.scrape_official_with_browser", new=AsyncMock(return_value=fresh_official)) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings_with_browser("00980A", page)
+        result = scrape_holdings_with_browser(
+            "00980A",
+            page,
+            target_date=FixedDate.today(),
+        )
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"

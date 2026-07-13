@@ -155,7 +155,7 @@ def test_daily_scrape_runs_when_run_date_is_tw_trading_day():
     with patch("pipeline.date", TradingRunDate), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TRADING_DATE), \
-        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape_holdings, \
+        patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape_holdings, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
         patch("pipeline.insert_scrape_run"):
