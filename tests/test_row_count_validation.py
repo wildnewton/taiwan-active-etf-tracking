@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
+import pipeline
 from pipeline import run_daily_scrape
 from scraper import scrape_holdings, scrape_holdings_with_browser
 
@@ -54,7 +55,7 @@ def test_low_moneydj_row_count_uses_official_when_official_recovers_rows():
         patch("scraper.scrape_moneydj", return_value=moneydj), \
         patch("scraper.scrape_official_static", return_value=official) as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings("00984A")
+        result = scrape_holdings("00984A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"
@@ -72,7 +73,7 @@ def test_low_moneydj_row_count_keeps_moneydj_when_official_rows_are_stale():
         patch("scraper.scrape_moneydj", return_value=moneydj), \
         patch("scraper.scrape_official_static", return_value=stale_official), \
         patch("time.sleep"):
-        result = scrape_holdings("00984A")
+        result = scrape_holdings("00984A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -91,7 +92,7 @@ def test_low_moneydj_row_count_confirmed_by_same_nonzero_official_count_is_manua
         patch("scraper.scrape_moneydj", return_value=moneydj), \
         patch("scraper.scrape_official_static", return_value=official), \
         patch("time.sleep"):
-        result = scrape_holdings("00984A")
+        result = scrape_holdings("00984A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -111,7 +112,7 @@ def test_low_moneydj_row_count_keeps_moneydj_when_official_fallback_fails():
         patch("scraper.scrape_moneydj", return_value=moneydj), \
         patch("scraper.scrape_official_static", return_value=official), \
         patch("time.sleep"):
-        result = scrape_holdings("00984A")
+        result = scrape_holdings("00984A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -127,7 +128,7 @@ def test_moneydj_row_count_validation_skips_when_history_is_missing():
         patch("scraper.scrape_moneydj", return_value=moneydj), \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings("00984A")
+        result = scrape_holdings("00984A", target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "moneydj_primary"
@@ -148,7 +149,7 @@ def test_low_moneydj_row_count_uses_browser_official_fallback_when_available():
         patch("scraper.scrape_official_with_browser", new=AsyncMock(return_value=official)) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
         patch("time.sleep"):
-        result = scrape_holdings_with_browser("00984A", page)
+        result = scrape_holdings_with_browser("00984A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
     assert result["source_type"] == "official_fallback"
@@ -174,6 +175,11 @@ def test_pipeline_summary_surfaces_row_count_manual_inspection_warnings():
     }
 
     with patch("pipeline.date", FixedDate), \
+        patch("pipeline._current_run_at", return_value=datetime.combine(
+            FixedDate.today(),
+            pipeline.DATA_AVAILABILITY_CUTOFF,
+            tzinfo=pipeline.TAIPEI_TIMEZONE,
+        )), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00984A"}]), \
         patch("pipeline.scrape_holdings", return_value=result), \
         patch("pipeline.init_db"), \

@@ -1,9 +1,11 @@
-from datetime import date
+from contextlib import contextmanager
+from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 import db
+import pipeline
 from pipeline import run_daily_scrape, run_daily_scrape_with_browser_async
 
 RUN_DATE = date(2026, 6, 22)
@@ -36,8 +38,18 @@ def _patch_active_etfs():
     return patch("pipeline._active_etfs_for_run", return_value=TEST_ETFS)
 
 
+@contextmanager
 def _patch_run_date(date_cls=FixedDate):
-    return patch("pipeline.date", date_cls)
+    run_at = datetime.combine(
+        date_cls.today(),
+        pipeline.DATA_AVAILABILITY_CUTOFF,
+        tzinfo=pipeline.TAIPEI_TIMEZONE,
+    )
+    with patch("pipeline.date", date_cls), patch(
+        "pipeline._current_run_at",
+        return_value=run_at,
+    ):
+        yield
 
 
 def make_row(etf_code, asset_type="stock", stock_code="2330", asset_name=None, row_date="2026/06/22"):
@@ -109,7 +121,7 @@ def test_run_daily_scrape_all_success():
     expected_count = _active_count()
     with _patch_run_date(), \
         _patch_active_etfs(), \
-        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)) as scrape, \
+        patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape, \
         patch("pipeline.init_db") as init_db, \
         patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run") as insert_scrape_run:
@@ -139,7 +151,7 @@ def test_run_daily_scrape_all_success():
 async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
     expected_count = _active_count()
     page = object()
-    scraper = AsyncMock(side_effect=lambda code, page_arg: make_success(code, source_type="moneydj_browser"))
+    scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code, source_type="moneydj_browser"))
 
     with _patch_run_date(), \
         _patch_active_etfs(), \
@@ -170,7 +182,7 @@ def test_run_daily_scrape_some_fail():
     failed_codes = set(_active_codes()[:2])
     expected_count = _active_count()
 
-    def fake_scrape(code):
+    def fake_scrape(code, target_date=None):
         if code in failed_codes:
             return make_failure("blocked")
         return make_success(code, source_type="official_fallback")
@@ -197,7 +209,7 @@ def test_run_daily_scrape_saves_to_db():
     expected_count = _active_count()
     with _patch_run_date(), \
         _patch_active_etfs(), \
-        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
+        patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)):
         summary = run_daily_scrape(":memory:")
 
     with db._connect() as conn:
@@ -216,7 +228,7 @@ def test_run_daily_scrape_logs_scrape_runs():
     expected_count = _active_count()
     with _patch_run_date(), \
         _patch_active_etfs(), \
-        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code)):
+        patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)):
         run_daily_scrape(":memory:")
 
     with db._connect() as conn:
@@ -352,7 +364,7 @@ def test_insert_scrape_run_replaces_failure_with_success():
 def test_run_daily_scrape_uses_run_date_not_first_source_data_date():
     with _patch_run_date(NextRunDate), \
         _patch_active_etfs(), \
-        patch("pipeline.scrape_holdings", side_effect=lambda code: make_success(code, row_date="2026/06/22")):
+        patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code, row_date="2026/06/22")):
         summary = run_daily_scrape(":memory:")
 
     assert summary["date"] == "2026-06-23"
@@ -363,7 +375,7 @@ def test_run_daily_scrape_uses_run_date_not_first_source_data_date():
 def test_scrape_run_records_per_etf_data_date_not_first_success_date():
     captured_runs = []
 
-    def fake_scrape(code):
+    def fake_scrape(code, target_date=None):
         if code == "00980A":
             return make_success(code, row_date="2026/06/22")
         return make_success(code, row_date="2026/06/23")
@@ -403,7 +415,7 @@ def test_run_daily_scrape_reports_unknown_data_date_without_top_level_data_date(
     for row in unknown["all_rows"]:
         row["date"] = ""
 
-    def fake_scrape(code):
+    def fake_scrape(code, target_date=None):
         if code == "00980A":
             return unknown
         return make_success(code)

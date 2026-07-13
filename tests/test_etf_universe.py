@@ -281,7 +281,7 @@ def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
     retire_etf("00980A", last_active_date="2026-07-01", reason="not listed")
     seen_codes = []
 
-    def fake_scrape(code):
+    def fake_scrape(code, target_date=None):
         seen_codes.append(code)
         return {
             "ok": False,

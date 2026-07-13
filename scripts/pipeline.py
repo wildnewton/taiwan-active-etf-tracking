@@ -1,16 +1,20 @@
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from typing import Awaitable, Callable, Optional
+from zoneinfo import ZoneInfo
 
 from db import init_db, insert_scrape_run, replace_daily_snapshot, snapshot_exists
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings, scrape_holdings_with_browser_async
-from trading_calendar import latest_tw_trading_day_on_or_before
+from trading_calendar import is_tw_trading_day, latest_tw_trading_day_on_or_before
 
 
-ScrapeFn = Callable[[str], dict]
-AsyncScrapeFn = Callable[[str], Awaitable[dict]]
+ScrapeFn = Callable[[str, date], dict]
+AsyncScrapeFn = Callable[[str, date], Awaitable[dict]]
+
+TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
+DATA_AVAILABILITY_CUTOFF = time(15, 0)
 
 
 def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
@@ -39,7 +43,7 @@ async def run_daily_scrape_with_browser_async(
         return await _run_scrape_async(
             db_path,
             None,
-            lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+            _browser_scrape_fn(page),
         )
 
     from playwright.async_api import async_playwright
@@ -53,10 +57,7 @@ async def run_daily_scrape_with_browser_async(
                 return await _run_scrape_async(
                     db_path,
                     None,
-                    lambda etf_code: scrape_holdings_with_browser_async(
-                        etf_code,
-                        browser_page,
-                    ),
+                    _browser_scrape_fn(browser_page),
                 )
             finally:
                 await context.close()
@@ -76,7 +77,7 @@ async def run_selected_scrape_with_browser_async(
         return await _run_scrape_async(
             db_path,
             selected_etfs,
-            lambda etf_code: scrape_holdings_with_browser_async(etf_code, page),
+            _browser_scrape_fn(page),
             run_date=run_date,
             use_trading_calendar=False,
         )
@@ -92,10 +93,7 @@ async def run_selected_scrape_with_browser_async(
                 return await _run_scrape_async(
                     db_path,
                     selected_etfs,
-                    lambda etf_code: scrape_holdings_with_browser_async(
-                        etf_code,
-                        browser_page,
-                    ),
+                    _browser_scrape_fn(browser_page),
                     run_date=run_date,
                     use_trading_calendar=False,
                 )
@@ -103,6 +101,17 @@ async def run_selected_scrape_with_browser_async(
                 await context.close()
         finally:
             await browser.close()
+
+
+def _browser_scrape_fn(page) -> AsyncScrapeFn:
+    async def scrape_one(etf_code: str, target_date: date) -> dict:
+        return await scrape_holdings_with_browser_async(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
+
+    return scrape_one
 
 
 def _active_etfs_for_run() -> list[dict]:
@@ -125,19 +134,22 @@ def _run_scrape_sync(
 ) -> dict:
     if not already_initialized:
         init_db(db_path)
-    run_date = date.today()
-    expected_data_date = _expected_data_date_for_run(run_date, use_trading_calendar)
-    summary = _new_summary(run_date, len(etfs), expected_data_date)
+    run_at = _as_taipei_run_at(_current_run_at())
+    run_date = run_at.date()
+    expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
+    is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
+    summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
-    if _should_skip_non_trading_day(run_date, expected_data_date, use_trading_calendar):
+    if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
         _record_non_trading_day_skip(summary, len(etfs))
         _finalize_data_date_range(summary)
         return summary
 
+    freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
-        result = scrape_fn(etf_code)
+        result = scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
         etf_data_date = _extract_data_date(result) if result["ok"] is True else None
         _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)
@@ -156,19 +168,29 @@ async def _run_scrape_async(
     init_db(db_path)
     if etfs is None:
         etfs = _active_etfs_for_run()
-    run_date = run_date or date.today()
-    expected_data_date = _expected_data_date_for_run(run_date, use_trading_calendar)
-    summary = _new_summary(run_date, len(etfs), expected_data_date)
+    if run_date is None:
+        run_at = _as_taipei_run_at(_current_run_at())
+        run_date = run_at.date()
+    else:
+        run_at = datetime.combine(
+            run_date,
+            DATA_AVAILABILITY_CUTOFF,
+            tzinfo=TAIPEI_TIMEZONE,
+        )
+    expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
+    is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
+    summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
-    if _should_skip_non_trading_day(run_date, expected_data_date, use_trading_calendar):
+    if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
         _record_non_trading_day_skip(summary, len(etfs))
         _finalize_data_date_range(summary)
         return summary
 
+    freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
         started_at = datetime.now()
-        result = await scrape_fn(etf_code)
+        result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
         etf_data_date = _extract_data_date(result) if result["ok"] is True else None
         _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)
@@ -177,20 +199,44 @@ async def _run_scrape_async(
     return summary
 
 
-def _expected_data_date_for_run(run_date: date, use_trading_calendar: bool) -> Optional[date]:
+def _current_run_at() -> datetime:
+    return datetime.now(TAIPEI_TIMEZONE)
+
+
+def _as_taipei_run_at(run_at: datetime) -> datetime:
+    if run_at.tzinfo is None:
+        return run_at.replace(tzinfo=TAIPEI_TIMEZONE)
+    return run_at.astimezone(TAIPEI_TIMEZONE)
+
+
+def _expected_data_date_for_run(
+    run_at: datetime,
+    use_trading_calendar: bool,
+) -> Optional[date]:
+    local_run_at = _as_taipei_run_at(run_at)
+    run_date = local_run_at.date()
     if not use_trading_calendar:
         return run_date
-    return latest_tw_trading_day_on_or_before(run_date)
+    candidate_date = run_date
+    if local_run_at.time() < DATA_AVAILABILITY_CUTOFF:
+        candidate_date -= timedelta(days=1)
+    return latest_tw_trading_day_on_or_before(candidate_date)
+
+
+def _is_trading_day_for_run(
+    run_date: date,
+    use_trading_calendar: bool,
+) -> Optional[bool]:
+    if not use_trading_calendar:
+        return True
+    return is_tw_trading_day(run_date)
 
 
 def _should_skip_non_trading_day(
-    run_date: date,
-    expected_data_date: Optional[date],
+    is_trading_day: Optional[bool],
     use_trading_calendar: bool,
 ) -> bool:
-    if not use_trading_calendar or expected_data_date is None:
-        return False
-    return expected_data_date < run_date
+    return use_trading_calendar and is_trading_day is False
 
 
 def _coerce_run_date(value):
@@ -203,8 +249,12 @@ def _coerce_run_date(value):
     raise TypeError("run_date must be a date, ISO date string, or None")
 
 
-def _new_summary(run_date: date, total_etfs: int, expected_data_date: Optional[date] = None) -> dict:
-    is_trading_day = None if expected_data_date is None else expected_data_date == run_date
+def _new_summary(
+    run_date: date,
+    total_etfs: int,
+    expected_data_date: Optional[date] = None,
+    is_trading_day: Optional[bool] = None,
+) -> dict:
     return {
         "date": run_date.isoformat(),
         "expected_data_date": expected_data_date.isoformat() if expected_data_date else None,
