@@ -111,6 +111,7 @@ def test_tw_stock_calendar_missing_params_returns_unknown(tmp_path):
 
 def test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day():
     with patch("pipeline.date", NonTradingRunDate), \
+        patch("pipeline.is_tw_trading_day", return_value=False), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
         patch("pipeline.scrape_holdings") as scrape_holdings, \
@@ -135,6 +136,7 @@ async def test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_t
     scraper = AsyncMock()
 
     with patch("pipeline.date", NonTradingRunDate), \
+        patch("pipeline.is_tw_trading_day", return_value=False), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
@@ -153,6 +155,7 @@ async def test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_t
 
 def test_daily_scrape_runs_when_run_date_is_tw_trading_day():
     with patch("pipeline.date", TradingRunDate), \
+        patch("pipeline.is_tw_trading_day", return_value=True), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TRADING_DATE), \
         patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape_holdings, \

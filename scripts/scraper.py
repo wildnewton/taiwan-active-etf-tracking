@@ -73,8 +73,15 @@ def _retry_moneydj(etf_code: str) -> dict:
     return last_result
 
 
+def _require_target_date(target_date: date | None) -> date:
+    if target_date is None:
+        raise TypeError("target_date is required")
+    return target_date
+
+
 def scrape_holdings(etf_code: str, target_date: date) -> dict:
     """Scrape holdings without browser using the caller-provided freshness target."""
+    target_date = _require_target_date(target_date)
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _apply_min_weight_gate(
@@ -104,6 +111,7 @@ def scrape_holdings_with_browser(
     Use this from synchronous code when no event loop is running. Async callers
     should call scrape_holdings_with_browser_async directly.
     """
+    target_date = _require_target_date(target_date)
     return _run_async(
         scrape_holdings_with_browser_async(
             etf_code,
@@ -124,6 +132,7 @@ async def scrape_holdings_with_browser_async(
     This is the production-safe path for an async Playwright pipeline because it
     avoids nesting asyncio.run inside an already-running event loop.
     """
+    target_date = _require_target_date(target_date)
     # 1. MoneyDJ static (fastest) — retries up to 3x for transient errors
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
