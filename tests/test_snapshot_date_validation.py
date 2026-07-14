@@ -206,7 +206,7 @@ def test_moneydj_validation_failure_does_not_rescrape_moneydj():
 
 
 def test_official_validation_failure_keeps_moneydj_diagnostic():
-    _, _, _, _, check_moneydj_warning = run_with_results({
+    summary, _, _, _, check_moneydj_warning = run_with_results({
         "00981A": scrape_result(
             "00981A",
             stock_dates=(None,),
@@ -214,7 +214,7 @@ def test_official_validation_failure_keeps_moneydj_diagnostic():
         ),
     })
 
-    check_moneydj_warning.assert_called_once_with("00981A")
+    check_moneydj_warning.assert_called_once_with(summary, "00981A")
 
 
 def test_valid_single_date_snapshot_keeps_existing_write_behavior():
