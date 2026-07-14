@@ -67,7 +67,6 @@ def fetch_static(url: str, timeout: int = 30) -> str:
 
 # Static parsers
 
-
 def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
@@ -81,7 +80,6 @@ def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
 
 
 # API / text parsers
-
 
 def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list[dict]:
     """Parse Capital's buyback API response.
@@ -211,7 +209,6 @@ def parse_uni_president_table(
 
 
 # Browser / API scraper functions
-
 
 async def scrape_capital_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
@@ -348,7 +345,6 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
 
 # Unified entry points
 
-
 def scrape_official_static(etf_code: str) -> dict:
     etf_code = etf_code.upper()
     source_url = _build_twse_url(etf_code)
@@ -393,7 +389,6 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
 
 
 # Internal helpers
-
 
 def _response_url(response) -> str:
     url = getattr(response, "url", "")
