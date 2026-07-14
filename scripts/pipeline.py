@@ -290,7 +290,7 @@ def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str
         *(result.get("non_stock_rows") or []),
     ]
     if not rows:
-        return None, "missing_or_unparseable_source_date"
+        return None, "empty_snapshot"
 
     parsed_dates = []
     for row in rows:
@@ -330,7 +330,13 @@ def _record_result(
                 result,
                 unknown_reason=date_error,
             )
-            _record_failure(summary, etf_code, date_error)
+            _record_failure(
+                summary,
+                etf_code,
+                date_error,
+                run_moneydj_diagnostic=result.get("source_type")
+                not in {"moneydj_primary", "moneydj_browser"},
+            )
             insert_scrape_run(
                 _build_scrape_run(
                     etf_code,
@@ -382,10 +388,16 @@ def _record_result(
         insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
 
 
-def _record_failure(summary: dict, etf_code: str, reason: str) -> None:
+def _record_failure(
+    summary: dict,
+    etf_code: str,
+    reason: str,
+    run_moneydj_diagnostic: bool = True,
+) -> None:
     summary["failed"] += 1
     summary["failures"].append({"etf_code": etf_code, "reason": reason})
-    _check_moneydj_warning(summary, etf_code)
+    if run_moneydj_diagnostic:
+        _check_moneydj_warning(summary, etf_code)
 
 
 def _should_skip_stale_existing_snapshot(data_date: Optional[date], expected_data_date: date, etf_code: str) -> bool:
