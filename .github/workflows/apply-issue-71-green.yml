@@ -1,0 +1,245 @@
+name: Apply issue 71 GREEN
+
+on:
+  push:
+    branches:
+      - fix/71-precheck-existing-snapshots
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/71-precheck-existing-snapshots
+          fetch-depth: 1
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
+      - name: Apply implementation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/pipeline.py')
+          text = path.read_text(encoding='utf-8')
+
+          selected_old = '''            run_date=run_date,
+              use_trading_calendar=False,
+          )'''.replace('  use_', 'use_')
+          selected_new = '''            run_date=run_date,
+              use_trading_calendar=False,
+              skip_existing_snapshot=False,
+          )'''.replace('  use_', 'use_').replace('  skip_', 'skip_')
+          if text.count(selected_old) != 2:
+              raise SystemExit(f'expected 2 selected call sites, found {text.count(selected_old)}')
+          text = text.replace(selected_old, selected_new)
+
+          sync_signature_old = '''    already_initialized: bool = False,
+              use_trading_calendar: bool = True,
+              run_at: datetime | None = None,
+          ) -> dict:'''.replace('  use_', 'use_').replace('  run_', 'run_')
+          sync_signature_new = '''    already_initialized: bool = False,
+              use_trading_calendar: bool = True,
+              run_at: datetime | None = None,
+              skip_existing_snapshot: bool = True,
+          ) -> dict:'''.replace('  use_', 'use_').replace('  run_', 'run_').replace('  skip_', 'skip_')
+          if sync_signature_old not in text:
+              raise SystemExit('sync signature anchor not found')
+          text = text.replace(sync_signature_old, sync_signature_new, 1)
+
+          sync_loop_old = '''    for etf in etfs:
+              etf_code = etf["code"]
+              started_at = datetime.now()
+              result = scrape_fn(etf_code, freshness_target_date)
+              finished_at = datetime.now()
+              _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
+          '''.replace('  etf_', 'etf_').replace('  started_', 'started_').replace('  result', 'result').replace('  finished_', 'finished_').replace('  _record', '_record')
+          sync_loop_new = '''    for etf in etfs:
+              etf_code = etf["code"]
+              if _should_skip_existing_expected_snapshot(
+                  expected_data_date,
+                  etf_code,
+                  skip_existing_snapshot,
+              ):
+                  _record_existing_snapshot_skip(
+                      summary,
+                      etf_code,
+                      run_date,
+                      expected_data_date,
+                  )
+                  continue
+              started_at = datetime.now()
+              result = scrape_fn(etf_code, freshness_target_date)
+              finished_at = datetime.now()
+              _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
+          '''.replace('  etf_', 'etf_').replace('  if ', 'if ').replace('  expected_', 'expected_').replace('  skip_', 'skip_').replace('  _record', '_record').replace('  summary', 'summary').replace('  run_', 'run_').replace('  continue', 'continue').replace('  started_', 'started_').replace('  result', 'result').replace('  finished_', 'finished_')
+          if sync_loop_old not in text:
+              raise SystemExit('sync loop anchor not found')
+          text = text.replace(sync_loop_old, sync_loop_new, 1)
+
+          async_signature_old = '''    scrape_fn: AsyncScrapeFn,
+              run_date=None,
+              use_trading_calendar: bool = True,
+          ) -> dict:'''.replace('  run_', 'run_').replace('  use_', 'use_')
+          async_signature_new = '''    scrape_fn: AsyncScrapeFn,
+              run_date=None,
+              use_trading_calendar: bool = True,
+              skip_existing_snapshot: bool = True,
+          ) -> dict:'''.replace('  run_', 'run_').replace('  use_', 'use_').replace('  skip_', 'skip_')
+          if async_signature_old not in text:
+              raise SystemExit('async signature anchor not found')
+          text = text.replace(async_signature_old, async_signature_new, 1)
+
+          async_loop_old = '''    for etf in etfs:
+              etf_code = etf["code"]
+              started_at = datetime.now()
+              result = await scrape_fn(etf_code, freshness_target_date)
+              finished_at = datetime.now()
+              _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
+          '''.replace('  etf_', 'etf_').replace('  started_', 'started_').replace('  result', 'result').replace('  finished_', 'finished_').replace('  _record', '_record')
+          async_loop_new = '''    for etf in etfs:
+              etf_code = etf["code"]
+              if _should_skip_existing_expected_snapshot(
+                  expected_data_date,
+                  etf_code,
+                  skip_existing_snapshot,
+              ):
+                  _record_existing_snapshot_skip(
+                      summary,
+                      etf_code,
+                      run_date,
+                      expected_data_date,
+                  )
+                  continue
+              started_at = datetime.now()
+              result = await scrape_fn(etf_code, freshness_target_date)
+              finished_at = datetime.now()
+              _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
+          '''.replace('  etf_', 'etf_').replace('  if ', 'if ').replace('  expected_', 'expected_').replace('  skip_', 'skip_').replace('  _record', '_record').replace('  summary', 'summary').replace('  run_', 'run_').replace('  continue', 'continue').replace('  started_', 'started_').replace('  result', 'result').replace('  finished_', 'finished_')
+          if async_loop_old not in text:
+              raise SystemExit('async loop anchor not found')
+          text = text.replace(async_loop_old, async_loop_new, 1)
+
+          summary_old = '''        "skipped_non_trading_day": 0,
+                  "skipped_stale_existing": 0,
+                  "total_stock_rows": 0,'''.replace('  "skipped_', '"skipped_').replace('  "total_', '"total_')
+          summary_new = '''        "skipped_non_trading_day": 0,
+                  "skipped_existing_snapshot": 0,
+                  "skipped_stale_existing": 0,
+                  "total_stock_rows": 0,'''.replace('  "skipped_', '"skipped_').replace('  "total_', '"total_')
+          if summary_old not in text:
+              raise SystemExit('summary counter anchor not found')
+          text = text.replace(summary_old, summary_new, 1)
+
+          list_old = '''        "stale_etfs": [],
+                  "stale_existing_etfs": [],
+                  "unknown_date_etfs": [],'''.replace('  "stale_', '"stale_').replace('  "unknown_', '"unknown_')
+          list_new = '''        "stale_etfs": [],
+                  "existing_snapshot_etfs": [],
+                  "stale_existing_etfs": [],
+                  "unknown_date_etfs": [],'''.replace('  "stale_', '"stale_').replace('  "existing_', '"existing_').replace('  "unknown_', '"unknown_')
+          if list_old not in text:
+              raise SystemExit('summary list anchor not found')
+          text = text.replace(list_old, list_new, 1)
+
+          helper_anchor = '''def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
+              summary["skipped_non_trading_day"] = skipped_count
+              summary["skip_reason"] = "tw_stock_market_closed"
+          '''.replace('  summary', 'summary')
+          helper_replacement = helper_anchor + '''
+
+          def _should_skip_existing_expected_snapshot(
+              expected_data_date: Optional[date],
+              etf_code: str,
+              enabled: bool,
+          ) -> bool:
+              return (
+                  enabled
+                  and expected_data_date is not None
+                  and snapshot_exists(expected_data_date, etf_code)
+              )
+
+
+          def _record_existing_snapshot_skip(
+              summary: dict,
+              etf_code: str,
+              run_date: date,
+              expected_data_date: date,
+          ) -> None:
+              reason = "expected_snapshot_already_exists"
+              summary["skipped_existing_snapshot"] += 1
+              summary["existing_snapshot_etfs"].append({
+                  "etf_code": etf_code,
+                  "data_date": expected_data_date.isoformat(),
+                  "reason": reason,
+              })
+              observed_at = datetime.now()
+              result = {
+                  "ok": False,
+                  "reason": reason,
+                  "all_rows": [],
+                  "stock_rows": [],
+                  "non_stock_rows": [],
+                  "source_type": "",
+              }
+              insert_scrape_run(
+                  _build_scrape_run(
+                      etf_code,
+                      run_date,
+                      expected_data_date,
+                      observed_at,
+                      observed_at,
+                      result,
+                      status="skipped_existing_snapshot",
+                  )
+              )
+          '''
+          helper_replacement = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in helper_replacement.splitlines()
+          )
+          if helper_anchor not in text:
+              raise SystemExit('helper anchor not found')
+          text = text.replace(helper_anchor, helper_replacement, 1)
+
+          error_old = '''    if status == "skipped_stale_existing":
+              error = "stale_snapshot_already_exists"
+              elif result["ok"] is not True:'''.replace('  error', 'error').replace('  elif', 'elif')
+          error_new = '''    if status == "skipped_stale_existing":
+              error = "stale_snapshot_already_exists"
+              elif status == "skipped_existing_snapshot":
+              error = "expected_snapshot_already_exists"
+              elif result["ok"] is not True:'''.replace('  error', 'error').replace('  elif', 'elif')
+          if error_old not in text:
+              raise SystemExit('scrape-run error anchor not found')
+          text = text.replace(error_old, error_new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Run targeted tests
+        run: PYTHONPATH=. pytest -q tests/test_skip_existing_expected_snapshots.py tests/test_skip_stale_existing_snapshots.py
+
+      - name: Commit GREEN
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/pipeline.py
+          git commit -m "fix: skip existing expected snapshots before scrape"
+          git push origin HEAD:fix/71-precheck-existing-snapshots
