@@ -206,7 +206,7 @@ def run_nightly_pipeline(
     official_success = scrape_summary.get("official_success", 0)
     successful_etfs = moneydj_success + official_success
     available_etfs = (
-        successful_etfs + scrape_summary.get("skipped_existing_snapshot", 0)
+        successful_etfs + scrape_summary.get("preexisting_success", 0)
     )
     if total_etfs is not None and available_etfs < total_etfs:
         failures = scrape_summary.get("failures", [])

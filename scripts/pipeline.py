@@ -3,7 +3,13 @@ from datetime import date, datetime, time, timedelta
 from typing import Awaitable, Callable, Optional
 from zoneinfo import ZoneInfo
 
-from db import init_db, insert_scrape_run, replace_daily_snapshot, snapshot_exists
+from db import (
+    init_db,
+    insert_scrape_run,
+    replace_daily_snapshot,
+    snapshot_exists,
+    successful_snapshot_exists,
+)
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
 from scraper import scrape_holdings, scrape_holdings_with_browser_async
@@ -46,6 +52,14 @@ async def run_daily_scrape_with_browser_async(
             _browser_scrape_fn(page),
         )
 
+    run_date, expected_data_date, summary, etfs_to_scrape = _prepare_scrape_run(
+        db_path,
+        None,
+    )
+    if not etfs_to_scrape:
+        _finalize_data_date_range(summary)
+        return summary
+
     from playwright.async_api import async_playwright
 
     async with async_playwright() as playwright:
@@ -54,10 +68,12 @@ async def run_daily_scrape_with_browser_async(
             context = await browser.new_context(locale="zh-TW")
             try:
                 browser_page = await context.new_page()
-                return await _run_scrape_async(
-                    db_path,
-                    None,
+                return await _execute_scrape_async(
+                    etfs_to_scrape,
                     _browser_scrape_fn(browser_page),
+                    run_date,
+                    expected_data_date,
+                    summary,
                 )
             finally:
                 await context.close()
@@ -143,41 +159,21 @@ def _run_scrape_sync(
     run_at: datetime | None = None,
     skip_existing_snapshot: bool = True,
 ) -> dict:
-    if not already_initialized:
-        init_db(db_path)
-    run_at = _as_taipei_run_at(run_at or _current_run_at())
-    run_date = run_at.date()
-    expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
-    is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
-    summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
-
-    if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
-        _record_non_trading_day_skip(summary, len(etfs))
-        _finalize_data_date_range(summary)
-        return summary
-
-    freshness_target_date = expected_data_date or run_date
-    for etf in etfs:
-        etf_code = etf["code"]
-        if _should_skip_existing_expected_snapshot(
-            expected_data_date,
-            etf_code,
-            skip_existing_snapshot,
-        ):
-            _record_existing_snapshot_skip(
-                summary,
-                etf_code,
-                run_date,
-                expected_data_date,
-            )
-            continue
-        started_at = datetime.now()
-        result = scrape_fn(etf_code, freshness_target_date)
-        finished_at = datetime.now()
-        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
-
-    _finalize_data_date_range(summary)
-    return summary
+    run_date, expected_data_date, summary, etfs_to_scrape = _prepare_scrape_run(
+        db_path,
+        etfs,
+        already_initialized=already_initialized,
+        use_trading_calendar=use_trading_calendar,
+        run_at=run_at,
+        skip_existing_snapshot=skip_existing_snapshot,
+    )
+    return _execute_scrape_sync(
+        etfs_to_scrape,
+        scrape_fn,
+        run_date,
+        expected_data_date,
+        summary,
+    )
 
 
 async def _run_scrape_async(
@@ -188,46 +184,151 @@ async def _run_scrape_async(
     use_trading_calendar: bool = True,
     skip_existing_snapshot: bool = True,
 ) -> dict:
-    init_db(db_path)
-    if run_date is None:
+    run_date, expected_data_date, summary, etfs_to_scrape = _prepare_scrape_run(
+        db_path,
+        etfs,
+        run_date=run_date,
+        use_trading_calendar=use_trading_calendar,
+        skip_existing_snapshot=skip_existing_snapshot,
+    )
+    return await _execute_scrape_async(
+        etfs_to_scrape,
+        scrape_fn,
+        run_date,
+        expected_data_date,
+        summary,
+    )
+
+
+def _prepare_scrape_run(
+    db_path: str,
+    etfs: list[dict] | None,
+    *,
+    already_initialized: bool = False,
+    use_trading_calendar: bool = True,
+    run_at: datetime | None = None,
+    run_date=None,
+    skip_existing_snapshot: bool = True,
+) -> tuple[date, Optional[date], dict, list[dict]]:
+    if not already_initialized:
+        init_db(db_path)
+
+    if run_at is not None:
+        run_at = _as_taipei_run_at(run_at)
+    elif run_date is None:
         run_at = _as_taipei_run_at(_current_run_at())
-        run_date = run_at.date()
     else:
+        run_date = _coerce_run_date(run_date)
         run_at = datetime.combine(
             run_date,
             DATA_AVAILABILITY_CUTOFF,
             tzinfo=TAIPEI_TIMEZONE,
         )
+
+    run_date = run_at.date()
     if etfs is None:
         etfs = _active_etfs_for_run(run_date)
+    etfs = list(etfs)
+
     expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
     if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
         _record_non_trading_day_skip(summary, len(etfs))
-        _finalize_data_date_range(summary)
-        return summary
+        return run_date, expected_data_date, summary, []
 
+    if not skip_existing_snapshot:
+        return run_date, expected_data_date, summary, etfs
+
+    preexisting, etfs_to_scrape = _partition_preexisting_successes(
+        etfs,
+        expected_data_date,
+    )
+    _record_preexisting_success(summary, len(preexisting), expected_data_date)
+    return run_date, expected_data_date, summary, etfs_to_scrape
+
+
+def _partition_preexisting_successes(
+    etfs: list[dict],
+    expected_data_date: Optional[date],
+) -> tuple[list[dict], list[dict]]:
+    if expected_data_date is None:
+        return [], list(etfs)
+
+    preexisting = []
+    missing = []
+    for etf in etfs:
+        target = (
+            preexisting
+            if successful_snapshot_exists(expected_data_date, etf["code"])
+            else missing
+        )
+        target.append(etf)
+    return preexisting, missing
+
+
+def _record_preexisting_success(
+    summary: dict,
+    count: int,
+    expected_data_date: Optional[date],
+) -> None:
+    if count <= 0 or expected_data_date is None:
+        return
+    summary["preexisting_success"] += count
+    summary["data_freshness"]["fresh"] += count
+    summary["_known_data_dates"].extend([expected_data_date] * count)
+
+
+def _execute_scrape_sync(
+    etfs: list[dict],
+    scrape_fn: ScrapeFn,
+    run_date: date,
+    expected_data_date: Optional[date],
+    summary: dict,
+) -> dict:
     freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
-        if _should_skip_existing_expected_snapshot(
-            expected_data_date,
+        started_at = datetime.now()
+        result = scrape_fn(etf_code, freshness_target_date)
+        finished_at = datetime.now()
+        _record_result(
+            summary,
             etf_code,
-            skip_existing_snapshot,
-        ):
-            _record_existing_snapshot_skip(
-                summary,
-                etf_code,
-                run_date,
-                expected_data_date,
-            )
-            continue
+            run_date,
+            expected_data_date,
+            started_at,
+            finished_at,
+            result,
+        )
+
+    _finalize_data_date_range(summary)
+    return summary
+
+
+async def _execute_scrape_async(
+    etfs: list[dict],
+    scrape_fn: AsyncScrapeFn,
+    run_date: date,
+    expected_data_date: Optional[date],
+    summary: dict,
+) -> dict:
+    freshness_target_date = expected_data_date or run_date
+    for etf in etfs:
+        etf_code = etf["code"]
         started_at = datetime.now()
         result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
-        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
+        _record_result(
+            summary,
+            etf_code,
+            run_date,
+            expected_data_date,
+            started_at,
+            finished_at,
+            result,
+        )
 
     _finalize_data_date_range(summary)
     return summary
@@ -299,7 +400,7 @@ def _new_summary(
         "official_success": 0,
         "failed": 0,
         "skipped_non_trading_day": 0,
-        "skipped_existing_snapshot": 0,
+        "preexisting_success": 0,
         "skipped_stale_existing": 0,
         "total_stock_rows": 0,
         "total_non_stock_rows": 0,
@@ -308,7 +409,6 @@ def _new_summary(
         "row_count_warnings": [],
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
-        "existing_snapshot_etfs": [],
         "stale_existing_etfs": [],
         "unknown_date_etfs": [],
         "data_date_min": None,
@@ -320,53 +420,6 @@ def _new_summary(
 def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
     summary["skipped_non_trading_day"] = skipped_count
     summary["skip_reason"] = "tw_stock_market_closed"
-
-
-def _should_skip_existing_expected_snapshot(
-    expected_data_date: Optional[date],
-    etf_code: str,
-    enabled: bool,
-) -> bool:
-    return (
-        enabled
-        and expected_data_date is not None
-        and snapshot_exists(expected_data_date, etf_code)
-    )
-
-
-def _record_existing_snapshot_skip(
-    summary: dict,
-    etf_code: str,
-    run_date: date,
-    expected_data_date: date,
-) -> None:
-    reason = "expected_snapshot_already_exists"
-    summary["skipped_existing_snapshot"] += 1
-    summary["existing_snapshot_etfs"].append({
-        "etf_code": etf_code,
-        "data_date": expected_data_date.isoformat(),
-        "reason": reason,
-    })
-    observed_at = datetime.now()
-    result = {
-        "ok": False,
-        "reason": reason,
-        "all_rows": [],
-        "stock_rows": [],
-        "non_stock_rows": [],
-        "source_type": "",
-    }
-    insert_scrape_run(
-        _build_scrape_run(
-            etf_code,
-            run_date,
-            expected_data_date,
-            observed_at,
-            observed_at,
-            result,
-            status="skipped_existing_snapshot",
-        )
-    )
 
 
 def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
@@ -621,8 +674,6 @@ def _build_scrape_run(
     error = None
     if status == "skipped_stale_existing":
         error = "stale_snapshot_already_exists"
-    elif status == "skipped_existing_snapshot":
-        error = "expected_snapshot_already_exists"
     elif result["ok"] is not True:
         error = result.get("reason")
 
