@@ -82,12 +82,14 @@ def test_security_master_extracts_and_normalizes_listing_date():
     <table>
       <tr><td>00408A 主動第一金優股息</td><td>TW00000408A0</td><td>2026/07/15</td></tr>
       <tr><td>00409A 主動測試ETF</td><td>TW00000409A8</td><td>2026-07-16</td></tr>
+      <tr><td>00410A 主動日期未知</td><td>TW00000410A6</td><td>待公告</td></tr>
     </table>
     """
     securities = parse_security_master(html, "TWSE")
     assert [row.as_dict()["listing_date"] for row in securities] == [
         "2026-07-15",
         "2026-07-16",
+        None,
     ]
 
 
