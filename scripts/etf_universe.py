@@ -1,9 +1,9 @@
 """DB-backed ETF universe helpers.
 
 `etf_universe` is the operational source of truth for which Taiwan active ETFs
-should be fetched. Rows with `retired = 0` are included in nightly holdings
-scrapes; retired rows are retained for historical lookup but skipped going
-forward.
+should be fetched. Rows are eligible for nightly holdings scrapes when they are
+not retired and their listing date is unknown or has arrived; all rows remain
+available for historical lookup.
 """
 from __future__ import annotations
 
@@ -28,6 +28,16 @@ def _now() -> str:
 
 def _today() -> str:
     return date.today().isoformat()
+
+
+def _as_date_text(value: date | datetime | str | None) -> str:
+    if value is None:
+        return _today()
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
 
 
 def _dict_factory(cursor, row):
@@ -117,12 +127,12 @@ def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str |
             conn.execute(
                 """
                 INSERT INTO etf_universe (
-                    code, name, issuer, market, isin, retired,
+                    code, name, issuer, market, isin, listing_date, retired,
                     first_seen_date, last_active_date,
                     pending_retirement_since,
                     official_url, official_method, official_logic,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?, ?, ?, ?)
                 """,
                 (
                     code,
@@ -130,6 +140,7 @@ def seed_etf_universe_from_file(path: str | Path | None = None, seen_date: str |
                     raw.get("issuer"),
                     raw.get("market"),
                     raw.get("isin"),
+                    raw.get("listing_date"),
                     seen_date,
                     seen_date,
                     raw.get("official_url"),
@@ -150,8 +161,9 @@ def ensure_seeded() -> int:
     return seed_etf_universe_from_file()
 
 
-def get_active_etfs() -> list[dict]:
+def get_active_etfs(as_of_date: date | datetime | str | None = None) -> list[dict]:
     ensure_seeded()
+    as_of_date = _as_date_text(as_of_date)
     conn = db._connect()
     old = conn.row_factory
     conn.row_factory = _dict_factory
@@ -161,22 +173,31 @@ def get_active_etfs() -> list[dict]:
             SELECT *
             FROM etf_universe
             WHERE retired = 0
+              AND (listing_date IS NULL OR listing_date <= ?)
             ORDER BY code
-            """
+            """,
+            (as_of_date,),
         ).fetchall()
     finally:
         conn.row_factory = old
     return [_with_derived_fields(row) for row in rows]
 
 
-def get_active_etf_count() -> int:
+def get_active_etf_count(as_of_date: date | datetime | str | None = None) -> int:
     ensure_seeded()
+    as_of_date = _as_date_text(as_of_date)
     conn = db._connect()
     old = conn.row_factory
     conn.row_factory = None
     try:
         row = conn.execute(
-            "SELECT COUNT(*) FROM etf_universe WHERE retired = 0"
+            """
+            SELECT COUNT(*)
+            FROM etf_universe
+            WHERE retired = 0
+              AND (listing_date IS NULL OR listing_date <= ?)
+            """,
+            (as_of_date,),
         ).fetchone()
     finally:
         conn.row_factory = old
@@ -208,6 +229,7 @@ def upsert_etf(row: dict) -> None:
             "issuer": normalized.get("issuer"),
             "market": normalized.get("market"),
             "isin": normalized.get("isin"),
+            "listing_date": normalized.get("listing_date"),
             "retired": int(normalized.get("retired", 0)),
             "first_seen_date": normalized.get("first_seen_date"),
             "last_active_date": normalized.get("last_active_date"),
@@ -223,12 +245,12 @@ def upsert_etf(row: dict) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO etf_universe (
-                code, name, issuer, market, isin, retired,
+                code, name, issuer, market, isin, listing_date, retired,
                 first_seen_date, last_active_date,
                 pending_retirement_since,
                 official_url, official_method, official_logic,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 merged["code"],
@@ -236,6 +258,7 @@ def upsert_etf(row: dict) -> None:
                 merged.get("issuer"),
                 merged.get("market"),
                 merged.get("isin"),
+                merged.get("listing_date"),
                 int(merged.get("retired") or 0),
                 merged.get("first_seen_date"),
                 merged.get("last_active_date"),
@@ -295,10 +318,10 @@ def reconcile_discovered_universe(
 ) -> dict:
     """Reconcile exchange-discovered active ETFs into etf_universe.
 
-    Discovery rows are expected to represent currently listed active A-class ETFs.
-    Missing active rows are retired only after they are absent from two complete
-    discovery runs. Incomplete discovery runs can insert/update observed ETFs
-    but never start or complete retirement.
+    Discovery rows may include announced ETFs before their listing date. Missing
+    active rows are retired only after they are absent from two complete discovery
+    runs. Incomplete discovery runs can insert/update observed ETFs but never
+    start or complete retirement.
     """
     ensure_seeded()
     seen_date = seen_date or _today()
@@ -332,12 +355,12 @@ def reconcile_discovered_universe(
                 conn.execute(
                     """
                     INSERT INTO etf_universe (
-                        code, name, issuer, market, isin, retired,
+                        code, name, issuer, market, isin, listing_date, retired,
                         first_seen_date, last_active_date,
                         pending_retirement_since,
                         official_url, official_method, official_logic,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL, ?, ?)
                     """,
                     (
                         code,
@@ -345,6 +368,7 @@ def reconcile_discovered_universe(
                         raw.get("issuer"),
                         raw.get("market"),
                         raw.get("isin"),
+                        raw.get("listing_date"),
                         seen_date,
                         seen_date,
                         now,
@@ -362,10 +386,17 @@ def reconcile_discovered_universe(
                         SET pending_retirement_since = NULL,
                             market = COALESCE(?, market),
                             isin = COALESCE(?, isin),
+                            listing_date = COALESCE(?, listing_date),
                             updated_at = ?
                         WHERE code = ?
                         """,
-                        (raw.get("market"), raw.get("isin"), now, code),
+                        (
+                            raw.get("market"),
+                            raw.get("isin"),
+                            raw.get("listing_date"),
+                            now,
+                            code,
+                        ),
                     )
                     continue
                 conn.execute(
@@ -376,10 +407,18 @@ def reconcile_discovered_universe(
                         last_active_date = ?,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
+                        listing_date = COALESCE(?, listing_date),
                         updated_at = ?
                     WHERE code = ?
                     """,
-                    (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                    (
+                        seen_date,
+                        raw.get("market"),
+                        raw.get("isin"),
+                        raw.get("listing_date"),
+                        now,
+                        code,
+                    ),
                 )
                 reactivated.append(code)
             else:
@@ -390,10 +429,18 @@ def reconcile_discovered_universe(
                         pending_retirement_since = NULL,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
+                        listing_date = COALESCE(?, listing_date),
                         updated_at = ?
                     WHERE code = ?
                     """,
-                    (seen_date, raw.get("market"), raw.get("isin"), now, code),
+                    (
+                        seen_date,
+                        raw.get("market"),
+                        raw.get("isin"),
+                        raw.get("listing_date"),
+                        now,
+                        code,
+                    ),
                 )
                 updated.append(code)
 
@@ -439,5 +486,5 @@ def reconcile_discovered_universe(
         "pending_retirement": pending_retirement,
         "retirement_skipped": retirement_skipped,
         "retired": retired,
-        "active_total": get_active_etf_count(),
+        "active_total": get_active_etf_count(as_of_date=seen_date),
     }
