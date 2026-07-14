@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -19,8 +19,9 @@ def _rich_uni_president_rows():
     return [header] + data_rows
 
 
-def _make_mock_table(rows_data):
+def _make_mock_table(rows_data, pane_text):
     table = AsyncMock()
+    table.evaluate = AsyncMock(return_value=pane_text)
     mock_rows = []
     for index, row_cells in enumerate(rows_data):
         row = AsyncMock()
@@ -39,20 +40,19 @@ def _make_mock_table(rows_data):
     return table
 
 
-def _make_mock_page(body_text):
+def _make_mock_page(*, body_text, pane_text):
     page = AsyncMock()
     page.goto = AsyncMock()
     page.wait_for_selector = AsyncMock()
-    page.query_selector_all = AsyncMock(return_value=[_make_mock_table(_rich_uni_president_rows())])
+    table = _make_mock_table(_rich_uni_president_rows(), pane_text)
+    page.query_selector_all = AsyncMock(return_value=[table])
     body_locator = AsyncMock()
     body_locator.inner_text.return_value = body_text
-    page.locator = Mock(return_value=body_locator)
-    return page
+    page.locator.return_value = body_locator
+    return page, table
 
 
-@pytest.mark.asyncio
-@patch("scrapers.official.get_official_config")
-async def test_uni_president_uses_labeled_holdings_date_not_page_render_date(mock_config):
+def _mock_config(mock_config):
     mock_config.return_value = {
         "url": UNI_PRESIDENT_URL,
         "method": "playwright",
@@ -60,38 +60,52 @@ async def test_uni_president_uses_labeled_holdings_date_not_page_render_date(moc
         "internal_id": "49YTW",
         "official_logic": "internal_fundcode=49YTW",
     }
-    page = _make_mock_page(
-        "頁面產製時間：2026/07/10\n"
-        "主動統一台股增長\n"
-        "投資組合資料日期：2026/07/09\n"
-        "股票投資明細"
-    )
-
-    result = await scrape_uni_president_playwright("00981A", page)
-
-    assert result["ok"] is True
-    assert len(result["stock_rows"]) == 24
-    assert result["stock_rows"][0]["date"] == "2026/07/09"
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_uni_president_does_not_use_unlabeled_global_render_date(mock_config):
-    mock_config.return_value = {
-        "url": UNI_PRESIDENT_URL,
-        "method": "playwright",
-        "issuer": "Uni-President",
-        "internal_id": "49YTW",
-        "official_logic": "internal_fundcode=49YTW",
-    }
-    page = _make_mock_page(
-        "頁面產製時間：2026/07/10\n"
-        "主動統一台股增長\n"
-        "股票投資明細"
+async def test_uni_president_reads_hidden_pane_date_instead_of_global_date(mock_config):
+    _mock_config(mock_config)
+    page, table = _make_mock_page(
+        body_text="資料日期：2026/07/10\n主動統一台股增長",
+        pane_text="基金投資組合\n投資組合資料日期：2026/07/09\n股票投資明細",
     )
 
     result = await scrape_uni_president_playwright("00981A", page)
 
     assert result["ok"] is True
     assert len(result["stock_rows"]) == 24
-    assert result["stock_rows"][0]["date"] is None
+    assert {row["date"] for row in result["all_rows"]} == {"2026/07/09"}
+    table.evaluate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_uni_president_ignores_labeled_date_outside_holdings_pane(mock_config):
+    _mock_config(mock_config)
+    page, _ = _make_mock_page(
+        body_text="資料日期：2026/07/10\n主動統一台股增長",
+        pane_text="基金投資組合\n股票投資明細",
+    )
+
+    result = await scrape_uni_president_playwright("00981A", page)
+
+    assert result["ok"] is False
+    assert result["reason"] == "Uni-President holdings date not found in portfolio pane"
+    assert result["all_rows"] == []
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_uni_president_requires_labeled_date_in_holdings_pane(mock_config):
+    _mock_config(mock_config)
+    page, _ = _make_mock_page(
+        body_text="頁面產製時間：2026/07/10\n主動統一台股增長",
+        pane_text="基金投資組合\n2026/07/09\n股票投資明細",
+    )
+
+    result = await scrape_uni_president_playwright("00981A", page)
+
+    assert result["ok"] is False
+    assert result["reason"] == "Uni-President holdings date not found in portfolio pane"
+    assert result["stock_rows"] == []
