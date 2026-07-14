@@ -429,7 +429,7 @@ def _get_data_quality(data_date):
             "scrape_freshness": _empty_scrape_freshness(),
             "warnings": ["⚠️ 無持倉資料"],
         }
-    expected_count = get_active_etf_count()
+    expected_count = get_active_etf_count(as_of_date=data_date)
     actual_count = _get_actual_etf_count(data_date)
     failed_etfs = _get_failed_etfs(data_date)
     change_skips = _get_skipped_change_diagnostics(data_date)
@@ -463,6 +463,7 @@ def _get_failed_etfs(data_date):
                    JOIN etf_universe u ON sr.etf_code = u.code
                    WHERE sr.date = ? AND sr.status = 'failed'
                      AND u.retired = 0
+                      AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
                    ORDER BY sr.etf_code""",
                 (data_date,),
             ).fetchall()
@@ -484,6 +485,7 @@ def _get_scrape_data_freshness(data_date):
                    WHERE sr.date = ?
                      AND sr.status = 'success'
                      AND u.retired = 0
+                      AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
                    ORDER BY sr.etf_code""",
                 (data_date,),
             ).fetchall()
@@ -514,6 +516,7 @@ def _get_skipped_change_diagnostics(data_date):
                    WHERE d.date = ?
                      AND d.status = 'skipped'
                      AND u.retired = 0
+                      AND (u.listing_date IS NULL OR u.listing_date <= d.date)
                      AND d.created_at = (
                          SELECT MAX(created_at)
                          FROM etf_change_diagnostics
