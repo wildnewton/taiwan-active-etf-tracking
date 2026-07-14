@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import db
 import pipeline
@@ -62,13 +62,19 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
         )), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
-        patch("pipeline.snapshot_exists", return_value=True) as snapshot_exists, \
+        patch(
+            "pipeline.snapshot_exists",
+            side_effect=lambda data_date, _: data_date == STALE_DATA_DATE,
+        ) as snapshot_exists, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run", side_effect=captured_runs.append):
         summary = run_daily_scrape(":memory:")
 
-    snapshot_exists.assert_called_once_with(STALE_DATA_DATE, "00980A")
+    assert snapshot_exists.call_args_list == [
+        call(RUN_DATE, "00980A"),
+        call(STALE_DATA_DATE, "00980A"),
+    ]
     replace_daily_snapshot.assert_not_called()
     assert summary["skipped_stale_existing"] == 1
     assert summary["stale_existing_etfs"] == [
@@ -101,7 +107,10 @@ def test_stale_result_without_existing_snapshot_writes_once():
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
-    snapshot_exists.assert_called_once_with(STALE_DATA_DATE, "00980A")
+    assert snapshot_exists.call_args_list == [
+        call(RUN_DATE, "00980A"),
+        call(STALE_DATA_DATE, "00980A"),
+    ]
     replace_daily_snapshot.assert_called_once()
     assert summary["skipped_stale_existing"] == 0
     assert summary["stale_existing_etfs"] == []
@@ -117,13 +126,13 @@ def test_fresh_result_does_not_check_for_existing_stale_snapshot():
         )), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/23")), \
-        patch("pipeline.snapshot_exists") as snapshot_exists, \
+        patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}) as replace_daily_snapshot, \
         patch("pipeline.insert_scrape_run"):
         summary = run_daily_scrape(":memory:")
 
-    snapshot_exists.assert_not_called()
+    snapshot_exists.assert_called_once_with(RUN_DATE, "00980A")
     replace_daily_snapshot.assert_called_once()
     assert summary["skipped_stale_existing"] == 0
     assert summary["stale_existing_etfs"] == []
