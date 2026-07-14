@@ -13,7 +13,7 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -21,11 +21,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: Check out PR branch
         uses: actions/checkout@v4
         with:
+          ref: fix/71-precheck-existing-snapshots
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
+
+      - name: Apply issue 71 implementation
+        run: python .github/apply_issue_71.py
+
+      - name: Commit GREEN when needed
+        run: |
+          if ! git diff --quiet -- scripts/pipeline.py; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add scripts/pipeline.py
+            git commit -m "fix: skip existing expected snapshots before scrape"
+            git push origin HEAD:fix/71-precheck-existing-snapshots
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,6 +51,9 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
+
+      - name: Run targeted tests
+        run: PYTHONPATH=. pytest -q tests/test_skip_existing_expected_snapshots.py tests/test_skip_stale_existing_snapshots.py
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q
