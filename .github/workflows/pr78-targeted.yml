@@ -1,0 +1,25 @@
+name: PR 78 targeted tests
+
+on:
+  push:
+    branches:
+      - fix/77-snapshot-date-validation
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - name: Run snapshot date validation tests
+        run: PYTHONPATH=. pytest -q tests/test_snapshot_date_validation.py
