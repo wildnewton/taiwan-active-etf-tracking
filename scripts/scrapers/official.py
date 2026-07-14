@@ -29,7 +29,6 @@ TWSE_URL_TEMPLATE = (
 )
 
 
-
 def get_official_config(etf_code: str) -> dict:
     etf = get_etf_config(etf_code.upper())
     internal_ids = _parse_official_logic(etf.get("official_logic", ""))
@@ -43,7 +42,6 @@ def get_official_config(etf_code: str) -> dict:
         "internal_id": next(iter(internal_ids.values()), None),
         "internal_ids": internal_ids,
     }
-
 
 
 def fetch_static(url: str, timeout: int = 30) -> str:
@@ -74,10 +72,8 @@ def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
 
-
 def parse_taishin(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
-
 
 
 def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -128,7 +124,6 @@ def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list
     return rows
 
 
-
 def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
     data = json.loads(assets_json)
     fund_data = data.get("Entries", {}).get("Data", {})
@@ -162,7 +157,6 @@ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[d
     return rows
 
 
-
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
         match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
@@ -184,7 +178,6 @@ def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | 
             continue
         rows.append(_row(etf_code, code, name, shares, weight, source_url, date, EXTRACTION_METHOD_PLAYWRIGHT))
     return rows
-
 
 
 def parse_uni_president_table(
@@ -407,11 +400,9 @@ def _response_url(response) -> str:
     return url if isinstance(url, str) else ""
 
 
-
 def _is_capital_buyback_response(response) -> bool:
     url = _response_url(response).lower()
     return "capitalfund" in url and "buyback" in url
-
 
 
 def _is_nomura_assets_response(response) -> bool:
@@ -434,7 +425,6 @@ async def _uni_president_portfolio_pane_text(table) -> str:
     return text if isinstance(text, str) else ""
 
 
-
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "lxml")
     date = _parse_date(soup)
@@ -442,7 +432,6 @@ def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dic
     for table in soup.find_all("table"):
         rows.extend(_parse_table_rows(table, etf_code.upper(), source_url, date))
     return rows
-
 
 
 def _parse_table_rows(table, etf_code: str, source_url: str, date: str | None) -> list[dict]:
@@ -471,7 +460,6 @@ def _parse_table_rows(table, etf_code: str, source_url: str, date: str | None) -
     return rows
 
 
-
 def _extract_cells(cells: list[str], header_map: dict) -> tuple | None:
     if header_map:
         try:
@@ -493,7 +481,6 @@ def _extract_cells(cells: list[str], header_map: dict) -> tuple | None:
     return code_match.group(1), stock_name, shares, weight_pct
 
 
-
 def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date, method):
     asset_name = f"{stock_name}({stock_code}.TW)"
     classification = classify_asset(asset_name)
@@ -512,7 +499,6 @@ def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date,
     }
 
 
-
 def _build_header_map(headers: list[str]) -> dict:
     field_patterns = {
         "code": ("股票代號", "股票代碼", "證券代號", "代號", "code"),
@@ -529,24 +515,20 @@ def _build_header_map(headers: list[str]) -> dict:
     return header_map
 
 
-
 def _looks_like_header(cells) -> bool:
     text = " ".join(cell.get_text(" ", strip=True) for cell in cells)
     header_terms = ("股票", "證券", "代號", "名稱", "股數", "權重", "比例", "code", "name")
     return any(term in text.lower() for term in header_terms)
 
 
-
 def _normalize_header(value: str) -> str:
     return re.sub(r"\s+", "", value).lower()
-
 
 
 def _normalize_date(value):
     if not value:
         return None
     return str(value).replace("-", "/")
-
 
 
 def _parse_date(soup: BeautifulSoup) -> str | None:
@@ -561,7 +543,6 @@ def _parse_date(soup: BeautifulSoup) -> str | None:
     return date_match.group(0) if date_match else None
 
 
-
 def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
     """Extract the labeled holdings date from the matched portfolio pane."""
     labeled_date_match = re.search(
@@ -572,13 +553,11 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
     return labeled_date_match.group(1) if labeled_date_match else None
 
 
-
 def _parse_float(value: str) -> float | None:
     cleaned = value.strip().replace(",", "").replace("%", "")
     if not cleaned or cleaned.upper() in {"-", "--", "N/A", "NA"}:
         return None
     return float(cleaned)
-
 
 
 def _parse_number(value: str) -> int | float | None:
@@ -589,14 +568,12 @@ def _parse_number(value: str) -> int | float | None:
     return int(number) if number.is_integer() else number
 
 
-
 def _parser_for_issuer(issuer: str):
     parsers = {"Fubon": parse_fubon, "Taishin": parse_taishin, "TWSE": parse_twse}
     try:
         return parsers[issuer]
     except KeyError as exc:
         raise ValueError(f"No static official parser for issuer: {issuer}") from exc
-
 
 
 def _parse_official_logic(logic: str) -> dict:
@@ -609,15 +586,12 @@ def _parse_official_logic(logic: str) -> dict:
     return internal_ids
 
 
-
 def _build_twse_url(etf_code: str) -> str:
     return TWSE_URL_TEMPLATE.format(code=etf_code.upper())
 
 
-
 def _sum_weights(rows: list) -> float:
     return round(sum(row["weight_pct"] for row in rows if row.get("weight_pct") is not None), 2)
-
 
 
 def _validate_official_rows(rows: list) -> tuple[bool, str]:
@@ -643,7 +617,6 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
     return True, "ok"
 
 
-
 def _failed_result(source_url: str, reason: str) -> dict:
     return {
         "ok": False,
@@ -656,7 +629,6 @@ def _failed_result(source_url: str, reason: str) -> dict:
         "total_weight_all_rows": 0.0,
         "total_weight_stock_rows": 0.0,
     }
-
 
 
 def _build_result(all_rows: list, source_url: str, extraction_method: str) -> dict:
