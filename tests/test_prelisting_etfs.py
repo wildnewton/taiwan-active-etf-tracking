@@ -194,3 +194,34 @@ def test_report_excludes_prelisting_freshness_and_change_diagnostics():
         "unknown": [],
     }
     assert report._get_skipped_change_diagnostics("2026-07-14") == []
+
+
+def test_report_warnings_use_historical_universe_count():
+    db.init_db(":memory:")
+    _seed_with_future_etf()
+
+    with patch("etf_universe._today", return_value="2026-07-15"):
+        warnings = report._get_data_warnings("2026-07-14")
+
+    assert any("預期 19 檔 ETF" in warning for warning in warnings)
+    assert not any("預期 20 檔 ETF" in warning for warning in warnings)
+
+
+def test_consensus_denominator_uses_historical_universe_count():
+    db.init_db(":memory:")
+    _seed_with_future_etf()
+    canonical_rows = [
+        {
+            "etf_code": "00980A",
+            "stock_code": "2330",
+            "stock_name": "台積電",
+            "asset_type": "stock",
+            "weight_pct": 10.0,
+        }
+    ]
+
+    with patch("report._canonical_stock_rows", return_value=canonical_rows), \
+        patch("etf_universe._today", return_value="2026-07-15"):
+        rows = report._get_consensus_stocks("2026-07-14", min_etfs=1)
+
+    assert rows[0]["active_etf_count"] == 19
