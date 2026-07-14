@@ -36,26 +36,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-asyncio coverage
-
-      - name: Run issue 71 targeted tests with branch coverage
-        run: |
-          PYTHONPATH=. coverage run --branch --source=scripts -m pytest -q \
-            tests/test_preexisting_successful_snapshots.py \
-            tests/test_successful_snapshot_eligibility.py \
-            tests/test_try_run_preexisting_success.py \
-            tests/test_skip_stale_existing_snapshots.py \
-            tests/test_nightly_existing_snapshot_completeness.py
-          coverage report -m scripts/db.py scripts/pipeline.py scripts/nightly_pipeline.py | tee issue71-coverage.txt
-          coverage json -o issue71-coverage.json
-
-      - name: Upload issue 71 coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: issue71-coverage
-          path: |
-            issue71-coverage.txt
-            issue71-coverage.json
+          pip install pytest pytest-asyncio
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q
