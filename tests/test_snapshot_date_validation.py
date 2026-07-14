@@ -16,7 +16,12 @@ RUN_AT = datetime(
 )
 
 
-def stock_row(etf_code: str, stock_code: str, row_date) -> dict:
+def stock_row(
+    etf_code: str,
+    stock_code: str,
+    row_date,
+    source_type: str = "moneydj_primary",
+) -> dict:
     return {
         "date": row_date,
         "etf_code": etf_code,
@@ -27,12 +32,16 @@ def stock_row(etf_code: str, stock_code: str, row_date) -> dict:
         "shares": 1000,
         "weight_pct": 10.0,
         "source_url": "https://example.test",
-        "source_type": "moneydj_primary",
+        "source_type": source_type,
         "extraction_method": "test",
     }
 
 
-def non_stock_row(etf_code: str, row_date) -> dict:
+def non_stock_row(
+    etf_code: str,
+    row_date,
+    source_type: str = "moneydj_primary",
+) -> dict:
     return {
         "date": row_date,
         "etf_code": etf_code,
@@ -40,7 +49,7 @@ def non_stock_row(etf_code: str, row_date) -> dict:
         "asset_type": "cash",
         "weight_pct": 5.0,
         "source_url": "https://example.test",
-        "source_type": "moneydj_primary",
+        "source_type": source_type,
         "extraction_method": "test",
     }
 
@@ -50,12 +59,16 @@ def scrape_result(
     *,
     stock_dates=("2026/07/14",),
     non_stock_dates=(),
+    source_type="moneydj_primary",
 ) -> dict:
     stock_rows = [
-        stock_row(etf_code, str(2330 + index), row_date)
+        stock_row(etf_code, str(2330 + index), row_date, source_type)
         for index, row_date in enumerate(stock_dates)
     ]
-    non_stock_rows = [non_stock_row(etf_code, row_date) for row_date in non_stock_dates]
+    non_stock_rows = [
+        non_stock_row(etf_code, row_date, source_type)
+        for row_date in non_stock_dates
+    ]
     all_rows = [*stock_rows, *non_stock_rows]
     return {
         "ok": True,
@@ -64,7 +77,7 @@ def scrape_result(
         "stock_rows": stock_rows,
         "non_stock_rows": non_stock_rows,
         "source_url": "https://example.test",
-        "source_type": "moneydj_primary",
+        "source_type": source_type,
         "total_weight_all_rows": sum(row["weight_pct"] for row in all_rows),
         "total_weight_stock_rows": sum(row["weight_pct"] for row in stock_rows),
     }
@@ -85,10 +98,16 @@ def run_with_results(results_by_code: dict[str, dict]):
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}) as replace_snapshot, \
         patch("pipeline.insert_scrape_run") as insert_scrape_run, \
-        patch("pipeline._check_moneydj_warning"):
+        patch("pipeline._check_moneydj_warning") as check_moneydj_warning:
         summary = run_daily_scrape(":memory:")
 
-    return summary, scrape_holdings, replace_snapshot, insert_scrape_run
+    return (
+        summary,
+        scrape_holdings,
+        replace_snapshot,
+        insert_scrape_run,
+        check_moneydj_warning,
+    )
 
 
 def assert_failed_run(insert_scrape_run, expected_error: str) -> None:
@@ -99,7 +118,7 @@ def assert_failed_run(insert_scrape_run, expected_error: str) -> None:
 
 
 def test_missing_source_date_rejects_snapshot_before_db_write():
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": scrape_result("00981A", stock_dates=(None,)),
     })
 
@@ -115,7 +134,7 @@ def test_missing_source_date_rejects_snapshot_before_db_write():
 
 
 def test_inconsistent_source_dates_reject_snapshot_before_db_write():
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": scrape_result(
             "00981A",
             stock_dates=("2026/07/14", "2026/07/13"),
@@ -130,7 +149,7 @@ def test_inconsistent_source_dates_reject_snapshot_before_db_write():
 
 
 def test_missing_non_stock_date_rejects_entire_snapshot():
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": scrape_result(
             "00981A",
             stock_dates=("2026/07/14",),
@@ -151,7 +170,7 @@ def test_validation_checks_rows_written_even_if_all_rows_omits_them():
     )
     result["all_rows"] = result["stock_rows"]
 
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": result,
     })
 
@@ -165,17 +184,41 @@ def test_nonempty_all_rows_cannot_validate_an_empty_write_set():
     result["stock_rows"] = []
     result["non_stock_rows"] = []
 
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": result,
     })
 
     replace_snapshot.assert_not_called()
     assert summary["failed"] == 1
-    assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
+    assert summary["failures"] == [{
+        "etf_code": "00981A",
+        "reason": "empty_snapshot",
+    }]
+    assert_failed_run(insert_scrape_run, "empty_snapshot")
+
+
+def test_moneydj_validation_failure_does_not_rescrape_moneydj():
+    _, _, _, _, check_moneydj_warning = run_with_results({
+        "00981A": scrape_result("00981A", stock_dates=(None,)),
+    })
+
+    check_moneydj_warning.assert_not_called()
+
+
+def test_official_validation_failure_keeps_moneydj_diagnostic():
+    _, _, _, _, check_moneydj_warning = run_with_results({
+        "00981A": scrape_result(
+            "00981A",
+            stock_dates=(None,),
+            source_type="official_fallback",
+        ),
+    })
+
+    check_moneydj_warning.assert_called_once_with("00981A")
 
 
 def test_valid_single_date_snapshot_keeps_existing_write_behavior():
-    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": scrape_result(
             "00981A",
             stock_dates=("2026/07/14", "2026-07-14"),
@@ -193,7 +236,7 @@ def test_valid_single_date_snapshot_keeps_existing_write_behavior():
 
 
 def test_invalid_snapshot_does_not_stop_later_etfs():
-    summary, scrape_holdings, replace_snapshot, insert_scrape_run = run_with_results({
+    summary, scrape_holdings, replace_snapshot, insert_scrape_run, _ = run_with_results({
         "00981A": scrape_result("00981A", stock_dates=(None,)),
         "00982A": scrape_result("00982A", stock_dates=("2026/07/14",)),
     })
