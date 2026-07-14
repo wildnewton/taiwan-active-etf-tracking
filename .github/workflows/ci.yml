@@ -46,7 +46,16 @@ jobs:
             tests/test_try_run_preexisting_success.py \
             tests/test_skip_stale_existing_snapshots.py \
             tests/test_nightly_existing_snapshot_completeness.py
-          coverage report -m scripts/db.py scripts/pipeline.py scripts/nightly_pipeline.py
+          coverage report -m scripts/db.py scripts/pipeline.py scripts/nightly_pipeline.py | tee issue71-coverage.txt
+          coverage json -o issue71-coverage.json
+
+      - name: Upload issue 71 coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue71-coverage
+          path: |
+            issue71-coverage.txt
+            issue71-coverage.json
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q
