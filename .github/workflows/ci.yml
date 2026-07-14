@@ -48,4 +48,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pr80-pytest-output
-          path: pytest-output.txt
+          path: |
+            pytest-output.txt
+            tests/test_official.py
