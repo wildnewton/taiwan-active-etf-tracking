@@ -38,8 +38,5 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Run targeted Uni-President tests
-        run: PYTHONPATH=. pytest -q tests/test_uni_president_date.py tests/test_official.py
-
       - name: Run tests
         run: PYTHONPATH=. pytest -q
