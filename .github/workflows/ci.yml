@@ -31,7 +31,7 @@ jobs:
       - name: Apply validated snapshot implementation
         id: apply
         continue-on-error: true
-        run: python .github/apply_issue_71_validated_precheck.py > issue71-helper.log 2>&1
+        run: python .github/apply_issue_71_validated_precheck_v2.py > issue71-helper.log 2>&1
 
       - name: Upload helper diagnostics
         if: always()
