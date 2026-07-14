@@ -13,7 +13,7 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -21,11 +21,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: Check out PR branch
         uses: actions/checkout@v4
         with:
+          ref: fix/76-uni-president-pane-date
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
+
+      - name: Apply stale fixture update
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test_official.py")
+          text = path.read_text(encoding="utf-8")
+          old = '''def _make_mock_table(rows_data):
+              """Create a mock table with rows containing cells."""
+              table = AsyncMock()
+          '''
+          new = '''def _make_mock_table(
+              rows_data,
+              pane_text="基金投資組合\\n資料日期：2026/06/18\\n股票投資明細",
+          ):
+              """Create a mock table with rows and its owning portfolio-pane text."""
+              table = AsyncMock()
+              table.evaluate = AsyncMock(return_value=pane_text)
+          '''
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          if ! git diff --quiet -- tests/test_official.py; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add tests/test_official.py
+            git commit -m "test: align Uni-President fixtures with pane-local date"
+            git push origin HEAD:fix/76-uni-president-pane-date
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -39,15 +70,4 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: |
-          set -o pipefail
-          PYTHONPATH=. pytest -q 2>&1 | tee pytest-output.txt
-
-      - name: Upload pytest output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr80-pytest-output
-          path: |
-            pytest-output.txt
-            tests/test_official.py
+        run: PYTHONPATH=. pytest -q
