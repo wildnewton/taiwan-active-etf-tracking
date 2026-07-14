@@ -28,16 +28,21 @@ jobs:
           fetch-depth: 1
           persist-credentials: true
 
-      - name: Apply completeness fix
-        run: python .github/fix_issue_71_completeness.py
-
-      - name: Commit completeness fix
+      - name: Remove temporary helpers
         run: |
+          git rm -f --ignore-unmatch \
+            .github/apply_issue_71.py \
+            .github/apply_issue_71_v2.py \
+            .github/apply_issue_71_v3.py \
+            .github/fix_issue_71_completeness.py \
+            .github/fix_issue_71_review.py \
+            .github/workflows/apply-issue-71-green.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/nightly_pipeline.py
-          git commit -m "fix: count existing snapshots as nightly available"
-          git push origin HEAD:fix/71-precheck-existing-snapshots
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove temporary issue 71 helpers"
+            git push origin HEAD:fix/71-precheck-existing-snapshots
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5
