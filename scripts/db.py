@@ -312,21 +312,43 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
         return {"inserted": True, "source_type": source_type}
 
 
+def _snapshot_exists(conn, date_value, etf_code):
+    holding = conn.execute(
+        "SELECT 1 FROM etf_daily_holdings WHERE date = ? AND etf_code = ? LIMIT 1",
+        (date_value, etf_code),
+    ).fetchone()
+    if holding:
+        return True
+    non_stock = conn.execute(
+        "SELECT 1 FROM etf_daily_non_stock_assets WHERE date = ? AND etf_code = ? LIMIT 1",
+        (date_value, etf_code),
+    ).fetchone()
+    return non_stock is not None
+
+
 def snapshot_exists(date_value, etf_code):
-    """Return whether a holdings snapshot exists for one ETF/data date."""
+    """Return whether any snapshot rows exist for one ETF/data date."""
     date_value = _serialize(date_value)
     with _connect() as conn:
-        holding = conn.execute(
-            "SELECT 1 FROM etf_daily_holdings WHERE date = ? AND etf_code = ? LIMIT 1",
-            (date_value, etf_code),
+        return _snapshot_exists(conn, date_value, etf_code)
+
+
+def successful_snapshot_exists(date_value, etf_code):
+    """Return whether an exact snapshot has a canonical successful scrape record."""
+    date_value = _serialize(date_value)
+    with _connect() as conn:
+        successful_run = conn.execute(
+            """
+            SELECT 1
+            FROM etf_scrape_runs
+            WHERE etf_code = ?
+              AND status = 'success'
+              AND data_date = ?
+            LIMIT 1
+            """,
+            (etf_code, date_value),
         ).fetchone()
-        if holding:
-            return True
-        non_stock = conn.execute(
-            "SELECT 1 FROM etf_daily_non_stock_assets WHERE date = ? AND etf_code = ? LIMIT 1",
-            (date_value, etf_code),
-        ).fetchone()
-    return non_stock is not None
+        return bool(successful_run and _snapshot_exists(conn, date_value, etf_code))
 
 
 def _snapshot_key(rows):

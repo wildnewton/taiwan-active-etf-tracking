@@ -205,7 +205,10 @@ def run_nightly_pipeline(
     moneydj_success = scrape_summary.get("moneydj_success", 0)
     official_success = scrape_summary.get("official_success", 0)
     successful_etfs = moneydj_success + official_success
-    if total_etfs is not None and successful_etfs < total_etfs:
+    available_etfs = (
+        successful_etfs + scrape_summary.get("preexisting_success", 0)
+    )
+    if total_etfs is not None and available_etfs < total_etfs:
         failures = scrape_summary.get("failures", [])
         failed_codes = [
             failure.get("etf_code")
@@ -215,7 +218,7 @@ def run_nightly_pipeline(
         failure_text = f"（失敗: {', '.join(failed_codes)}）" if failed_codes else ""
         print(
             f"⚠️ 資料不完整: 預期 {total_etfs} 檔 ETF，"
-            f"實際取得 {successful_etfs} 檔{failure_text}"
+            f"實際可用 {available_etfs} 檔{failure_text}"
         )
 
     moneydj_warnings = scrape_summary.get("moneydj_warnings", [])
