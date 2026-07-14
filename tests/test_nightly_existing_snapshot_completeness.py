@@ -13,22 +13,7 @@ def _load_module():
     return module
 
 
-def test_existing_expected_snapshots_do_not_trigger_incomplete_warning(tmp_path, capsys):
-    module = _load_module()
-    scrape_summary = {
-        "date": "2026-07-14",
-        "expected_data_date": "2026-07-14",
-        "is_trading_day": True,
-        "total_etfs": 2,
-        "moneydj_success": 0,
-        "official_success": 0,
-        "skipped_existing_snapshot": 2,
-        "failed": 0,
-        "failures": [],
-        "moneydj_warnings": [],
-        "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
-    }
-
+def _run_with_summary(module, tmp_path, scrape_summary):
     with patch.object(module.db, "init_db"), patch.object(
         module, "run_daily_scrape_with_browser", return_value=scrape_summary
     ), patch.object(
@@ -49,6 +34,47 @@ def test_existing_expected_snapshots_do_not_trigger_incomplete_warning(tmp_path,
             str(tmp_path / "reports"),
             skip_discovery=True,
         )
+
+
+def test_preexisting_successes_do_not_trigger_incomplete_warning(tmp_path, capsys):
+    module = _load_module()
+    scrape_summary = {
+        "date": "2026-07-14",
+        "expected_data_date": "2026-07-14",
+        "is_trading_day": True,
+        "total_etfs": 2,
+        "preexisting_success": 2,
+        "moneydj_success": 0,
+        "official_success": 0,
+        "failed": 0,
+        "failures": [],
+        "moneydj_warnings": [],
+        "data_freshness": {"fresh": 2, "stale": 0, "unknown": 0},
+    }
+
+    _run_with_summary(module, tmp_path, scrape_summary)
+
+    output = capsys.readouterr().out
+    assert "\u8cc7\u6599\u4e0d\u5b8c\u6574" not in output
+
+
+def test_mixed_preexisting_and_new_successes_are_complete(tmp_path, capsys):
+    module = _load_module()
+    scrape_summary = {
+        "date": "2026-07-14",
+        "expected_data_date": "2026-07-14",
+        "is_trading_day": True,
+        "total_etfs": 3,
+        "preexisting_success": 1,
+        "moneydj_success": 1,
+        "official_success": 1,
+        "failed": 0,
+        "failures": [],
+        "moneydj_warnings": [],
+        "data_freshness": {"fresh": 3, "stale": 0, "unknown": 0},
+    }
+
+    _run_with_summary(module, tmp_path, scrape_summary)
 
     output = capsys.readouterr().out
     assert "\u8cc7\u6599\u4e0d\u5b8c\u6574" not in output
