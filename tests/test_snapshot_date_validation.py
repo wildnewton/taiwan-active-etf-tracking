@@ -143,6 +143,23 @@ def test_missing_non_stock_date_rejects_entire_snapshot():
     assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
 
 
+def test_validation_checks_rows_written_even_if_all_rows_omits_them():
+    result = scrape_result(
+        "00981A",
+        stock_dates=("2026/07/14",),
+        non_stock_dates=(None,),
+    )
+    result["all_rows"] = result["stock_rows"]
+
+    summary, _, replace_snapshot, insert_scrape_run = run_with_results({
+        "00981A": result,
+    })
+
+    replace_snapshot.assert_not_called()
+    assert summary["failed"] == 1
+    assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
+
+
 def test_valid_single_date_snapshot_keeps_existing_write_behavior():
     summary, _, replace_snapshot, insert_scrape_run = run_with_results({
         "00981A": scrape_result(
