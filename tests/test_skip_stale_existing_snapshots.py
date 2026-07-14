@@ -60,6 +60,8 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
             pipeline.DATA_AVAILABILITY_CUTOFF,
             tzinfo=pipeline.TAIPEI_TIMEZONE,
         )), \
+        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+        patch("pipeline.is_tw_trading_day", return_value=True), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
         patch(
@@ -99,6 +101,8 @@ def test_stale_result_without_existing_snapshot_writes_once():
             pipeline.DATA_AVAILABILITY_CUTOFF,
             tzinfo=pipeline.TAIPEI_TIMEZONE,
         )), \
+        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+        patch("pipeline.is_tw_trading_day", return_value=True), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
         patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \
@@ -124,6 +128,8 @@ def test_fresh_result_does_not_check_for_existing_stale_snapshot():
             pipeline.DATA_AVAILABILITY_CUTOFF,
             tzinfo=pipeline.TAIPEI_TIMEZONE,
         )), \
+        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+        patch("pipeline.is_tw_trading_day", return_value=True), \
         patch("pipeline._active_etfs_for_run", return_value=ETFS), \
         patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/23")), \
         patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \

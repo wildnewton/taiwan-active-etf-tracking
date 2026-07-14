@@ -97,6 +97,7 @@ async def run_selected_scrape_with_browser_async(
                     _browser_scrape_fn(browser_page),
                     run_date=run_date,
                     use_trading_calendar=False,
+                    skip_existing_snapshot=False,
                 )
             finally:
                 await context.close()
@@ -321,8 +322,6 @@ def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
     summary["skip_reason"] = "tw_stock_market_closed"
 
 
-
-
 def _should_skip_existing_expected_snapshot(
     expected_data_date: Optional[date],
     etf_code: str,
@@ -368,6 +367,8 @@ def _record_existing_snapshot_skip(
             status="skipped_existing_snapshot",
         )
     )
+
+
 def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
     rows = [
         *(result.get("stock_rows") or []),
