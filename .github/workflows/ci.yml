@@ -38,8 +38,5 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Run targeted snapshot date tests
-        run: PYTHONPATH=. pytest -q tests/test_snapshot_date_validation.py
-
       - name: Run tests
         run: PYTHONPATH=. pytest -q
