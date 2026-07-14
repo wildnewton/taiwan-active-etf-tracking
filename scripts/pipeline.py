@@ -80,6 +80,7 @@ async def run_selected_scrape_with_browser_async(
             _browser_scrape_fn(page),
             run_date=run_date,
             use_trading_calendar=False,
+            skip_existing_snapshot=False,
         )
 
     from playwright.async_api import async_playwright
@@ -139,6 +140,7 @@ def _run_scrape_sync(
     already_initialized: bool = False,
     use_trading_calendar: bool = True,
     run_at: datetime | None = None,
+    skip_existing_snapshot: bool = True,
 ) -> dict:
     if not already_initialized:
         init_db(db_path)
@@ -156,6 +158,18 @@ def _run_scrape_sync(
     freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
+        if _should_skip_existing_expected_snapshot(
+            expected_data_date,
+            etf_code,
+            skip_existing_snapshot,
+        ):
+            _record_existing_snapshot_skip(
+                summary,
+                etf_code,
+                run_date,
+                expected_data_date,
+            )
+            continue
         started_at = datetime.now()
         result = scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
@@ -171,6 +185,7 @@ async def _run_scrape_async(
     scrape_fn: AsyncScrapeFn,
     run_date=None,
     use_trading_calendar: bool = True,
+    skip_existing_snapshot: bool = True,
 ) -> dict:
     init_db(db_path)
     if run_date is None:
@@ -196,6 +211,18 @@ async def _run_scrape_async(
     freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
+        if _should_skip_existing_expected_snapshot(
+            expected_data_date,
+            etf_code,
+            skip_existing_snapshot,
+        ):
+            _record_existing_snapshot_skip(
+                summary,
+                etf_code,
+                run_date,
+                expected_data_date,
+            )
+            continue
         started_at = datetime.now()
         result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
@@ -271,6 +298,7 @@ def _new_summary(
         "official_success": 0,
         "failed": 0,
         "skipped_non_trading_day": 0,
+        "skipped_existing_snapshot": 0,
         "skipped_stale_existing": 0,
         "total_stock_rows": 0,
         "total_non_stock_rows": 0,
@@ -279,6 +307,7 @@ def _new_summary(
         "row_count_warnings": [],
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
+        "existing_snapshot_etfs": [],
         "stale_existing_etfs": [],
         "unknown_date_etfs": [],
         "data_date_min": None,
@@ -292,6 +321,53 @@ def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
     summary["skip_reason"] = "tw_stock_market_closed"
 
 
+
+
+def _should_skip_existing_expected_snapshot(
+    expected_data_date: Optional[date],
+    etf_code: str,
+    enabled: bool,
+) -> bool:
+    return (
+        enabled
+        and expected_data_date is not None
+        and snapshot_exists(expected_data_date, etf_code)
+    )
+
+
+def _record_existing_snapshot_skip(
+    summary: dict,
+    etf_code: str,
+    run_date: date,
+    expected_data_date: date,
+) -> None:
+    reason = "expected_snapshot_already_exists"
+    summary["skipped_existing_snapshot"] += 1
+    summary["existing_snapshot_etfs"].append({
+        "etf_code": etf_code,
+        "data_date": expected_data_date.isoformat(),
+        "reason": reason,
+    })
+    observed_at = datetime.now()
+    result = {
+        "ok": False,
+        "reason": reason,
+        "all_rows": [],
+        "stock_rows": [],
+        "non_stock_rows": [],
+        "source_type": "",
+    }
+    insert_scrape_run(
+        _build_scrape_run(
+            etf_code,
+            run_date,
+            expected_data_date,
+            observed_at,
+            observed_at,
+            result,
+            status="skipped_existing_snapshot",
+        )
+    )
 def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
     rows = [
         *(result.get("stock_rows") or []),
@@ -544,6 +620,8 @@ def _build_scrape_run(
     error = None
     if status == "skipped_stale_existing":
         error = "stale_snapshot_already_exists"
+    elif status == "skipped_existing_snapshot":
+        error = "expected_snapshot_already_exists"
     elif result["ok"] is not True:
         error = result.get("reason")
 
