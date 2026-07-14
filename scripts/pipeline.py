@@ -151,8 +151,7 @@ def _run_scrape_sync(
         started_at = datetime.now()
         result = scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
-        etf_data_date = _extract_data_date(result) if result["ok"] is True else None
-        _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)
+        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
 
     _finalize_data_date_range(summary)
     return summary
@@ -192,8 +191,7 @@ async def _run_scrape_async(
         started_at = datetime.now()
         result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
-        etf_data_date = _extract_data_date(result) if result["ok"] is True else None
-        _record_result(summary, etf_code, run_date, expected_data_date, etf_data_date, started_at, finished_at, result)
+        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)
 
     _finalize_data_date_range(summary)
     return summary
@@ -286,13 +284,25 @@ def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
     summary["skip_reason"] = "tw_stock_market_closed"
 
 
-def _extract_data_date(result: dict) -> Optional[date]:
-    rows = result.get("all_rows") or result.get("stock_rows") or []
+def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
+    rows = result.get("all_rows") or [
+        *(result.get("stock_rows") or []),
+        *(result.get("non_stock_rows") or []),
+    ]
+    if not rows:
+        return None, "missing_or_unparseable_source_date"
+
+    parsed_dates = []
     for row in rows:
         parsed = _parse_row_date(row.get("date"))
-        if parsed is not None:
-            return parsed
-    return None
+        if parsed is None:
+            return None, "missing_or_unparseable_source_date"
+        parsed_dates.append(parsed)
+
+    unique_dates = set(parsed_dates)
+    if len(unique_dates) != 1:
+        return None, "inconsistent_source_dates"
+    return parsed_dates[0], None
 
 
 def _record_result(
@@ -300,14 +310,39 @@ def _record_result(
     etf_code: str,
     run_date: date,
     expected_data_date: Optional[date],
-    data_date: Optional[date],
     started_at: datetime,
     finished_at: datetime,
     result: dict,
 ) -> None:
     should_record_scrape_run = True
     freshness_target_date = expected_data_date or run_date
+    data_date = None
+
     if result["ok"] is True:
+        data_date, date_error = _validate_snapshot_dates(result)
+        if date_error is not None:
+            failed_result = {**result, "ok": False, "reason": date_error}
+            _record_freshness(
+                summary,
+                etf_code,
+                freshness_target_date,
+                None,
+                result,
+                unknown_reason=date_error,
+            )
+            _record_failure(summary, etf_code, date_error)
+            insert_scrape_run(
+                _build_scrape_run(
+                    etf_code,
+                    run_date,
+                    None,
+                    started_at,
+                    finished_at,
+                    failed_result,
+                )
+            )
+            return
+
         if _should_skip_stale_existing_snapshot(data_date, freshness_target_date, etf_code):
             _record_freshness(summary, etf_code, freshness_target_date, data_date, result)
             _record_stale_existing(summary, etf_code, data_date, result)
@@ -324,9 +359,9 @@ def _record_result(
             )
             return
 
-        stock_rows = [_to_holding_row(row, run_date) for row in result["stock_rows"]]
+        stock_rows = [_to_holding_row(row) for row in result["stock_rows"]]
         non_stock_rows = [
-            _to_non_stock_asset_row(row, run_date) for row in result["non_stock_rows"]
+            _to_non_stock_asset_row(row) for row in result["non_stock_rows"]
         ]
         write_result = replace_daily_snapshot(stock_rows, non_stock_rows)
         should_record_scrape_run = write_result.get("inserted", False)
@@ -341,12 +376,16 @@ def _record_result(
         _record_freshness(summary, etf_code, freshness_target_date, data_date, result)
         _record_row_count_warning(summary, etf_code, result)
     else:
-        summary["failed"] += 1
-        summary["failures"].append({"etf_code": etf_code, "reason": result["reason"]})
-        _check_moneydj_warning(summary, etf_code)
+        _record_failure(summary, etf_code, result["reason"])
 
     if should_record_scrape_run:
         insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
+
+
+def _record_failure(summary: dict, etf_code: str, reason: str) -> None:
+    summary["failed"] += 1
+    summary["failures"].append({"etf_code": etf_code, "reason": reason})
+    _check_moneydj_warning(summary, etf_code)
 
 
 def _should_skip_stale_existing_snapshot(data_date: Optional[date], expected_data_date: date, etf_code: str) -> bool:
@@ -372,14 +411,21 @@ def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> Non
     summary["row_count_warnings"].append({"etf_code": etf_code, **warning})
 
 
-def _record_freshness(summary: dict, etf_code: str, target_date: date, data_date: Optional[date], result: dict) -> None:
+def _record_freshness(
+    summary: dict,
+    etf_code: str,
+    target_date: date,
+    data_date: Optional[date],
+    result: dict,
+    unknown_reason: str = "missing_or_unparseable_source_date",
+) -> None:
     source_type = result.get("source_type") or "unknown"
     if data_date is None:
         summary["data_freshness"]["unknown"] += 1
         summary["unknown_date_etfs"].append({
             "etf_code": etf_code,
             "source_type": source_type,
-            "reason": "missing_or_unparseable_source_date",
+            "reason": unknown_reason,
         })
         return
 
@@ -427,9 +473,16 @@ def _check_moneydj_warning(summary: dict, etf_code: str) -> None:
         })
 
 
-def _to_holding_row(row: dict, default_date: date) -> HoldingRow:
+def _require_row_date(row: dict) -> date:
+    parsed = _parse_row_date(row.get("date"))
+    if parsed is None:
+        raise ValueError(f"Validated snapshot row has no parseable date for {row.get('etf_code')}")
+    return parsed
+
+
+def _to_holding_row(row: dict) -> HoldingRow:
     return HoldingRow(
-        date=_parse_row_date(row.get("date")) or default_date,
+        date=_require_row_date(row),
         etf_code=row["etf_code"],
         asset_name=row["asset_name"],
         asset_type=row["asset_type"],
@@ -444,9 +497,9 @@ def _to_holding_row(row: dict, default_date: date) -> HoldingRow:
     )
 
 
-def _to_non_stock_asset_row(row: dict, default_date: date) -> NonStockAssetRow:
+def _to_non_stock_asset_row(row: dict) -> NonStockAssetRow:
     return NonStockAssetRow(
-        date=_parse_row_date(row.get("date")) or default_date,
+        date=_require_row_date(row),
         etf_code=row["etf_code"],
         asset_name=row["asset_name"],
         asset_type=row["asset_type"],
