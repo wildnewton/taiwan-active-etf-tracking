@@ -39,4 +39,13 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: |
+          set -o pipefail
+          PYTHONPATH=. pytest -q 2>&1 | tee pytest-output.txt
+
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr80-pytest-output
+          path: pytest-output.txt
