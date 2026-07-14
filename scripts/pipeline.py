@@ -288,7 +288,7 @@ def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str
     rows = [
         *(result.get("stock_rows") or []),
         *(result.get("non_stock_rows") or []),
-    ] or (result.get("all_rows") or [])
+    ]
     if not rows:
         return None, "missing_or_unparseable_source_date"
 
