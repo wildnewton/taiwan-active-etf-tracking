@@ -38,5 +38,24 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Run tests
-        run: PYTHONPATH=. pytest -q
+      - name: Run tests and capture output
+        id: pytest
+        continue-on-error: true
+        run: |
+          set +e
+          PYTHONPATH=. pytest -q > pytest-output.txt 2>&1
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat pytest-output.txt
+          exit "$status"
+
+      - name: Upload pytest output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-78-pytest-output
+          path: pytest-output.txt
+
+      - name: Fail when pytest failed
+        if: steps.pytest.outputs.status != '0'
+        run: exit 1
