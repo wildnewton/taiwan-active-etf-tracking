@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from unittest.mock import call, patch
+from unittest.mock import patch
 
 import db
 import pipeline
