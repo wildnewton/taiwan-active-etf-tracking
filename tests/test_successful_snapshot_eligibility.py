@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from unittest.mock import patch
 
 import db
 import pipeline
@@ -72,10 +73,10 @@ def test_before_cutoff_reuses_previous_trading_day_validated_snapshot(tmp_path):
     def must_not_scrape(etf_code, target_date):
         raise AssertionError(f"unexpected scrape for {etf_code} at {target_date}")
 
-    original = pipeline.latest_tw_trading_day_on_or_before
-    try:
-        pipeline.latest_tw_trading_day_on_or_before = lambda _: PREVIOUS_DATE
-        pipeline.is_tw_trading_day = lambda _: True
+    with patch(
+        "pipeline.latest_tw_trading_day_on_or_before",
+        return_value=PREVIOUS_DATE,
+    ), patch("pipeline.is_tw_trading_day", return_value=True):
         summary = pipeline._run_scrape_sync(
             str(db_path),
             [{"code": "00980A"}],
@@ -83,8 +84,6 @@ def test_before_cutoff_reuses_previous_trading_day_validated_snapshot(tmp_path):
             already_initialized=True,
             run_at=BEFORE_CUTOFF,
         )
-    finally:
-        pipeline.latest_tw_trading_day_on_or_before = original
 
     assert summary["expected_data_date"] == PREVIOUS_DATE.isoformat()
     assert summary["preexisting_success"] == 1
