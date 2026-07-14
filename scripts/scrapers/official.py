@@ -327,12 +327,17 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
             cell_texts = [(await cell.inner_text()).strip() for cell in cells]
             if len(cell_texts) >= 4:
                 table_data.append(cell_texts[:4])
-        body_text = await page.locator("body").inner_text()
-        date = _parse_uni_president_holdings_date(body_text)
+        pane_text = await _uni_president_portfolio_pane_text(table)
+        date = _parse_uni_president_holdings_date(pane_text)
         break
 
     if not table_data:
         return _failed_result(source_url, "Uni-President holdings table not found")
+    if not date:
+        return _failed_result(
+            source_url,
+            "Uni-President holdings date not found in portfolio pane",
+        )
 
     all_rows = dedupe_rows(parse_uni_president_table(table_data, etf_code, source_url, date))
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_PLAYWRIGHT)
@@ -397,6 +402,22 @@ def _is_capital_buyback_response(response) -> bool:
 
 def _is_nomura_assets_response(response) -> bool:
     return "getfundassets" in _response_url(response).lower()
+
+
+async def _uni_president_portfolio_pane_text(table) -> str:
+    """Return hidden text from the pane that owns the matched holdings table."""
+    try:
+        text = await table.evaluate(
+            """
+            (table) => {
+                const pane = table.closest('.tab-pane, [role="tabpanel"]');
+                return pane ? (pane.textContent || '') : '';
+            }
+            """
+        )
+    except Exception:
+        return ""
+    return text if isinstance(text, str) else ""
 
 
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -517,28 +538,14 @@ def _parse_date(soup: BeautifulSoup) -> str | None:
     return date_match.group(0) if date_match else None
 
 
-def _parse_uni_president_holdings_date(body_text: str) -> str | None:
-    """Extract a reliable Uni-President holdings date.
-
-    The ezmoney page can contain a page-render date before the actual portfolio
-    date. Do not fall back to the first global date because that can make stale
-    holdings look fresh.
-    """
+def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
+    """Extract the labeled holdings date from the matched portfolio pane."""
     labeled_date_match = re.search(
         r"(?:投資組合資料日期|投資組合日期|持股資料日期|股票投資明細資料日期|資料日期)\s*[:：]?\s*"
         r"(\d{4}/\d{2}/\d{2})",
-        body_text,
+        pane_text,
     )
-    if labeled_date_match:
-        return labeled_date_match.group(1)
-
-    if re.search(r"(?:頁面|網頁|系統)?(?:產製|產生|生成|更新|查詢)(?:時間|日期)", body_text):
-        return None
-
-    unique_dates = set(re.findall(r"\d{4}/\d{2}/\d{2}", body_text))
-    if len(unique_dates) == 1:
-        return next(iter(unique_dates))
-    return None
+    return labeled_date_match.group(1) if labeled_date_match else None
 
 
 def _parse_float(value: str) -> float | None:

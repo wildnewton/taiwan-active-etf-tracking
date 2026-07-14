@@ -764,9 +764,13 @@ async def test_scrape_mega_playwright_empty_page(mock_config):
 
 # -- scrape_uni_president_playwright --
 
-def _make_mock_table(rows_data):
-    """Create a mock table with rows containing cells."""
+def _make_mock_table(
+    rows_data,
+    pane_text="基金投資組合\n資料日期：2026/06/18\n股票投資明細",
+):
+    """Create a mock table with rows and its owning portfolio-pane text."""
     table = AsyncMock()
+    table.evaluate = AsyncMock(return_value=pane_text)
     mock_rows = []
     for i, row_cells in enumerate(rows_data):
         row = AsyncMock()
