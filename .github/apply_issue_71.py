@@ -1,0 +1,208 @@
+from pathlib import Path
+
+
+path = Path("scripts/pipeline.py")
+text = path.read_text(encoding="utf-8")
+
+if "skip_existing_snapshot: bool = True" in text:
+    print("issue 71 implementation already applied")
+    raise SystemExit(0)
+
+
+def replace_exact(old, new, label, expected_count=1):
+    global text
+    actual_count = text.count(old)
+    if actual_count != expected_count:
+        raise SystemExit(
+            f"{label}: expected {expected_count} anchors, found {actual_count}"
+        )
+    text = text.replace(old, new, expected_count)
+
+
+replace_exact(
+    "            run_date=run_date,\n"
+    "            use_trading_calendar=False,\n"
+    "        )",
+    "            run_date=run_date,\n"
+    "            use_trading_calendar=False,\n"
+    "            skip_existing_snapshot=False,\n"
+    "        )",
+    "selected scrape call sites",
+    expected_count=2,
+)
+
+replace_exact(
+    "    already_initialized: bool = False,\n"
+    "    use_trading_calendar: bool = True,\n"
+    "    run_at: datetime | None = None,\n"
+    ") -> dict:",
+    "    already_initialized: bool = False,\n"
+    "    use_trading_calendar: bool = True,\n"
+    "    run_at: datetime | None = None,\n"
+    "    skip_existing_snapshot: bool = True,\n"
+    ") -> dict:",
+    "sync runner signature",
+)
+
+replace_exact(
+    "    for etf in etfs:\n"
+    "        etf_code = etf[\"code\"]\n"
+    "        started_at = datetime.now()\n"
+    "        result = scrape_fn(etf_code, freshness_target_date)\n"
+    "        finished_at = datetime.now()\n"
+    "        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)",
+    "    for etf in etfs:\n"
+    "        etf_code = etf[\"code\"]\n"
+    "        if _should_skip_existing_expected_snapshot(\n"
+    "            expected_data_date,\n"
+    "            etf_code,\n"
+    "            skip_existing_snapshot,\n"
+    "        ):\n"
+    "            _record_existing_snapshot_skip(\n"
+    "                summary,\n"
+    "                etf_code,\n"
+    "                run_date,\n"
+    "                expected_data_date,\n"
+    "            )\n"
+    "            continue\n"
+    "        started_at = datetime.now()\n"
+    "        result = scrape_fn(etf_code, freshness_target_date)\n"
+    "        finished_at = datetime.now()\n"
+    "        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)",
+    "sync ETF loop",
+)
+
+replace_exact(
+    "    scrape_fn: AsyncScrapeFn,\n"
+    "    run_date=None,\n"
+    "    use_trading_calendar: bool = True,\n"
+    ") -> dict:",
+    "    scrape_fn: AsyncScrapeFn,\n"
+    "    run_date=None,\n"
+    "    use_trading_calendar: bool = True,\n"
+    "    skip_existing_snapshot: bool = True,\n"
+    ") -> dict:",
+    "async runner signature",
+)
+
+replace_exact(
+    "    for etf in etfs:\n"
+    "        etf_code = etf[\"code\"]\n"
+    "        started_at = datetime.now()\n"
+    "        result = await scrape_fn(etf_code, freshness_target_date)\n"
+    "        finished_at = datetime.now()\n"
+    "        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)",
+    "    for etf in etfs:\n"
+    "        etf_code = etf[\"code\"]\n"
+    "        if _should_skip_existing_expected_snapshot(\n"
+    "            expected_data_date,\n"
+    "            etf_code,\n"
+    "            skip_existing_snapshot,\n"
+    "        ):\n"
+    "            _record_existing_snapshot_skip(\n"
+    "                summary,\n"
+    "                etf_code,\n"
+    "                run_date,\n"
+    "                expected_data_date,\n"
+    "            )\n"
+    "            continue\n"
+    "        started_at = datetime.now()\n"
+    "        result = await scrape_fn(etf_code, freshness_target_date)\n"
+    "        finished_at = datetime.now()\n"
+    "        _record_result(summary, etf_code, run_date, expected_data_date, started_at, finished_at, result)",
+    "async ETF loop",
+)
+
+replace_exact(
+    "        \"skipped_non_trading_day\": 0,\n"
+    "        \"skipped_stale_existing\": 0,\n"
+    "        \"total_stock_rows\": 0,",
+    "        \"skipped_non_trading_day\": 0,\n"
+    "        \"skipped_existing_snapshot\": 0,\n"
+    "        \"skipped_stale_existing\": 0,\n"
+    "        \"total_stock_rows\": 0,",
+    "summary counters",
+)
+
+replace_exact(
+    "        \"stale_etfs\": [],\n"
+    "        \"stale_existing_etfs\": [],\n"
+    "        \"unknown_date_etfs\": [],",
+    "        \"stale_etfs\": [],\n"
+    "        \"existing_snapshot_etfs\": [],\n"
+    "        \"stale_existing_etfs\": [],\n"
+    "        \"unknown_date_etfs\": [],",
+    "summary lists",
+)
+
+replace_exact(
+    "def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:\n"
+    "    summary[\"skipped_non_trading_day\"] = skipped_count\n"
+    "    summary[\"skip_reason\"] = \"tw_stock_market_closed\"",
+    "def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:\n"
+    "    summary[\"skipped_non_trading_day\"] = skipped_count\n"
+    "    summary[\"skip_reason\"] = \"tw_stock_market_closed\"\n"
+    "\n"
+    "\n"
+    "def _should_skip_existing_expected_snapshot(\n"
+    "    expected_data_date: Optional[date],\n"
+    "    etf_code: str,\n"
+    "    enabled: bool,\n"
+    ") -> bool:\n"
+    "    return (\n"
+    "        enabled\n"
+    "        and expected_data_date is not None\n"
+    "        and snapshot_exists(expected_data_date, etf_code)\n"
+    "    )\n"
+    "\n"
+    "\n"
+    "def _record_existing_snapshot_skip(\n"
+    "    summary: dict,\n"
+    "    etf_code: str,\n"
+    "    run_date: date,\n"
+    "    expected_data_date: date,\n"
+    ") -> None:\n"
+    "    reason = \"expected_snapshot_already_exists\"\n"
+    "    summary[\"skipped_existing_snapshot\"] += 1\n"
+    "    summary[\"existing_snapshot_etfs\"].append({\n"
+    "        \"etf_code\": etf_code,\n"
+    "        \"data_date\": expected_data_date.isoformat(),\n"
+    "        \"reason\": reason,\n"
+    "    })\n"
+    "    observed_at = datetime.now()\n"
+    "    result = {\n"
+    "        \"ok\": False,\n"
+    "        \"reason\": reason,\n"
+    "        \"all_rows\": [],\n"
+    "        \"stock_rows\": [],\n"
+    "        \"non_stock_rows\": [],\n"
+    "        \"source_type\": \"\",\n"
+    "    }\n"
+    "    insert_scrape_run(\n"
+    "        _build_scrape_run(\n"
+    "            etf_code,\n"
+    "            run_date,\n"
+    "            expected_data_date,\n"
+    "            observed_at,\n"
+    "            observed_at,\n"
+    "            result,\n"
+    "            status=\"skipped_existing_snapshot\",\n"
+    "        )\n"
+    "    )",
+    "existing snapshot helpers",
+)
+
+replace_exact(
+    "    if status == \"skipped_stale_existing\":\n"
+    "        error = \"stale_snapshot_already_exists\"\n"
+    "    elif result[\"ok\"] is not True:",
+    "    if status == \"skipped_stale_existing\":\n"
+    "        error = \"stale_snapshot_already_exists\"\n"
+    "    elif status == \"skipped_existing_snapshot\":\n"
+    "        error = \"expected_snapshot_already_exists\"\n"
+    "    elif result[\"ok\"] is not True:",
+    "scrape run skip error",
+)
+
+path.write_text(text, encoding="utf-8")
+print("issue 71 implementation applied")
