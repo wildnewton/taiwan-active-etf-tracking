@@ -41,6 +41,7 @@ _ETF_UNIVERSE_COLUMN_MIGRATIONS = {
     "issuer": "TEXT",
     "market": "TEXT",
     "isin": "TEXT",
+    "listing_date": "TEXT",
     "retired": "INTEGER NOT NULL DEFAULT 0",
     "first_seen_date": "TEXT",
     "last_active_date": "TEXT",
@@ -58,6 +59,7 @@ _ETF_UNIVERSE_COLUMNS_SQL = """
     issuer TEXT,
     market TEXT,
     isin TEXT,
+    listing_date TEXT,
     retired INTEGER NOT NULL DEFAULT 0,
     first_seen_date TEXT,
     last_active_date TEXT,
@@ -169,7 +171,7 @@ def _rebuild_legacy_etf_universe(conn, existing):
     conn.execute(
         f"""
         INSERT INTO etf_universe (
-            code, name, issuer, market, isin, retired,
+            code, name, issuer, market, isin, listing_date, retired,
             first_seen_date, last_active_date, pending_retirement_since,
             official_url, official_method, official_logic,
             created_at, updated_at
@@ -180,6 +182,7 @@ def _rebuild_legacy_etf_universe(conn, existing):
             {_legacy_expr(existing, 'issuer')},
             {_legacy_expr(existing, 'market')},
             {_legacy_expr(existing, 'isin')},
+            {_legacy_expr(existing, 'listing_date')},
             COALESCE({_legacy_expr(existing, 'retired')}, 0),
             {_legacy_expr(existing, 'first_seen_date')},
             {_legacy_last_active_expr(existing)},

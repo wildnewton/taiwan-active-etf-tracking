@@ -59,6 +59,7 @@ def test_init_db_creates_etf_universe_table():
         "issuer",
         "market",
         "isin",
+        "listing_date",
         "retired",
         "first_seen_date",
         "last_active_date",
