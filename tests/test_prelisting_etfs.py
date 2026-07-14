@@ -106,6 +106,17 @@ def test_universe_persists_and_filters_listing_date():
     assert get_etf_config("00408A")["retired"] == 0
 
 
+def test_unknown_listing_date_remains_eligible():
+    db.init_db(":memory:")
+    seed_etf_universe_from_file(seen_date="2026-07-14")
+
+    active_codes = {
+        row["code"] for row in get_active_etfs(as_of_date="2026-07-14")
+    }
+
+    assert "00980A" in active_codes
+
+
 def test_sync_pipeline_uses_same_taipei_run_date_for_universe(tmp_path):
     db_path = str(tmp_path / "universe.sqlite")
     db.init_db(db_path)
