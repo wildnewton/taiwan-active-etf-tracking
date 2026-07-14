@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -41,9 +42,16 @@ class ListedSecurity:
     code: str
     name: str
     isin: str | None
+    listing_date: str | None = None
 
     def as_dict(self) -> dict:
-        return {"market": self.market, "code": self.code, "name": self.name, "isin": self.isin}
+        return {
+            "market": self.market,
+            "code": self.code,
+            "name": self.name,
+            "isin": self.isin,
+            "listing_date": self.listing_date,
+        }
 
 
 @dataclass(frozen=True)
@@ -56,6 +64,18 @@ class DiscoveryResult:
     @property
     def discovery_complete(self) -> bool:
         return not self.failed_markets and sorted(self.completed_markets) == sorted(self.expected_markets)
+
+
+def _normalize_listing_date(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = value.strip()
+    for fmt in ("%Y/%m/%d", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
 
 
 def fetch_security_master(source: dict[str, str], timeout: int = 30) -> list[ListedSecurity]:
@@ -81,7 +101,15 @@ def parse_security_master(html: str, market: str) -> list[ListedSecurity]:
         if not match:
             continue
         code, name = match.groups()
-        out.append(ListedSecurity(market=market, code=code.strip(), name=name.strip(), isin=cells[1].strip() or None))
+        out.append(
+            ListedSecurity(
+                market=market,
+                code=code.strip(),
+                name=name.strip(),
+                isin=cells[1].strip() or None,
+                listing_date=_normalize_listing_date(cells[2] if len(cells) > 2 else None),
+            )
+        )
     return out
 
 
