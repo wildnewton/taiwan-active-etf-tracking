@@ -29,6 +29,7 @@ TWSE_URL_TEMPLATE = (
 )
 
 
+
 def get_official_config(etf_code: str) -> dict:
     etf = get_etf_config(etf_code.upper())
     internal_ids = _parse_official_logic(etf.get("official_logic", ""))
@@ -42,6 +43,7 @@ def get_official_config(etf_code: str) -> dict:
         "internal_id": next(iter(internal_ids.values()), None),
         "internal_ids": internal_ids,
     }
+
 
 
 def fetch_static(url: str, timeout: int = 30) -> str:
@@ -67,12 +69,15 @@ def fetch_static(url: str, timeout: int = 30) -> str:
 
 # Static parsers
 
+
 def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
 
+
 def parse_taishin(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
+
 
 
 def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -80,6 +85,7 @@ def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
 
 
 # API / text parsers
+
 
 def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list[dict]:
     """Parse Capital's buyback API response.
@@ -122,6 +128,7 @@ def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list
     return rows
 
 
+
 def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
     data = json.loads(assets_json)
     fund_data = data.get("Entries", {}).get("Data", {})
@@ -155,6 +162,7 @@ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[d
     return rows
 
 
+
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
         match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
@@ -176,6 +184,7 @@ def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | 
             continue
         rows.append(_row(etf_code, code, name, shares, weight, source_url, date, EXTRACTION_METHOD_PLAYWRIGHT))
     return rows
+
 
 
 def parse_uni_president_table(
@@ -209,6 +218,7 @@ def parse_uni_president_table(
 
 
 # Browser / API scraper functions
+
 
 async def scrape_capital_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
@@ -327,18 +337,24 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
             cell_texts = [(await cell.inner_text()).strip() for cell in cells]
             if len(cell_texts) >= 4:
                 table_data.append(cell_texts[:4])
-        body_text = await page.locator("body").inner_text()
-        date = _parse_uni_president_holdings_date(body_text)
+        pane_text = await _uni_president_portfolio_pane_text(table)
+        date = _parse_uni_president_holdings_date(pane_text)
         break
 
     if not table_data:
         return _failed_result(source_url, "Uni-President holdings table not found")
+    if not date:
+        return _failed_result(
+            source_url,
+            "Uni-President holdings date not found in portfolio pane",
+        )
 
     all_rows = dedupe_rows(parse_uni_president_table(table_data, etf_code, source_url, date))
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_PLAYWRIGHT)
 
 
 # Unified entry points
+
 
 def scrape_official_static(etf_code: str) -> dict:
     etf_code = etf_code.upper()
@@ -385,9 +401,11 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
 
 # Internal helpers
 
+
 def _response_url(response) -> str:
     url = getattr(response, "url", "")
     return url if isinstance(url, str) else ""
+
 
 
 def _is_capital_buyback_response(response) -> bool:
@@ -395,8 +413,26 @@ def _is_capital_buyback_response(response) -> bool:
     return "capitalfund" in url and "buyback" in url
 
 
+
 def _is_nomura_assets_response(response) -> bool:
     return "getfundassets" in _response_url(response).lower()
+
+
+async def _uni_president_portfolio_pane_text(table) -> str:
+    """Return hidden text from the pane that owns the matched holdings table."""
+    try:
+        text = await table.evaluate(
+            """
+            (table) => {
+                const pane = table.closest('.tab-pane, [role="tabpanel"]');
+                return pane ? (pane.textContent || '') : '';
+            }
+            """
+        )
+    except Exception:
+        return ""
+    return text if isinstance(text, str) else ""
+
 
 
 def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -406,6 +442,7 @@ def _parse_official_table(html: str, etf_code: str, source_url: str) -> list[dic
     for table in soup.find_all("table"):
         rows.extend(_parse_table_rows(table, etf_code.upper(), source_url, date))
     return rows
+
 
 
 def _parse_table_rows(table, etf_code: str, source_url: str, date: str | None) -> list[dict]:
@@ -434,6 +471,7 @@ def _parse_table_rows(table, etf_code: str, source_url: str, date: str | None) -
     return rows
 
 
+
 def _extract_cells(cells: list[str], header_map: dict) -> tuple | None:
     if header_map:
         try:
@@ -455,6 +493,7 @@ def _extract_cells(cells: list[str], header_map: dict) -> tuple | None:
     return code_match.group(1), stock_name, shares, weight_pct
 
 
+
 def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date, method):
     asset_name = f"{stock_name}({stock_code}.TW)"
     classification = classify_asset(asset_name)
@@ -473,6 +512,7 @@ def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date,
     }
 
 
+
 def _build_header_map(headers: list[str]) -> dict:
     field_patterns = {
         "code": ("股票代號", "股票代碼", "證券代號", "代號", "code"),
@@ -489,20 +529,24 @@ def _build_header_map(headers: list[str]) -> dict:
     return header_map
 
 
+
 def _looks_like_header(cells) -> bool:
     text = " ".join(cell.get_text(" ", strip=True) for cell in cells)
     header_terms = ("股票", "證券", "代號", "名稱", "股數", "權重", "比例", "code", "name")
     return any(term in text.lower() for term in header_terms)
 
 
+
 def _normalize_header(value: str) -> str:
     return re.sub(r"\s+", "", value).lower()
+
 
 
 def _normalize_date(value):
     if not value:
         return None
     return str(value).replace("-", "/")
+
 
 
 def _parse_date(soup: BeautifulSoup) -> str | None:
@@ -517,28 +561,16 @@ def _parse_date(soup: BeautifulSoup) -> str | None:
     return date_match.group(0) if date_match else None
 
 
-def _parse_uni_president_holdings_date(body_text: str) -> str | None:
-    """Extract a reliable Uni-President holdings date.
 
-    The ezmoney page can contain a page-render date before the actual portfolio
-    date. Do not fall back to the first global date because that can make stale
-    holdings look fresh.
-    """
+def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
+    """Extract the labeled holdings date from the matched portfolio pane."""
     labeled_date_match = re.search(
         r"(?:投資組合資料日期|投資組合日期|持股資料日期|股票投資明細資料日期|資料日期)\s*[:：]?\s*"
         r"(\d{4}/\d{2}/\d{2})",
-        body_text,
+        pane_text,
     )
-    if labeled_date_match:
-        return labeled_date_match.group(1)
+    return labeled_date_match.group(1) if labeled_date_match else None
 
-    if re.search(r"(?:頁面|網頁|系統)?(?:產製|產生|生成|更新|查詢)(?:時間|日期)", body_text):
-        return None
-
-    unique_dates = set(re.findall(r"\d{4}/\d{2}/\d{2}", body_text))
-    if len(unique_dates) == 1:
-        return next(iter(unique_dates))
-    return None
 
 
 def _parse_float(value: str) -> float | None:
@@ -546,6 +578,7 @@ def _parse_float(value: str) -> float | None:
     if not cleaned or cleaned.upper() in {"-", "--", "N/A", "NA"}:
         return None
     return float(cleaned)
+
 
 
 def _parse_number(value: str) -> int | float | None:
@@ -556,12 +589,14 @@ def _parse_number(value: str) -> int | float | None:
     return int(number) if number.is_integer() else number
 
 
+
 def _parser_for_issuer(issuer: str):
     parsers = {"Fubon": parse_fubon, "Taishin": parse_taishin, "TWSE": parse_twse}
     try:
         return parsers[issuer]
     except KeyError as exc:
         raise ValueError(f"No static official parser for issuer: {issuer}") from exc
+
 
 
 def _parse_official_logic(logic: str) -> dict:
@@ -574,12 +609,15 @@ def _parse_official_logic(logic: str) -> dict:
     return internal_ids
 
 
+
 def _build_twse_url(etf_code: str) -> str:
     return TWSE_URL_TEMPLATE.format(code=etf_code.upper())
 
 
+
 def _sum_weights(rows: list) -> float:
     return round(sum(row["weight_pct"] for row in rows if row.get("weight_pct") is not None), 2)
+
 
 
 def _validate_official_rows(rows: list) -> tuple[bool, str]:
@@ -605,6 +643,7 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
     return True, "ok"
 
 
+
 def _failed_result(source_url: str, reason: str) -> dict:
     return {
         "ok": False,
@@ -617,6 +656,7 @@ def _failed_result(source_url: str, reason: str) -> dict:
         "total_weight_all_rows": 0.0,
         "total_weight_stock_rows": 0.0,
     }
+
 
 
 def _build_result(all_rows: list, source_url: str, extraction_method: str) -> dict:
