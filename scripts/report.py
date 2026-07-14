@@ -722,7 +722,7 @@ def _get_consensus_stocks(data_date, min_etfs=15):
         group["etfs"].add(row["etf_code"])
         group["weights"].append(row["weight_pct"] or 0.0)
 
-    active_count = get_active_etf_count()
+    active_count = get_active_etf_count(as_of_date=data_date)
     rows = []
     for group in stock_groups.values():
         etf_count = len(group["etfs"])
@@ -817,7 +817,7 @@ def _get_data_warnings(data_date):
     warnings = []
     try:
         actual_count = _get_actual_etf_count(data_date)
-        expected_count = get_active_etf_count()
+        expected_count = get_active_etf_count(as_of_date=data_date)
         if expected_count and actual_count < expected_count:
             warnings.append(
                 f"⚠️ 資料不完整: 預期 {expected_count} 檔 ETF，"
