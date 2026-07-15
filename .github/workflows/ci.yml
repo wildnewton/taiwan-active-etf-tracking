@@ -122,7 +122,7 @@ jobs:
           YAML
           git rm scripts/apply_issue83_review_fixes.py
           rm -f issue83-targeted.log issue83-targeted.status issue83-review-coverage.txt issue83-review-coverage.json
-          git add scripts/scraper.py scripts/pipeline.py tests/test_bounded_async_scraping.py .github/workflows/ci.yml
+          git add scripts/scraper.py scripts/pipeline.py tests/test_bounded_async_scraping.py tests/test_async_scrape_review_contract.py tests/test_scraper_freshness_target.py .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "fix: complete non-blocking async scrape lifecycle"
