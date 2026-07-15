@@ -40,6 +40,7 @@ jobs:
         run: |
           PYTHONPATH=. pytest -q \
             tests/test_bounded_async_scraping.py \
+            tests/test_scraper.py \
             tests/test_preexisting_successful_snapshots.py \
             tests/test_weight_validation_warnings.py \
             tests/test_scraper_freshness_target.py \
@@ -106,6 +107,7 @@ jobs:
           git add \
             scripts/scraper.py \
             scripts/pipeline.py \
+            tests/test_scraper.py \
             tests/test_preexisting_successful_snapshots.py \
             tests/test_weight_validation_warnings.py \
             tests/test_scraper_freshness_target.py \
