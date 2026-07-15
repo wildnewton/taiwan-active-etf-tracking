@@ -470,16 +470,20 @@ def _insert_non_stock_assets(conn, rows):
 
 def insert_scrape_run(run):
     row = _row_dict(run)
+    status_priority = {
+        "failed": 0,
+        "skipped_stale_existing": 1,
+        "stale": 2,
+        "success": 3,
+    }
     with _connect() as conn:
-        if row["status"] != "success":
-            existing = conn.execute(
-                "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
-                (row["date"], row["etf_code"]),
-            ).fetchone()
-            if existing and existing[0] == "success":
-                return
+        existing = conn.execute(
+            "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
+            (row["date"], row["etf_code"]),
+        ).fetchone()
+        if existing and status_priority.get(row["status"], 0) < status_priority.get(existing[0], 0):
+            return
         conn.execute("INSERT OR REPLACE INTO etf_scrape_runs (date, data_date, etf_code, status, primary_source, primary_success, moneydj_browser_used, official_fallback_used, official_success, rows_extracted, stock_rows_extracted, non_stock_rows_extracted, total_weight_all_rows, total_weight_stock_rows, source_url, error, started_at, finished_at) VALUES (:date, :data_date, :etf_code, :status, :primary_source, :primary_success, :moneydj_browser_used, :official_fallback_used, :official_success, :rows_extracted, :stock_rows_extracted, :non_stock_rows_extracted, :total_weight_all_rows, :total_weight_stock_rows, :source_url, :error, :started_at, :finished_at)", row)
-
 
 def get_last_scrape_date(etf_code):
     with _connect() as conn:

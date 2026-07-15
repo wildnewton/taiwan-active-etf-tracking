@@ -511,6 +511,22 @@ def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str
     return parsed_dates[0], None
 
 
+
+def _classify_scrape_status(
+    result: dict,
+    data_date: Optional[date],
+    expected_data_date: date,
+) -> str:
+    """Return the final persisted status for one scrape result."""
+    if result["ok"] is not True or data_date is None:
+        return "failed"
+    if data_date < expected_data_date:
+        return "stale"
+    if data_date == expected_data_date:
+        return "success"
+    return "failed"
+
+
 def _record_result(
     summary: dict,
     etf_code: str,
@@ -523,11 +539,13 @@ def _record_result(
     should_record_scrape_run = True
     freshness_target_date = expected_data_date or run_date
     data_date = None
+    final_result = result
+    final_status = "failed"
 
     if result["ok"] is True:
         data_date, date_error = _validate_snapshot_dates(result)
         if date_error is not None:
-            failed_result = {**result, "ok": False, "reason": date_error}
+            final_result = {**result, "ok": False, "reason": date_error}
             _record_freshness(
                 summary,
                 etf_code,
@@ -550,14 +568,61 @@ def _record_result(
                     None,
                     started_at,
                     finished_at,
-                    failed_result,
+                    final_result,
+                    status="failed",
                 )
             )
             return
 
+        final_status = _classify_scrape_status(
+            result,
+            data_date,
+            freshness_target_date,
+        )
         _record_weight_warning(summary, etf_code, result)
-        if _should_skip_stale_existing_snapshot(data_date, freshness_target_date, etf_code):
-            _record_freshness(summary, etf_code, freshness_target_date, data_date, result)
+
+        if final_status == "failed":
+            reason = "source_date_after_run_date"
+            final_result = {**result, "ok": False, "reason": reason}
+            _record_freshness(
+                summary,
+                etf_code,
+                freshness_target_date,
+                data_date,
+                result,
+            )
+            _record_failure(
+                summary,
+                etf_code,
+                reason,
+                run_moneydj_diagnostic=result.get("source_type")
+                not in {"moneydj_primary", "moneydj_browser"},
+            )
+            insert_scrape_run(
+                _build_scrape_run(
+                    etf_code,
+                    run_date,
+                    data_date,
+                    started_at,
+                    finished_at,
+                    final_result,
+                    status=final_status,
+                )
+            )
+            return
+
+        if final_status == "stale" and _should_skip_stale_existing_snapshot(
+            data_date,
+            freshness_target_date,
+            etf_code,
+        ):
+            _record_freshness(
+                summary,
+                etf_code,
+                freshness_target_date,
+                data_date,
+                result,
+            )
             _record_stale_existing(summary, etf_code, data_date, result)
             insert_scrape_run(
                 _build_scrape_run(
@@ -586,14 +651,29 @@ def _record_result(
         elif result["source_type"] == "official_fallback":
             summary["official_success"] += 1
             _check_moneydj_warning(summary, etf_code)
-        _record_freshness(summary, etf_code, freshness_target_date, data_date, result)
+        _record_freshness(
+            summary,
+            etf_code,
+            freshness_target_date,
+            data_date,
+            result,
+        )
         _record_row_count_warning(summary, etf_code, result)
     else:
         _record_failure(summary, etf_code, result["reason"])
 
     if should_record_scrape_run:
-        insert_scrape_run(_build_scrape_run(etf_code, run_date, data_date, started_at, finished_at, result))
-
+        insert_scrape_run(
+            _build_scrape_run(
+                etf_code,
+                run_date,
+                data_date,
+                started_at,
+                finished_at,
+                final_result,
+                status=final_status,
+            )
+        )
 
 def _record_failure(
     summary: dict,
@@ -655,10 +735,19 @@ def _record_freshness(
         })
         return
 
+    if data_date > target_date:
+        summary["data_freshness"]["unknown"] += 1
+        summary["unknown_date_etfs"].append({
+            "etf_code": etf_code,
+            "source_type": source_type,
+            "reason": "source_date_after_run_date",
+        })
+        return
+
     summary["_known_data_dates"].append(data_date)
     if data_date == target_date:
         summary["data_freshness"]["fresh"] += 1
-    elif data_date < target_date:
+    else:
         summary["data_freshness"]["stale"] += 1
         summary["stale_etfs"].append({
             "etf_code": etf_code,
@@ -666,14 +755,6 @@ def _record_freshness(
             "source_type": source_type,
             "reason": "source_date_before_run_date",
         })
-    else:
-        summary["data_freshness"]["unknown"] += 1
-        summary["unknown_date_etfs"].append({
-            "etf_code": etf_code,
-            "source_type": source_type,
-            "reason": "source_date_after_run_date",
-        })
-
 
 def _finalize_data_date_range(summary: dict) -> None:
     known_dates = summary.pop("_known_data_dates", [])
@@ -747,22 +828,25 @@ def _build_scrape_run(
     status: str | None = None,
 ) -> ScrapeRun:
     source_type = result.get("source_type", "")
+    final_status = status or ("success" if result["ok"] else "failed")
+    usable_result = result["ok"] is True and final_status in {"success", "stale"}
+
     error = None
-    if status == "skipped_stale_existing":
+    if final_status == "skipped_stale_existing":
         error = "stale_snapshot_already_exists"
-    elif result["ok"] is not True:
+    elif final_status == "failed":
         error = result.get("reason")
 
     return ScrapeRun(
         date=scrape_date,
         data_date=data_date,
         etf_code=etf_code,
-        status=status or ("success" if result["ok"] else "failed"),
+        status=final_status,
         primary_source=source_type or "none",
-        primary_success=result["ok"] is True and source_type == "moneydj_primary" and status is None,
-        moneydj_browser_used=result["ok"] is True and source_type == "moneydj_browser" and status is None,
-        official_fallback_used=result["ok"] is True and source_type == "official_fallback" and status is None,
-        official_success=result["ok"] is True and source_type == "official_fallback" and status is None,
+        primary_success=usable_result and source_type == "moneydj_primary",
+        moneydj_browser_used=usable_result and source_type == "moneydj_browser",
+        official_fallback_used=usable_result and source_type == "official_fallback",
+        official_success=usable_result and source_type == "official_fallback",
         rows_extracted=len(result.get("all_rows", [])),
         stock_rows_extracted=len(result.get("stock_rows", [])),
         non_stock_rows_extracted=len(result.get("non_stock_rows", [])),
@@ -773,7 +857,6 @@ def _build_scrape_run(
         started_at=started_at,
         finished_at=finished_at,
     )
-
 
 def _parse_row_date(value) -> Optional[date]:
     if isinstance(value, date):

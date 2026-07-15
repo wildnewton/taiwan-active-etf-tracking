@@ -58,11 +58,11 @@ def _seed_retry_rows():
     _seed_etf("00403A")
     _seed_etf("00404A")
     _seed_etf("00405A", retired=1)
-    _insert_scrape_run("00401A", data_date="2026-07-06")
+    _insert_scrape_run("00401A", data_date="2026-07-06", status="stale")
     _insert_scrape_run("00402A", data_date="2026-07-07", status="success")
     _insert_scrape_run("00403A", data_date="2026-07-06", status="failed")
     _insert_scrape_run("00404A", data_date=None)
-    _insert_scrape_run("00405A", data_date="2026-07-06")
+    _insert_scrape_run("00405A", data_date="2026-07-06", status="stale")
 
 
 def test_get_stale_scrape_runs_selects_only_active_retry_eligible_rows():
@@ -78,8 +78,8 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
     db_path = _init_db(tmp_path)
     _seed_etf("00401A")
     _seed_etf("00402A")
-    _insert_scrape_run("00401A", data_date="2026-07-06")
-    _insert_scrape_run("00402A", data_date="2026-07-06")
+    _insert_scrape_run("00401A", data_date="2026-07-06", status="stale")
+    _insert_scrape_run("00402A", data_date="2026-07-06", status="stale")
 
     retry_summary = {
         "date": "2026-07-07",
@@ -114,7 +114,7 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
 def test_retry_stale_etfs_failed_retry_does_not_count_as_improvement(tmp_path):
     db_path = _init_db(tmp_path)
     _seed_etf("00401A")
-    _insert_scrape_run("00401A", data_date="2026-07-06")
+    _insert_scrape_run("00401A", data_date="2026-07-06", status="stale")
 
     retry_summary = {
         "date": "2026-07-07",
@@ -140,7 +140,7 @@ def test_retry_stale_etfs_failed_retry_does_not_count_as_improvement(tmp_path):
 def test_retry_stale_etfs_does_not_overwrite_when_stale_count_does_not_drop(tmp_path):
     db_path = _init_db(tmp_path)
     _seed_etf("00401A")
-    _insert_scrape_run("00401A", data_date="2026-07-06")
+    _insert_scrape_run("00401A", data_date="2026-07-06", status="stale")
 
     retry_summary = {
         "date": "2026-07-07",

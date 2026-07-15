@@ -18,7 +18,7 @@ from traction_analysis import generate_traction_report
 
 
 def get_stale_scrape_runs(run_date: str) -> list[dict]:
-    """Return active ETFs whose successful scrape rows are older than run_date."""
+    """Return active ETFs whose run still needs a same-date freshness retry."""
     with db._connect() as conn:
         rows = conn.execute(
             """
@@ -26,13 +26,12 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
             FROM etf_scrape_runs sr
             JOIN etf_universe u ON sr.etf_code = u.code
             WHERE sr.date = ?
-              AND sr.status = 'success'
+              AND sr.status IN ('stale', 'skipped_stale_existing')
               AND sr.data_date IS NOT NULL
-              AND sr.data_date < ?
               AND u.retired = 0
             ORDER BY sr.etf_code
             """,
-            (run_date, run_date),
+            (run_date,),
         ).fetchall()
     return [{"etf_code": row[0], "data_date": row[1]} for row in rows]
 
