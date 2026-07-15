@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import db
 import pipeline
+import pytest
 from retry_stale_scrapes import get_stale_scrape_runs
 
 
@@ -218,21 +219,58 @@ def _seed_run(code: str, *, status: str, data_date: str | None, retired: int = 0
         )
 
 
-def test_retry_query_selects_status_stale_only():
+def _fetch_status(code: str) -> tuple[str, str | None]:
+    with db._connect() as conn:
+        return conn.execute(
+            """
+            SELECT status, data_date
+            FROM etf_scrape_runs
+            WHERE date = ? AND etf_code = ?
+            """,
+            (RUN_DATE.isoformat(), code),
+        ).fetchone()
+
+
+def test_retry_query_selects_retry_eligible_stale_statuses():
     db.init_db(":memory:")
     _seed_run("00401A", status="stale", data_date=STALE_DATE.isoformat())
-    _seed_run("00402A", status="success", data_date=STALE_DATE.isoformat())
-    _seed_run("00403A", status="failed", data_date=STALE_DATE.isoformat())
     _seed_run(
-        "00404A",
+        "00402A",
+        status="skipped_stale_existing",
+        data_date=STALE_DATE.isoformat(),
+    )
+    _seed_run("00403A", status="success", data_date=STALE_DATE.isoformat())
+    _seed_run("00404A", status="failed", data_date=STALE_DATE.isoformat())
+    _seed_run(
+        "00405A",
         status="stale",
         data_date=STALE_DATE.isoformat(),
         retired=1,
     )
 
     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
-        {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()}
+        {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
+        {"etf_code": "00402A", "data_date": STALE_DATE.isoformat()},
     ]
+
+
+@pytest.mark.parametrize("existing_status", ["stale", "skipped_stale_existing"])
+def test_failed_retry_preserves_retry_eligible_stale_run(existing_status):
+    db.init_db(":memory:")
+    _seed_run(ETF_CODE, status=existing_status, data_date=STALE_DATE.isoformat())
+
+    failed_run = pipeline._build_scrape_run(
+        ETF_CODE,
+        RUN_DATE,
+        None,
+        STARTED_AT,
+        FINISHED_AT,
+        _failure("retry failed"),
+        status="failed",
+    )
+    db.insert_scrape_run(failed_run)
+
+    assert _fetch_status(ETF_CODE) == (existing_status, STALE_DATE.isoformat())
 
 
 def test_same_day_fresh_retry_replaces_stale_scrape_run():
@@ -257,14 +295,4 @@ def test_same_day_fresh_retry_replaces_stale_scrape_run():
             _success(RUN_DATE),
         )
 
-    with db._connect() as conn:
-        row = conn.execute(
-            """
-            SELECT status, data_date
-            FROM etf_scrape_runs
-            WHERE date = ? AND etf_code = ?
-            """,
-            (RUN_DATE.isoformat(), ETF_CODE),
-        ).fetchone()
-
-    assert row == ("success", RUN_DATE.isoformat())
+    assert _fetch_status(ETF_CODE) == ("success", RUN_DATE.isoformat())
