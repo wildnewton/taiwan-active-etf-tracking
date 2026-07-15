@@ -66,8 +66,8 @@ def test_retry_selects_usable_rows_with_data_older_than_run_date():
     for code in ("OLD_SUCCESS", "STALE", "FRESH", "FAILED", "RETIRED"):
         _seed_etf(code, retired=1 if code == "RETIRED" else 0)
 
-    # Cutoff edge case: the morning row remains persisted as success even though
-    # its data date is older than the report date.
+    # Consumer-side cutoff compatibility: a morning success may still carry the
+    # previous data date after the afternoon expectation has advanced.
     _seed_scrape_run("OLD_SUCCESS", data_date=PREVIOUS_DATE, status="success")
     _seed_scrape_run("STALE", data_date=PREVIOUS_DATE, status="stale")
     _seed_scrape_run("FRESH", data_date=RUN_DATE, status="success")
