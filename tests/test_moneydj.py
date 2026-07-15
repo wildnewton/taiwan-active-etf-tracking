@@ -241,7 +241,7 @@ def test_scrape_moneydj_with_incomplete_fixture_returns_warning():
     assert result["reason"] == "ok"
     assert result["weight_warning"] == {
         "reason": "total_weight_below_expected_range",
-        "total_weight_all_rows": expected_weight,
+        "source_total_weight_all_rows": expected_weight,
         "minimum_expected_weight": 70.0,
         "maximum_expected_weight": 140.0,
     }

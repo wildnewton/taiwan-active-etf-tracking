@@ -1,13 +1,19 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
+      - master
+      - "milestone-*"
+      - "ci-*"
   pull_request:
     branches:
       - main
       - master
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -15,12 +21,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out PR branch
+      - name: Check out repository
         uses: actions/checkout@v4
         with:
-          ref: fix/82-weight-validation-warnings
-          fetch-depth: 0
-          persist-credentials: true
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,27 +38,5 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Apply warning contract cleanup
-        run: python tools/apply_issue82_warning_cleanup.py
-
-      - name: Run targeted tests
-        run: |
-          PYTHONPATH=. pytest -q \
-            tests/test_weight_warning_contract_cleanup.py \
-            tests/test_weight_validation_warnings.py \
-            tests/test_weight_warning_edge_cases.py \
-            tests/test_moneydj.py \
-            tests/test_moneydj_browser.py \
-            tests/test_min_weight_gate.py \
-            tests/test_row_count_validation.py
-
-      - name: Run full suite
+      - name: Run tests
         run: PYTHONPATH=. pytest -q
-
-      - name: Commit GREEN cleanup
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add scripts/scrapers/moneydj.py tests/test_weight_validation_warnings.py tests/test_moneydj.py tests/test_moneydj_browser.py tests/test_weight_warning_edge_cases.py tests/test_weight_warning_contract_cleanup.py .github/workflows/ci.yml tools/apply_issue82_warning_cleanup.py
-          git commit -m "refactor: clarify weight warning source semantics"
-          git push origin HEAD:fix/82-weight-validation-warnings

@@ -157,7 +157,7 @@ def test_scrape_moneydj_browser_surfaces_weight_warning(
     assert result["reason"] == "ok"
     assert result["weight_warning"] == {
         "reason": expected_reason,
-        "total_weight_all_rows": expected_total,
+        "source_total_weight_all_rows": expected_total,
         "minimum_expected_weight": 70.0,
         "maximum_expected_weight": 140.0,
     }

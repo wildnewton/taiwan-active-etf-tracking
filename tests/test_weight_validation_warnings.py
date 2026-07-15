@@ -36,19 +36,19 @@ def make_rows(total_weight: float, row_date: str = "2026/07/15") -> list[dict]:
 def make_result(total_weight: float, *, source_type: str = "moneydj_primary") -> dict:
     rows = make_rows(total_weight)
     warning = None
-    if total_weight < moneydj.REQUIRED_MIN_TOTAL_WEIGHT:
+    if total_weight < moneydj.WARNING_MIN_TOTAL_WEIGHT:
         warning = {
             "reason": "total_weight_below_expected_range",
-            "total_weight_all_rows": round(total_weight, 2),
-            "minimum_expected_weight": moneydj.REQUIRED_MIN_TOTAL_WEIGHT,
-            "maximum_expected_weight": moneydj.REQUIRED_MAX_TOTAL_WEIGHT,
+            "source_total_weight_all_rows": round(total_weight, 2),
+            "minimum_expected_weight": moneydj.WARNING_MIN_TOTAL_WEIGHT,
+            "maximum_expected_weight": moneydj.WARNING_MAX_TOTAL_WEIGHT,
         }
-    elif total_weight > moneydj.REQUIRED_MAX_TOTAL_WEIGHT:
+    elif total_weight > moneydj.WARNING_MAX_TOTAL_WEIGHT:
         warning = {
             "reason": "total_weight_above_expected_range",
-            "total_weight_all_rows": round(total_weight, 2),
-            "minimum_expected_weight": moneydj.REQUIRED_MIN_TOTAL_WEIGHT,
-            "maximum_expected_weight": moneydj.REQUIRED_MAX_TOTAL_WEIGHT,
+            "source_total_weight_all_rows": round(total_weight, 2),
+            "minimum_expected_weight": moneydj.WARNING_MIN_TOTAL_WEIGHT,
+            "maximum_expected_weight": moneydj.WARNING_MAX_TOTAL_WEIGHT,
         }
     result = {
         "ok": True,
@@ -90,7 +90,7 @@ def test_weight_threshold_breach_is_warning_not_failure(total_weight, expected_r
     assert result["reason"] == "ok"
     assert result["weight_warning"] == {
         "reason": expected_reason,
-        "total_weight_all_rows": round(total_weight, 2),
+        "source_total_weight_all_rows": round(total_weight, 2),
         "minimum_expected_weight": 70.0,
         "maximum_expected_weight": 140.0,
     }

@@ -12,10 +12,8 @@ EXTRACTION_METHOD = "requests_bs4"
 
 # Basic0007B is the full-holdings page. Weight-quality warnings must use all
 # parsed rows, including non-stock assets, because the total should be near 100%.
-PREFERRED_MIN_TOTAL_WEIGHT = 99.5
-PREFERRED_MAX_TOTAL_WEIGHT = 100.5
-REQUIRED_MIN_TOTAL_WEIGHT = 70.0
-REQUIRED_MAX_TOTAL_WEIGHT = 140.0
+WARNING_MIN_TOTAL_WEIGHT = 70.0
+WARNING_MAX_TOTAL_WEIGHT = 140.0
 
 
 def build_moneydj_url(etf_code: str) -> str:
@@ -169,18 +167,18 @@ def validate_rows(rows: list) -> tuple[bool, str]:
 
 
 def _weight_warning(total_weight: float) -> dict | None:
-    if total_weight < REQUIRED_MIN_TOTAL_WEIGHT:
+    if total_weight < WARNING_MIN_TOTAL_WEIGHT:
         reason = "total_weight_below_expected_range"
-    elif total_weight > REQUIRED_MAX_TOTAL_WEIGHT:
+    elif total_weight > WARNING_MAX_TOTAL_WEIGHT:
         reason = "total_weight_above_expected_range"
     else:
         return None
 
     return {
         "reason": reason,
-        "total_weight_all_rows": total_weight,
-        "minimum_expected_weight": REQUIRED_MIN_TOTAL_WEIGHT,
-        "maximum_expected_weight": REQUIRED_MAX_TOTAL_WEIGHT,
+        "source_total_weight_all_rows": total_weight,
+        "minimum_expected_weight": WARNING_MIN_TOTAL_WEIGHT,
+        "maximum_expected_weight": WARNING_MAX_TOTAL_WEIGHT,
     }
 
 

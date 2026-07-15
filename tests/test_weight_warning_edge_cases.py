@@ -10,7 +10,7 @@ def test_weight_warning_threshold_boundaries_are_in_range():
 def test_min_weight_gate_preserves_raw_weight_warning():
     warning = {
         "reason": "total_weight_below_expected_range",
-        "total_weight_all_rows": 0.013,
+        "source_total_weight_all_rows": 0.013,
         "minimum_expected_weight": 70.0,
         "maximum_expected_weight": 140.0,
     }
