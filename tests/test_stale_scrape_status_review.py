@@ -74,6 +74,32 @@ def test_data_after_expected_date_uses_expected_date_failure_reason():
     replace_snapshot.assert_not_called()
 
 
+def test_future_dated_invalid_snapshot_does_not_emit_weight_warning():
+    result = _result(RUN_DATE)
+    result["weight_warning"] = {
+        "reason": "total_weight_below_expected_range",
+        "source_total_weight_all_rows": 10.0,
+        "minimum_expected_weight": 70.0,
+        "maximum_expected_weight": 140.0,
+    }
+    summary = _summary()
+
+    with patch("pipeline.replace_daily_snapshot"), patch(
+        "pipeline.insert_scrape_run"
+    ), patch("pipeline._check_moneydj_warning"):
+        pipeline._record_result(
+            summary,
+            ETF_CODE,
+            RUN_DATE,
+            EXPECTED_DATE,
+            STARTED_AT,
+            FINISHED_AT,
+            result,
+        )
+
+    assert summary["weight_warnings"] == []
+
+
 def test_stale_valid_run_retains_primary_source_success_flag():
     summary = _summary()
     with patch(
