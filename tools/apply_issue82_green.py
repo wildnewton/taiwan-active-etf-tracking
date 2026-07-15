@@ -60,5 +60,48 @@ pipeline = replace_once(
 
 pipeline_path.write_text(pipeline)
 
+Path(".github/workflows/ci.yml").write_text('''name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "milestone-*"
+      - "ci-*"
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
+      - name: Run tests
+        run: PYTHONPATH=. pytest -q
+''')
 Path(".github/workflows/issue82-green.yml").unlink(missing_ok=True)
 Path("tools/apply_issue82_green.py").unlink(missing_ok=True)
