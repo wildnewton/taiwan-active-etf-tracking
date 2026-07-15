@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ci-review-87-coverage
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read
