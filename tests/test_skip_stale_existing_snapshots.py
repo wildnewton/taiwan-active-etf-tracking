@@ -91,6 +91,7 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
     assert captured_runs[0].status == "stale"
     assert captured_runs[0].data_date == STALE_DATA_DATE
     assert captured_runs[0].error is None
+    assert captured_runs[0].primary_success is True
 
 
 def test_stale_result_without_existing_snapshot_writes_once():
