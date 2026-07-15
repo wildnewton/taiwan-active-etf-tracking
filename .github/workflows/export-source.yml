@@ -1,0 +1,20 @@
+name: Export source
+
+on:
+  push:
+    branches:
+      - tooling/export-pr90-source
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr90-source
+          path: |
+            .
+            !.git/**
+          include-hidden-files: true
+          retention-days: 1
