@@ -10,8 +10,8 @@ MONEYDJ_URL_TEMPLATE = (
 SOURCE_TYPE = "moneydj_primary"
 EXTRACTION_METHOD = "requests_bs4"
 
-# Basic0007B is the full-holdings page. The completeness check must use all
-# parsed rows, including non-stock assets, and should be approximately 100%.
+# Basic0007B is the full-holdings page. Weight-quality warnings must use all
+# parsed rows, including non-stock assets, because the total should be near 100%.
 PREFERRED_MIN_TOTAL_WEIGHT = 99.5
 PREFERRED_MAX_TOTAL_WEIGHT = 100.5
 REQUIRED_MIN_TOTAL_WEIGHT = 70.0
