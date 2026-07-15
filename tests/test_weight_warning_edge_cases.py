@@ -7,7 +7,7 @@ def test_weight_warning_threshold_boundaries_are_in_range():
     assert _weight_warning(140.0) is None
 
 
-def test_min_weight_gate_preserves_raw_weight_warning():
+def test_min_weight_gate_preserves_raw_source_weight_warning():
     warning = {
         "reason": "total_weight_below_expected_range",
         "source_total_weight_all_rows": 0.013,
@@ -27,7 +27,12 @@ def test_min_weight_gate_preserves_raw_weight_warning():
         "source_type": "moneydj_primary",
         "extraction_method": "test",
     }
-    kept_stock = {**tiny_stock, "asset_name": "保留股票(1001.TW)", "stock_code": "1001", "weight_pct": 0.01}
+    kept_stock = {
+        **tiny_stock,
+        "asset_name": "保留股票(1001.TW)",
+        "stock_code": "1001",
+        "weight_pct": 0.01,
+    }
     result = {
         "ok": True,
         "reason": "ok",
