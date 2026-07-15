@@ -3,6 +3,7 @@ from pathlib import Path
 
 SCRAPER = Path("scripts/scraper.py")
 PIPELINE = Path("scripts/pipeline.py")
+SCRAPER_TEST = Path("tests/test_scraper.py")
 PREEXISTING_TEST = Path("tests/test_preexisting_successful_snapshots.py")
 FRESHNESS_TEST = Path("tests/test_scraper_freshness_target.py")
 CUTOFF_TEST = Path("tests/test_expected_data_date_cutoff.py")
@@ -248,6 +249,60 @@ async def _execute_scrape_async_with_pages(
 
 
 def patch_tests() -> None:
+    replace_once(
+        SCRAPER_TEST,
+        '''        patch("scraper.scrape_official_static") as official_static, \\
+        patch("time.sleep") as sleep:
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert moneydj.call_count == 3
+    browser.assert_not_called()
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert sleep.call_count == 2
+''',
+        '''        patch("scraper.scrape_official_static") as official_static, \\
+        patch("scraper.asyncio.sleep", new=AsyncMock()) as sleep:
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_primary"
+    assert moneydj.call_count == 3
+    browser.assert_not_called()
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert [item.args[0] for item in sleep.await_args_list] == [2, 2]
+''',
+    )
+    replace_once(
+        SCRAPER_TEST,
+        '''        patch("scraper.scrape_official_static") as official_static, \\
+        patch("time.sleep") as sleep:
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_browser"
+    assert moneydj.call_count == 10
+    browser.assert_awaited_once_with("00980A", page)
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert sleep.call_count == 9
+''',
+        '''        patch("scraper.scrape_official_static") as official_static, \\
+        patch("scraper.asyncio.sleep", new=AsyncMock()) as sleep:
+        result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
+
+    assert result["ok"] is True
+    assert result["source_type"] == "moneydj_browser"
+    assert moneydj.call_count == 10
+    browser.assert_awaited_once_with("00980A", page)
+    official_browser.assert_not_called()
+    official_static.assert_not_called()
+    assert [item.args[0] for item in sleep.await_args_list] == scraper._MONEYDJ_RETRY_DELAYS
+''',
+    )
     replace_once(
         PREEXISTING_TEST,
         '''        self.page = object()
