@@ -42,12 +42,22 @@ replace_once(
 
 replace_once(
     "tests/test_async_scrape_review_contract.py",
-    '''    to_thread.assert_awaited_once_with(scraper._official_fallback_static, "00405A")\n''',
-    '''    to_thread.assert_awaited_once_with(static_fallback, "00405A")\n    static_fallback.assert_not_called()\n''',
+    '    to_thread.assert_awaited_once_with(scraper._official_fallback_static, "00405A")\n',
+    '    to_thread.assert_awaited_once_with(static_fallback, "00405A")\n'
+    '    static_fallback.assert_not_called()\n',
 )
 
+freshness_old = (
+    '        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \\\n'
+    '        patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \\\n'
+)
+freshness_new = (
+    '        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \\\n'
+    '        patch("pipeline.successful_snapshot_exists", return_value=False), \\\n'
+    '        patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \\\n'
+)
 replace_once(
     "tests/test_scraper_freshness_target.py",
-    '''        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \\\n        patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \\\n''',
-    '''        patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \\\n        patch("pipeline.successful_snapshot_exists", return_value=False), \\\n        patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \\\n''',
+    freshness_old,
+    freshness_new,
 )
