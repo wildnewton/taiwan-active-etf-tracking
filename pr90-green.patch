@@ -1,0 +1,308 @@
+diff --git a/scripts/changes.py b/scripts/changes.py
+index 4861f97..a628fc6 100644
+--- a/scripts/changes.py
++++ b/scripts/changes.py
+@@ -24,7 +24,7 @@ def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
+     with db._connect() as conn:
+         rows = conn.execute(
+             """
+-            SELECT date, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
++            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
+             FROM etf_scrape_runs
+             GROUP BY date
+             ORDER BY date DESC
+@@ -42,7 +42,7 @@ def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -
+     with db._connect() as conn:
+         rows = conn.execute(
+             """
+-            SELECT date, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
++            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
+             FROM etf_scrape_runs
+             WHERE date < ?
+             GROUP BY date
+diff --git a/scripts/pipeline.py b/scripts/pipeline.py
+index 56c34f5..e6c08cb 100644
+--- a/scripts/pipeline.py
++++ b/scripts/pipeline.py
+@@ -549,7 +549,7 @@ def _record_result(
+             _record_freshness(
+                 summary,
+                 etf_code,
+-                freshness_target_date,
++                "failed",
+                 None,
+                 result,
+                 unknown_reason=date_error,
+@@ -582,14 +582,15 @@ def _record_result(
+         _record_weight_warning(summary, etf_code, result)
+ 
+         if final_status == "failed":
+-            reason = "source_date_after_run_date"
++            reason = "source_date_after_expected_data_date"
+             final_result = {**result, "ok": False, "reason": reason}
+             _record_freshness(
+                 summary,
+                 etf_code,
+-                freshness_target_date,
++                final_status,
+                 data_date,
+                 result,
++                unknown_reason=reason,
+             )
+             _record_failure(
+                 summary,
+@@ -611,18 +612,27 @@ def _record_result(
+             )
+             return
+ 
++        summary["total_stock_rows"] += len(result["stock_rows"])
++        summary["total_non_stock_rows"] += len(result["non_stock_rows"])
++        if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
++            summary["moneydj_success"] += 1
++        elif result["source_type"] == "official_fallback":
++            summary["official_success"] += 1
++            _check_moneydj_warning(summary, etf_code)
++        _record_freshness(
++            summary,
++            etf_code,
++            final_status,
++            data_date,
++            result,
++        )
++        _record_row_count_warning(summary, etf_code, result)
++
+         if final_status == "stale" and _should_skip_stale_existing_snapshot(
+             data_date,
+             freshness_target_date,
+             etf_code,
+         ):
+-            _record_freshness(
+-                summary,
+-                etf_code,
+-                freshness_target_date,
+-                data_date,
+-                result,
+-            )
+             _record_stale_existing(summary, etf_code, data_date, result)
+             insert_scrape_run(
+                 _build_scrape_run(
+@@ -643,22 +653,6 @@ def _record_result(
+         ]
+         write_result = replace_daily_snapshot(stock_rows, non_stock_rows)
+         should_record_scrape_run = write_result.get("inserted", False)
+-
+-        summary["total_stock_rows"] += len(stock_rows)
+-        summary["total_non_stock_rows"] += len(non_stock_rows)
+-        if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
+-            summary["moneydj_success"] += 1
+-        elif result["source_type"] == "official_fallback":
+-            summary["official_success"] += 1
+-            _check_moneydj_warning(summary, etf_code)
+-        _record_freshness(
+-            summary,
+-            etf_code,
+-            freshness_target_date,
+-            data_date,
+-            result,
+-        )
+-        _record_row_count_warning(summary, etf_code, result)
+     else:
+         _record_failure(summary, etf_code, result["reason"])
+ 
+@@ -720,13 +714,13 @@ def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> Non
+ def _record_freshness(
+     summary: dict,
+     etf_code: str,
+-    target_date: date,
++    status: str,
+     data_date: Optional[date],
+     result: dict,
+     unknown_reason: str = "missing_or_unparseable_source_date",
+ ) -> None:
+     source_type = result.get("source_type") or "unknown"
+-    if data_date is None:
++    if status == "failed":
+         summary["data_freshness"]["unknown"] += 1
+         summary["unknown_date_etfs"].append({
+             "etf_code": etf_code,
+@@ -735,19 +729,14 @@ def _record_freshness(
+         })
+         return
+ 
+-    if data_date > target_date:
+-        summary["data_freshness"]["unknown"] += 1
+-        summary["unknown_date_etfs"].append({
+-            "etf_code": etf_code,
+-            "source_type": source_type,
+-            "reason": "source_date_after_run_date",
+-        })
+-        return
++    if data_date is None:
++        raise ValueError(f"{status} scrape result requires a data_date")
+ 
+     summary["_known_data_dates"].append(data_date)
+-    if data_date == target_date:
++    if status == "success":
+         summary["data_freshness"]["fresh"] += 1
+-    else:
++        return
++    if status == "stale":
+         summary["data_freshness"]["stale"] += 1
+         summary["stale_etfs"].append({
+             "etf_code": etf_code,
+@@ -755,6 +744,8 @@ def _record_freshness(
+             "source_type": source_type,
+             "reason": "source_date_before_run_date",
+         })
++        return
++    raise ValueError(f"Unknown scrape status: {status}")
+ 
+ def _finalize_data_date_range(summary: dict) -> None:
+     known_dates = summary.pop("_known_data_dates", [])
+diff --git a/scripts/report.py b/scripts/report.py
+index fb5bda6..cd03f21 100644
+--- a/scripts/report.py
++++ b/scripts/report.py
+@@ -479,11 +479,11 @@ def _get_scrape_data_freshness(data_date):
+     try:
+         with _using_row_factory(_dict_factory) as conn:
+             rows = conn.execute(
+-                """SELECT sr.etf_code, sr.data_date
++                """SELECT sr.etf_code, sr.data_date, sr.status
+                    FROM etf_scrape_runs sr
+                    JOIN etf_universe u ON sr.etf_code = u.code
+                    WHERE sr.date = ?
+-                     AND sr.status = 'success'
++                     AND sr.status IN ('success', 'stale')
+                      AND u.retired = 0
+                       AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
+                    ORDER BY sr.etf_code""",
+@@ -494,11 +494,14 @@ def _get_scrape_data_freshness(data_date):
+ 
+     for row in rows:
+         source_date = row.get("data_date")
++        status = row.get("status")
+         item = {"etf_code": row.get("etf_code"), "data_date": source_date}
+-        if source_date == data_date:
+-            freshness["fresh"].append(item)
+-        elif source_date and source_date < data_date:
++        if not source_date or source_date > data_date:
++            freshness["unknown"].append(item)
++        elif status == "stale" or source_date < data_date:
+             freshness["stale"].append(item)
++        elif status == "success" and source_date == data_date:
++            freshness["fresh"].append(item)
+         else:
+             freshness["unknown"].append(item)
+     return freshness
+diff --git a/scripts/retry_stale_scrapes.py b/scripts/retry_stale_scrapes.py
+index 6faf1ec..64ed599 100644
+--- a/scripts/retry_stale_scrapes.py
++++ b/scripts/retry_stale_scrapes.py
+@@ -1,8 +1,8 @@
+-"""Retry stale ETF scrape rows for a single report date.
++"""Retry outdated usable ETF scrape rows for a single report date.
+ 
+-The command re-scrapes stale rows for the requested report date, then reruns
+-same-date derived layers and overwrites the date-only primary reports only when
+-at least one retried ETF becomes fresh.
++The command re-scrapes usable rows whose data date is older than the requested
++report date, then reruns same-date derived layers and overwrites the date-only
++primary reports only when at least one retried ETF becomes fresh.
+ """
+ import argparse
+ import json
+@@ -18,7 +18,7 @@ from traction_analysis import generate_traction_report
+ 
+ 
+ def get_stale_scrape_runs(run_date: str) -> list[dict]:
+-    """Return active ETFs whose run still needs a same-date freshness retry."""
++    """Return active ETFs with usable data older than the requested run date."""
+     with db._connect() as conn:
+         rows = conn.execute(
+             """
+@@ -26,12 +26,13 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
+             FROM etf_scrape_runs sr
+             JOIN etf_universe u ON sr.etf_code = u.code
+             WHERE sr.date = ?
+-              AND sr.status = 'stale'
++              AND sr.status IN ('success', 'stale')
+               AND sr.data_date IS NOT NULL
++              AND sr.data_date < ?
+               AND u.retired = 0
+             ORDER BY sr.etf_code
+             """,
+-            (run_date,),
++            (run_date, run_date),
+         ).fetchall()
+     return [{"etf_code": row[0], "data_date": row[1]} for row in rows]
+ 
+diff --git a/tests/test_changes.py b/tests/test_changes.py
+index 5ed00df..2230ace 100644
+--- a/tests/test_changes.py
++++ b/tests/test_changes.py
+@@ -46,16 +46,16 @@ def insert_success_runs(date_value, count=16):
+             conn.execute(
+                 """
+                 INSERT OR REPLACE INTO etf_scrape_runs (
+-                    date, etf_code, status, primary_source, primary_success,
++                    date, data_date, etf_code, status, primary_source, primary_success,
+                     moneydj_browser_used, official_fallback_used, official_success,
+                     rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                     total_weight_all_rows, total_weight_stock_rows, source_url,
+                     error, started_at, finished_at
+-                ) VALUES (?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
++                ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
+                     10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
+                     '2026-06-23T00:00:00', '2026-06-23T00:01:00')
+                 """,
+-                (date_value, f"ETF{idx:02d}"),
++                (date_value, date_value, f"ETF{idx:02d}"),
+             )
+ 
+ 
+@@ -194,16 +194,16 @@ def _insert_scrape_success(date_value, etf_code):
+         conn.execute(
+             """
+             INSERT OR REPLACE INTO etf_scrape_runs (
+-                date, etf_code, status, primary_source, primary_success,
++                date, data_date, etf_code, status, primary_source, primary_success,
+                 moneydj_browser_used, official_fallback_used, official_success,
+                 rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                 total_weight_all_rows, total_weight_stock_rows, source_url,
+                 error, started_at, finished_at
+-            ) VALUES (?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
++            ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
+                 10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
+                 '2026-06-23T00:00:00', '2026-06-23T00:01:00')
+             """,
+-            (date_value, etf_code),
++            (date_value, date_value, etf_code),
+         )
+ 
+ 
+diff --git a/tests/test_stale_scrape_status.py b/tests/test_stale_scrape_status.py
+index 2c2c8db..ccc6e1c 100644
+--- a/tests/test_stale_scrape_status.py
++++ b/tests/test_stale_scrape_status.py
+@@ -124,10 +124,10 @@ def test_future_dated_snapshot_fails_without_writing_holdings():
+ 
+     assert persisted.status == "failed"
+     assert persisted.data_date == FUTURE_DATE
+-    assert persisted.error == "source_date_after_run_date"
++    assert persisted.error == "source_date_after_expected_data_date"
+     assert summary["failed"] == 1
+     assert summary["failures"] == [
+-        {"etf_code": ETF_CODE, "reason": "source_date_after_run_date"}
++        {"etf_code": ETF_CODE, "reason": "source_date_after_expected_data_date"}
+     ]
+     assert summary["data_freshness"] == {"fresh": 0, "stale": 0, "unknown": 1}
+     replace_snapshot.assert_not_called()
+@@ -250,6 +250,7 @@ def test_retry_query_selects_retry_eligible_stale_statuses():
+ 
+     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
+         {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
++        {"etf_code": "00403A", "data_date": STALE_DATE.isoformat()},
+     ]
+ 
+ 
