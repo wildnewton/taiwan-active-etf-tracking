@@ -36,8 +36,8 @@ replace_once(
 
 replace_once(
     "tests/test_async_scrape_review_contract.py",
-    '''    ), patch(\n        "scraper._official_fallback_static",\n        side_effect=AssertionError("static fallback must not run on the event loop"),\n    ):\n''',
-    '''    ), patch(\n        "scraper._official_fallback_static",\n        side_effect=AssertionError("static fallback must not run on the event loop"),\n    ) as static_fallback:\n''',
+    '''    ) as to_thread, patch(\n        "scraper._official_fallback_static",\n        side_effect=AssertionError("static fallback must not run on the event loop"),\n    ):\n''',
+    '''    ) as to_thread, patch(\n        "scraper._official_fallback_static",\n        side_effect=AssertionError("static fallback must not run on the event loop"),\n    ) as static_fallback:\n''',
 )
 
 replace_once(
