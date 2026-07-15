@@ -128,20 +128,17 @@ def test_validate_rows_passes_when_all_rows_sum_to_100():
     assert reason == "ok"
 
 
-def test_validate_rows_fails_when_full_holdings_total_is_incomplete():
-    # With 70-140% threshold, 89.07% should now pass.
-    # Test with a value below 70% to verify failure.
+def test_validate_rows_accepts_incomplete_total_when_structure_is_valid():
     rows = load_incomplete_fixture_rows()
-    # Scale down weights to be below 70%
     low_weight_rows = [
-        {**row, "weight_pct": row["weight_pct"] * 0.6}  # ~53% total
+        {**row, "weight_pct": row["weight_pct"] * 0.6}
         for row in rows
     ]
 
     ok, reason = validate_rows(low_weight_rows)
 
-    assert ok is False
-    assert "incomplete full holdings" in reason
+    assert ok is True
+    assert reason == "ok"
 
 
 def test_validate_rows_empty_fails():
@@ -151,7 +148,7 @@ def test_validate_rows_empty_fails():
     assert "empty" in reason
 
 
-def test_validate_rows_low_weight_fails():
+def test_validate_rows_accepts_low_weight_when_structure_is_valid():
     rows = make_complete_rows()
     low_weight_rows = [
         {**row, "weight_pct": row["weight_pct"] / 2}
@@ -160,20 +157,18 @@ def test_validate_rows_low_weight_fails():
 
     ok, reason = validate_rows(low_weight_rows)
 
-    assert ok is False
-    assert "incomplete full holdings" in reason
+    assert ok is True
+    assert reason == "ok"
 
 
-def test_validate_rows_overcounted_weight_fails():
-    # With 70-140% threshold, need weight >140% to fail.
+def test_validate_rows_accepts_overcounted_weight_when_structure_is_valid():
     rows = make_complete_rows()
-    # Add multiple copies to exceed 140%
-    duplicated_rows = rows + rows + rows  # ~300% weight
+    duplicated_rows = rows + rows + rows
 
     ok, reason = validate_rows(duplicated_rows)
 
-    assert ok is False
-    assert "duplicated or overcounted" in reason
+    assert ok is True
+    assert reason == "ok"
 
 
 def test_split_rows():
@@ -198,7 +193,6 @@ def test_zero_weight_floored():
     """Stocks with 0% weight should be stored as 0.004% to avoid calculation issues."""
     html = '<table class="datalist"><tbody><tr><td>台積電(2330.TW)</td><td>0.00</td><td>100,000</td></tr><tr><td>鴻海(2317.TW)</td><td>5.50</td><td>50,000</td></tr></tbody></table>'
     rows = parse_moneydj_rows("00981A", html, "https://example.com")
-    # The 0.00 weight should become 0.004
     assert rows[0]["weight_pct"] == 0.004
     assert rows[1]["weight_pct"] == 5.5
 
@@ -208,13 +202,12 @@ def test_fetch_html_forces_utf8():
     chinese_html = "<html><body>臺股期貨07/26</body></html>"
     response = Mock()
     response.text = chinese_html
-    response.encoding = "ISO-8859-1"  # Simulate wrong auto-detection
+    response.encoding = "ISO-8859-1"
     response.raise_for_status.return_value = None
 
     with patch("scrapers.moneydj.requests.get", return_value=response):
         result = fetch_html("https://example.com")
 
-    # After fetch_html, encoding should be forced to utf-8
     assert response.encoding == "utf-8"
     assert "期貨" in result
 
@@ -227,37 +220,34 @@ def test_classify_futures_with_chinese():
     assert classify_asset("臺股期貨")["asset_type"] == "futures"
 
 
-def test_scrape_moneydj_with_incomplete_fixture_fails_validation():
-    # With 70-140% threshold, the fixture (89.07%) would pass.
-    # Modify fixture to have weights below 70% to test failure.
+def test_scrape_moneydj_with_incomplete_fixture_returns_warning():
     fixture_html = load_fixture()
-    # We'll create a modified version by scaling down weights in the HTML
-    # Instead, let's test with a mock that returns rows with very low weight
-    from unittest.mock import MagicMock
-    from scrapers.moneydj import parse_moneydj_rows
-
-    # Parse the fixture and scale down weights
     rows = parse_moneydj_rows("00980A", fixture_html, SOURCE_URL)
     low_weight_rows = [
-        {**row, "weight_pct": row["weight_pct"] * 0.5}  # ~44% total
+        {**row, "weight_pct": row["weight_pct"] * 0.5}
         for row in rows
     ]
 
-    # Mock the requests.get to return rows that will fail validation
     response = Mock()
     response.text = fixture_html
     response.raise_for_status.return_value = None
 
     with patch("scrapers.moneydj.requests.get", return_value=response) as mock_get:
-        # Patch parse_moneydj_rows to return our low-weight rows
         with patch("scrapers.moneydj.parse_moneydj_rows", return_value=low_weight_rows):
             result = scrape_moneydj("00980A")
 
-    assert result["ok"] is False
-    assert "incomplete full holdings" in result["reason"]
+    expected_weight = round(89.07 * 0.5, 2)
+    assert result["ok"] is True
+    assert result["reason"] == "ok"
+    assert result["weight_warning"] == {
+        "reason": "total_weight_below_expected_range",
+        "source_total_weight_all_rows": expected_weight,
+        "minimum_expected_weight": 70.0,
+        "maximum_expected_weight": 140.0,
+    }
     assert result["non_stock_rows"] == []
     assert result["source_url"] == SOURCE_URL
     assert result["source_type"] == "moneydj_primary"
     assert result["total_weight_all_rows"] == result["total_weight_stock_rows"]
-    assert round(result["total_weight_stock_rows"], 2) == round(89.07 * 0.5, 2)
+    assert round(result["total_weight_stock_rows"], 2) == expected_weight
     mock_get.assert_called_once()

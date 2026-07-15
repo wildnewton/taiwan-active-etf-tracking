@@ -10,12 +10,10 @@ MONEYDJ_URL_TEMPLATE = (
 SOURCE_TYPE = "moneydj_primary"
 EXTRACTION_METHOD = "requests_bs4"
 
-# Basic0007B is the full-holdings page. The completeness check must use all
-# parsed rows, including non-stock assets, and should be approximately 100%.
-PREFERRED_MIN_TOTAL_WEIGHT = 99.5
-PREFERRED_MAX_TOTAL_WEIGHT = 100.5
-REQUIRED_MIN_TOTAL_WEIGHT = 70.0
-REQUIRED_MAX_TOTAL_WEIGHT = 140.0
+# Basic0007B is the full-holdings page. Weight-quality warnings must use all
+# parsed rows, including non-stock assets, because the total should be near 100%.
+WARNING_MIN_TOTAL_WEIGHT = 70.0
+WARNING_MAX_TOTAL_WEIGHT = 140.0
 
 
 def build_moneydj_url(etf_code: str) -> str:
@@ -155,21 +153,6 @@ def validate_rows(rows: list) -> tuple[bool, str]:
     if any(row.get("weight_pct") is None for row in rows):
         return False, "missing weight_pct"
 
-    total_weight = _sum_weights(rows)
-    if total_weight < REQUIRED_MIN_TOTAL_WEIGHT:
-        return (
-            False,
-            "incomplete full holdings: "
-            f"total_weight_all_rows={total_weight:.2f}, expected about 100",
-        )
-
-    if total_weight > REQUIRED_MAX_TOTAL_WEIGHT:
-        return (
-            False,
-            "duplicated or overcounted rows: "
-            f"total_weight_all_rows={total_weight:.2f}, expected about 100",
-        )
-
     stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
     if len(stock_rows) < 5:
         return False, "fewer than 5 Taiwan stock rows"
@@ -181,6 +164,22 @@ def validate_rows(rows: list) -> tuple[bool, str]:
             return False, "invalid Taiwan stock row"
 
     return True, "ok"
+
+
+def _weight_warning(total_weight: float) -> dict | None:
+    if total_weight < WARNING_MIN_TOTAL_WEIGHT:
+        reason = "total_weight_below_expected_range"
+    elif total_weight > WARNING_MAX_TOTAL_WEIGHT:
+        reason = "total_weight_above_expected_range"
+    else:
+        return None
+
+    return {
+        "reason": reason,
+        "source_total_weight_all_rows": total_weight,
+        "minimum_expected_weight": WARNING_MIN_TOTAL_WEIGHT,
+        "maximum_expected_weight": WARNING_MAX_TOTAL_WEIGHT,
+    }
 
 
 def split_rows(rows: list) -> tuple[list, list]:
@@ -212,7 +211,7 @@ def scrape_moneydj(etf_code: str) -> dict:
             "total_weight_stock_rows": 0.0,
         }
 
-    return {
+    result = {
         "ok": ok,
         "reason": reason,
         "all_rows": all_rows,
@@ -223,6 +222,11 @@ def scrape_moneydj(etf_code: str) -> dict:
         "total_weight_all_rows": total_weight_all_rows,
         "total_weight_stock_rows": total_weight_stock_rows,
     }
+    if ok:
+        warning = _weight_warning(total_weight_all_rows)
+        if warning is not None:
+            result["weight_warning"] = warning
+    return result
 
 
 def _parse_float(value: str) -> float | None:

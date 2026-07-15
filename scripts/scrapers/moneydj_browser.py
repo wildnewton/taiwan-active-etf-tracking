@@ -2,6 +2,7 @@ import inspect
 import re
 
 from scrapers.moneydj import (
+    _weight_warning,
     build_moneydj_url,
     classify_asset,
     dedupe_rows,
@@ -38,6 +39,8 @@ async def scrape_moneydj_browser(etf_code: str, page) -> dict:
         all_rows = dedupe_rows(all_rows)
         ok, reason = validate_rows(all_rows)
         stock_rows, non_stock_rows = split_rows(all_rows)
+        total_weight_all_rows = _sum_weights(all_rows)
+        total_weight_stock_rows = _sum_weights(stock_rows)
     except Exception as exc:
         return {
             "ok": False,
@@ -51,7 +54,7 @@ async def scrape_moneydj_browser(etf_code: str, page) -> dict:
             "total_weight_stock_rows": 0.0,
         }
 
-    return {
+    result = {
         "ok": ok,
         "reason": reason,
         "all_rows": all_rows,
@@ -59,9 +62,14 @@ async def scrape_moneydj_browser(etf_code: str, page) -> dict:
         "non_stock_rows": non_stock_rows,
         "source_url": source_url,
         "source_type": SOURCE_TYPE,
-        "total_weight_all_rows": _sum_weights(all_rows),
-        "total_weight_stock_rows": _sum_weights(stock_rows),
+        "total_weight_all_rows": total_weight_all_rows,
+        "total_weight_stock_rows": total_weight_stock_rows,
     }
+    if ok:
+        warning = _weight_warning(total_weight_all_rows)
+        if warning is not None:
+            result["weight_warning"] = warning
+    return result
 
 
 async def extract_all_dom_rows(page, etf_code, data_date, source_url) -> list[dict]:

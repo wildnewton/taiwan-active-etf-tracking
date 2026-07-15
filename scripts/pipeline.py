@@ -407,6 +407,7 @@ def _new_summary(
         "failures": [],
         "moneydj_warnings": [],
         "row_count_warnings": [],
+        "weight_warnings": [],
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
         "stale_existing_etfs": [],
@@ -487,6 +488,7 @@ def _record_result(
             )
             return
 
+        _record_weight_warning(summary, etf_code, result)
         if _should_skip_stale_existing_snapshot(data_date, freshness_target_date, etf_code):
             _record_freshness(summary, etf_code, freshness_target_date, data_date, result)
             _record_stale_existing(summary, etf_code, data_date, result)
@@ -552,6 +554,13 @@ def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result
         "source_type": result.get("source_type") or "unknown",
         "reason": "stale_snapshot_already_exists",
     })
+
+
+def _record_weight_warning(summary: dict, etf_code: str, result: dict) -> None:
+    warning = result.get("weight_warning")
+    if not warning:
+        return
+    summary["weight_warnings"].append({"etf_code": etf_code, **warning})
 
 
 def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> None:
