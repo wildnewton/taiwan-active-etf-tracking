@@ -3,6 +3,11 @@ from pathlib import Path
 
 SCRAPER = Path("scripts/scraper.py")
 PIPELINE = Path("scripts/pipeline.py")
+PREEXISTING_TEST = Path("tests/test_preexisting_successful_snapshots.py")
+FRESHNESS_TEST = Path("tests/test_scraper_freshness_target.py")
+CUTOFF_TEST = Path("tests/test_expected_data_date_cutoff.py")
+MIN_WEIGHT_TEST = Path("tests/test_min_weight_gate.py")
+WEIGHT_WARNING_TEST = Path("tests/test_weight_validation_warnings.py")
 
 
 def replace_once(path: Path, old: str, new: str) -> None:
@@ -242,9 +247,55 @@ async def _execute_scrape_async_with_pages(
     )
 
 
+def patch_tests() -> None:
+    replace_once(
+        PREEXISTING_TEST,
+        '''        self.page = object()
+        self.context = Mock()
+''',
+        '''        self.page = Mock()
+        self.page.close = AsyncMock()
+        self.context = Mock()
+''',
+    )
+    replace_once(
+        FRESHNESS_TEST,
+        '''    with patch("scraper._retry_moneydj", return_value=moneydj), \\
+        patch("scraper._official_fallback_with_browser", new=official_fallback), \\
+''',
+        '''    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=moneydj)), \\
+        patch("scraper._official_fallback_with_browser", new=official_fallback), \\
+''',
+    )
+    replace_once(
+        CUTOFF_TEST,
+        '    with patch("scraper._retry_moneydj", new=retry_moneydj):\n',
+        '    with patch("scraper._retry_moneydj_async", new=retry_moneydj):\n',
+    )
+    replace_once(
+        MIN_WEIGHT_TEST,
+        '''    with patch("scraper._retry_moneydj", return_value=make_failed_result()), \\
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)), \\
+''',
+        '''    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=make_failed_result())), \\
+        patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)), \\
+''',
+    )
+    replace_once(
+        WEIGHT_WARNING_TEST,
+        '''    with patch("scraper._retry_moneydj", return_value=warned), patch(
+        "scraper.scrape_moneydj_browser", new=moneydj_browser
+''',
+        '''    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=warned)), patch(
+        "scraper.scrape_moneydj_browser", new=moneydj_browser
+''',
+    )
+
+
 def main() -> None:
     patch_scraper()
     patch_pipeline()
+    patch_tests()
 
 
 if __name__ == "__main__":
