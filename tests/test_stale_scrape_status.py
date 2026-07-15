@@ -124,10 +124,10 @@ def test_future_dated_snapshot_fails_without_writing_holdings():
 
     assert persisted.status == "failed"
     assert persisted.data_date == FUTURE_DATE
-    assert persisted.error == "source_date_after_run_date"
+    assert persisted.error == "source_date_after_expected_data_date"
     assert summary["failed"] == 1
     assert summary["failures"] == [
-        {"etf_code": ETF_CODE, "reason": "source_date_after_run_date"}
+        {"etf_code": ETF_CODE, "reason": "source_date_after_expected_data_date"}
     ]
     assert summary["data_freshness"] == {"fresh": 0, "stale": 0, "unknown": 1}
     replace_snapshot.assert_not_called()
@@ -250,6 +250,7 @@ def test_retry_query_selects_retry_eligible_stale_statuses():
 
     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
         {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
+        {"etf_code": "00403A", "data_date": STALE_DATE.isoformat()},
     ]
 
 

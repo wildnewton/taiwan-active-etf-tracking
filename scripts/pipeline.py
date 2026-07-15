@@ -549,7 +549,7 @@ def _record_result(
             _record_freshness(
                 summary,
                 etf_code,
-                freshness_target_date,
+                "failed",
                 None,
                 result,
                 unknown_reason=date_error,
@@ -582,14 +582,15 @@ def _record_result(
         _record_weight_warning(summary, etf_code, result)
 
         if final_status == "failed":
-            reason = "source_date_after_run_date"
+            reason = "source_date_after_expected_data_date"
             final_result = {**result, "ok": False, "reason": reason}
             _record_freshness(
                 summary,
                 etf_code,
-                freshness_target_date,
+                final_status,
                 data_date,
                 result,
+                unknown_reason=reason,
             )
             _record_failure(
                 summary,
@@ -611,18 +612,27 @@ def _record_result(
             )
             return
 
+        summary["total_stock_rows"] += len(result["stock_rows"])
+        summary["total_non_stock_rows"] += len(result["non_stock_rows"])
+        if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
+            summary["moneydj_success"] += 1
+        elif result["source_type"] == "official_fallback":
+            summary["official_success"] += 1
+            _check_moneydj_warning(summary, etf_code)
+        _record_freshness(
+            summary,
+            etf_code,
+            final_status,
+            data_date,
+            result,
+        )
+        _record_row_count_warning(summary, etf_code, result)
+
         if final_status == "stale" and _should_skip_stale_existing_snapshot(
             data_date,
             freshness_target_date,
             etf_code,
         ):
-            _record_freshness(
-                summary,
-                etf_code,
-                freshness_target_date,
-                data_date,
-                result,
-            )
             _record_stale_existing(summary, etf_code, data_date, result)
             insert_scrape_run(
                 _build_scrape_run(
@@ -643,22 +653,6 @@ def _record_result(
         ]
         write_result = replace_daily_snapshot(stock_rows, non_stock_rows)
         should_record_scrape_run = write_result.get("inserted", False)
-
-        summary["total_stock_rows"] += len(stock_rows)
-        summary["total_non_stock_rows"] += len(non_stock_rows)
-        if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
-            summary["moneydj_success"] += 1
-        elif result["source_type"] == "official_fallback":
-            summary["official_success"] += 1
-            _check_moneydj_warning(summary, etf_code)
-        _record_freshness(
-            summary,
-            etf_code,
-            freshness_target_date,
-            data_date,
-            result,
-        )
-        _record_row_count_warning(summary, etf_code, result)
     else:
         _record_failure(summary, etf_code, result["reason"])
 
@@ -720,13 +714,13 @@ def _record_row_count_warning(summary: dict, etf_code: str, result: dict) -> Non
 def _record_freshness(
     summary: dict,
     etf_code: str,
-    target_date: date,
+    status: str,
     data_date: Optional[date],
     result: dict,
     unknown_reason: str = "missing_or_unparseable_source_date",
 ) -> None:
     source_type = result.get("source_type") or "unknown"
-    if data_date is None:
+    if status == "failed":
         summary["data_freshness"]["unknown"] += 1
         summary["unknown_date_etfs"].append({
             "etf_code": etf_code,
@@ -735,19 +729,14 @@ def _record_freshness(
         })
         return
 
-    if data_date > target_date:
-        summary["data_freshness"]["unknown"] += 1
-        summary["unknown_date_etfs"].append({
-            "etf_code": etf_code,
-            "source_type": source_type,
-            "reason": "source_date_after_run_date",
-        })
-        return
+    if data_date is None:
+        raise ValueError(f"{status} scrape result requires a data_date")
 
     summary["_known_data_dates"].append(data_date)
-    if data_date == target_date:
+    if status == "success":
         summary["data_freshness"]["fresh"] += 1
-    else:
+        return
+    if status == "stale":
         summary["data_freshness"]["stale"] += 1
         summary["stale_etfs"].append({
             "etf_code": etf_code,
@@ -755,6 +744,8 @@ def _record_freshness(
             "source_type": source_type,
             "reason": "source_date_before_run_date",
         })
+        return
+    raise ValueError(f"Unknown scrape status: {status}")
 
 def _finalize_data_date_range(summary: dict) -> None:
     known_dates = summary.pop("_known_data_dates", [])

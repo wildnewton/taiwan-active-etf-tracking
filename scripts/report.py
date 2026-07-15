@@ -479,11 +479,11 @@ def _get_scrape_data_freshness(data_date):
     try:
         with _using_row_factory(_dict_factory) as conn:
             rows = conn.execute(
-                """SELECT sr.etf_code, sr.data_date
+                """SELECT sr.etf_code, sr.data_date, sr.status
                    FROM etf_scrape_runs sr
                    JOIN etf_universe u ON sr.etf_code = u.code
                    WHERE sr.date = ?
-                     AND sr.status = 'success'
+                     AND sr.status IN ('success', 'stale')
                      AND u.retired = 0
                       AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
                    ORDER BY sr.etf_code""",
@@ -494,11 +494,14 @@ def _get_scrape_data_freshness(data_date):
 
     for row in rows:
         source_date = row.get("data_date")
+        status = row.get("status")
         item = {"etf_code": row.get("etf_code"), "data_date": source_date}
-        if source_date == data_date:
-            freshness["fresh"].append(item)
-        elif source_date and source_date < data_date:
+        if not source_date or source_date > data_date:
+            freshness["unknown"].append(item)
+        elif status == "stale" or source_date < data_date:
             freshness["stale"].append(item)
+        elif status == "success" and source_date == data_date:
+            freshness["fresh"].append(item)
         else:
             freshness["unknown"].append(item)
     return freshness

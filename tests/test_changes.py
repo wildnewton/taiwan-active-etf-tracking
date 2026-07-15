@@ -46,16 +46,16 @@ def insert_success_runs(date_value, count=16):
             conn.execute(
                 """
                 INSERT OR REPLACE INTO etf_scrape_runs (
-                    date, etf_code, status, primary_source, primary_success,
+                    date, data_date, etf_code, status, primary_source, primary_success,
                     moneydj_browser_used, official_fallback_used, official_success,
                     rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
                     total_weight_all_rows, total_weight_stock_rows, source_url,
                     error, started_at, finished_at
-                ) VALUES (?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
+                ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
                     10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
                     '2026-06-23T00:00:00', '2026-06-23T00:01:00')
                 """,
-                (date_value, f"ETF{idx:02d}"),
+                (date_value, date_value, f"ETF{idx:02d}"),
             )
 
 
@@ -194,16 +194,16 @@ def _insert_scrape_success(date_value, etf_code):
         conn.execute(
             """
             INSERT OR REPLACE INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
+                date, data_date, etf_code, status, primary_source, primary_success,
                 moneydj_browser_used, official_fallback_used, official_success,
                 rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
                 total_weight_all_rows, total_weight_stock_rows, source_url,
                 error, started_at, finished_at
-            ) VALUES (?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
+            ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
                 10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
                 '2026-06-23T00:00:00', '2026-06-23T00:01:00')
             """,
-            (date_value, etf_code),
+            (date_value, date_value, etf_code),
         )
 
 

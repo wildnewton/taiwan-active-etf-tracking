@@ -24,7 +24,7 @@ def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
     with db._connect() as conn:
         rows = conn.execute(
             """
-            SELECT date, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
+            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
             FROM etf_scrape_runs
             GROUP BY date
             ORDER BY date DESC
@@ -42,7 +42,7 @@ def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -
     with db._connect() as conn:
         rows = conn.execute(
             """
-            SELECT date, SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS successes
+            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
             FROM etf_scrape_runs
             WHERE date < ?
             GROUP BY date

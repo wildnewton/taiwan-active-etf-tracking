@@ -1,8 +1,8 @@
-"""Retry stale ETF scrape rows for a single report date.
+"""Retry outdated usable ETF scrape rows for a single report date.
 
-The command re-scrapes stale rows for the requested report date, then reruns
-same-date derived layers and overwrites the date-only primary reports only when
-at least one retried ETF becomes fresh.
+The command re-scrapes usable rows whose data date is older than the requested
+report date, then reruns same-date derived layers and overwrites the date-only
+primary reports only when at least one retried ETF becomes fresh.
 """
 import argparse
 import json
@@ -18,7 +18,7 @@ from traction_analysis import generate_traction_report
 
 
 def get_stale_scrape_runs(run_date: str) -> list[dict]:
-    """Return active ETFs whose run still needs a same-date freshness retry."""
+    """Return active ETFs with usable data older than the requested run date."""
     with db._connect() as conn:
         rows = conn.execute(
             """
@@ -26,12 +26,13 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
             FROM etf_scrape_runs sr
             JOIN etf_universe u ON sr.etf_code = u.code
             WHERE sr.date = ?
-              AND sr.status = 'stale'
+              AND sr.status IN ('success', 'stale')
               AND sr.data_date IS NOT NULL
+              AND sr.data_date < ?
               AND u.retired = 0
             ORDER BY sr.etf_code
             """,
-            (run_date,),
+            (run_date, run_date),
         ).fetchall()
     return [{"etf_code": row[0], "data_date": row[1]} for row in rows]
 
