@@ -64,4 +64,5 @@ def test_min_weight_gate_keeps_raw_source_total_distinct_from_retained_total():
     filtered = scraper._apply_min_weight_gate(result)
 
     assert filtered["total_weight_all_rows"] == 0.01
-    assert filtered["weight_warning"]["source_total_weight_all_rows"] == 0.013
+    assert filtered["weight_warning"] == result["weight_warning"]
+    assert "total_weight_all_rows" not in filtered["weight_warning"]
