@@ -42,7 +42,9 @@ jobs:
             tests/test_bounded_async_scraping.py \
             tests/test_preexisting_successful_snapshots.py \
             tests/test_weight_validation_warnings.py \
-            tests/test_scraper_freshness_target.py
+            tests/test_scraper_freshness_target.py \
+            tests/test_expected_data_date_cutoff.py \
+            tests/test_min_weight_gate.py
 
       - name: Run full suite
         run: PYTHONPATH=. pytest -q
@@ -94,7 +96,15 @@ jobs:
                   run: PYTHONPATH=. pytest -q
           YAML
           git rm scripts/apply_issue83_green.py
-          git add scripts/scraper.py scripts/pipeline.py .github/workflows/ci.yml
+          git add \
+            scripts/scraper.py \
+            scripts/pipeline.py \
+            tests/test_preexisting_successful_snapshots.py \
+            tests/test_weight_validation_warnings.py \
+            tests/test_scraper_freshness_target.py \
+            tests/test_expected_data_date_cutoff.py \
+            tests/test_min_weight_gate.py \
+            .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "feat: add bounded non-blocking async scraping"
