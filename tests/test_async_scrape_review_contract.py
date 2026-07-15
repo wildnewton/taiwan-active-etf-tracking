@@ -102,11 +102,12 @@ async def test_async_official_static_fallback_runs_off_event_loop():
     ) as to_thread, patch(
         "scraper._official_fallback_static",
         side_effect=AssertionError("static fallback must not run on the event loop"),
-    ):
+    ) as static_fallback:
         result = await scraper._official_fallback_with_browser("00405A", object())
 
     assert result is static_result
-    to_thread.assert_awaited_once_with(scraper._official_fallback_static, "00405A")
+    to_thread.assert_awaited_once_with(static_fallback, "00405A")
+    static_fallback.assert_not_called()
 
 
 @pytest.mark.asyncio

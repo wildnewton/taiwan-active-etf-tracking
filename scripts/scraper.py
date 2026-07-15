@@ -1,7 +1,7 @@
 """Unified scraper — decision tree for all data sources.
 
 Priority:
-  1. MoneyDJ static (fastest, no browser) — retries up to 3x for transient errors
+  1. MoneyDJ static (fastest, no browser) — retries up to 10 attempts
   2. MoneyDJ browser (Playwright fallback)
   3. Official browser-based (Capital API, Nomura stealth, Mega/Uni-President Playwright)
   4. Official static (Fubon, Taishin)
@@ -194,7 +194,7 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
                 _with_source_type(official_browser, "official_fallback")
             )
 
-    return _official_fallback_static(etf_code)
+    return await asyncio.to_thread(_official_fallback_static, etf_code)
 
 
 def _official_fallback_static(etf_code: str) -> dict:

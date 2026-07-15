@@ -294,20 +294,11 @@ async def test_page_close_exception_becomes_one_failure_without_aborting_other_e
     browser_stack = _FakeBrowserStack()
     etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
     recorded = []
-    original_new_page = browser_stack._new_page
-
-    async def new_page_with_one_close_failure():
-        page = await original_new_page()
-        if len(browser_stack.pages) == 2:
-            page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
-        return page
-
-    browser_stack.context.new_page = AsyncMock(
-        side_effect=new_page_with_one_close_failure
-    )
 
     async def scrape_one(etf_code, page, target_date):
         await asyncio.sleep(0)
+        if etf_code == "ETF2":
+            page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
         return _success(etf_code)
 
     def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):

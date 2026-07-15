@@ -371,10 +371,17 @@ async def _execute_scrape_async_with_pages(
                     try:
                         await page.close()
                     except Exception as exc:
-                        result = {
-                            **FAILED_RESULT,
-                            "reason": f"unhandled page close exception: {exc}",
-                        }
+                        close_reason = f"unhandled page close exception: {exc}"
+                        if result.get("ok") is False and result.get("reason"):
+                            result = {
+                                **result,
+                                "reason": f"{result['reason']}; {close_reason}",
+                            }
+                        else:
+                            result = {
+                                **FAILED_RESULT,
+                                "reason": close_reason,
+                            }
             finished_at = datetime.now()
             return etf_code, started_at, finished_at, result
 
