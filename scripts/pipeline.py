@@ -368,7 +368,13 @@ async def _execute_scrape_async_with_pages(
                 }
             finally:
                 if page is not None:
-                    await page.close()
+                    try:
+                        await page.close()
+                    except Exception as exc:
+                        result = {
+                            **FAILED_RESULT,
+                            "reason": f"unhandled page close exception: {exc}",
+                        }
             finished_at = datetime.now()
             return etf_code, started_at, finished_at, result
 

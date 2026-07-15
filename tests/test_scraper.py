@@ -1,7 +1,15 @@
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from scraper import scrape_holdings, scrape_holdings_with_browser, _MONEYDJ_RETRY_DELAYS
+
+
+@pytest.fixture(autouse=True)
+def no_historical_row_count_state_leak():
+    with patch("scraper.get_historical_mean_stock_row_count", return_value=None):
+        yield
 
 
 class FixedDate(date):
