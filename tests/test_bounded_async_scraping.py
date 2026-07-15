@@ -248,11 +248,59 @@ async def test_worker_exception_becomes_one_failure_without_cancelling_other_etf
     ):
         await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
 
-    assert completed == ["ETF1", "ETF3"]
+    assert set(completed) == {"ETF1", "ETF3"}
     assert [item[0] for item in recorded] == ["ETF1", "ETF2", "ETF3"]
     assert recorded[0][1] is True
     assert recorded[1][1] is False
     assert "worker exploded" in recorded[1][2]
+    assert recorded[2][1] is True
+    for page in browser_stack.pages:
+        page.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_page_close_exception_becomes_one_failure_without_aborting_other_etfs():
+    browser_stack = _FakeBrowserStack()
+    etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
+    recorded = []
+    original_new_page = browser_stack._new_page
+
+    async def new_page_with_one_close_failure():
+        page = await original_new_page()
+        if len(browser_stack.pages) == 2:
+            page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
+        return page
+
+    browser_stack.context.new_page = AsyncMock(
+        side_effect=new_page_with_one_close_failure
+    )
+
+    async def scrape_one(etf_code, page, target_date):
+        await asyncio.sleep(0)
+        return _success(etf_code)
+
+    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+        recorded.append((etf_code, result["ok"], result.get("reason")))
+
+    with patch(
+        "pipeline._prepare_scrape_run",
+        return_value=_prepared_run(etfs),
+    ), patch(
+        "playwright.async_api.async_playwright",
+        new=browser_stack.async_playwright,
+    ), patch(
+        "pipeline.scrape_holdings_with_browser_async",
+        new=scrape_one,
+    ), patch(
+        "pipeline._record_result",
+        side_effect=record_result,
+    ):
+        await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+    assert [item[0] for item in recorded] == ["ETF1", "ETF2", "ETF3"]
+    assert recorded[0][1] is True
+    assert recorded[1][1] is False
+    assert "page close exploded" in recorded[1][2]
     assert recorded[2][1] is True
     for page in browser_stack.pages:
         page.close.assert_awaited_once_with()
