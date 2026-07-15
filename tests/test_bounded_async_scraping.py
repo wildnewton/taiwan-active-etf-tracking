@@ -259,6 +259,37 @@ async def test_worker_exception_becomes_one_failure_without_cancelling_other_etf
 
 
 @pytest.mark.asyncio
+async def test_returned_failure_still_closes_worker_page():
+    browser_stack = _FakeBrowserStack()
+    etfs = [{"code": "ETF1"}]
+    recorded = []
+
+    async def scrape_one(etf_code, page, target_date):
+        return _failure("returned failure")
+
+    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+        recorded.append((etf_code, result["ok"], result.get("reason")))
+
+    with patch(
+        "pipeline._prepare_scrape_run",
+        return_value=_prepared_run(etfs),
+    ), patch(
+        "playwright.async_api.async_playwright",
+        new=browser_stack.async_playwright,
+    ), patch(
+        "pipeline.scrape_holdings_with_browser_async",
+        new=scrape_one,
+    ), patch(
+        "pipeline._record_result",
+        side_effect=record_result,
+    ):
+        await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+    assert recorded == [("ETF1", False, "returned failure")]
+    browser_stack.pages[0].close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_page_close_exception_becomes_one_failure_without_aborting_other_etfs():
     browser_stack = _FakeBrowserStack()
     etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
