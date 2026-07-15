@@ -1,21 +1,63 @@
-name: Export source
+name: Apply PR 90 GREEN
 
 on:
-  pull_request:
   push:
     branches:
       - tooling/export-pr90-source
 
+permissions:
+  contents: write
+
 jobs:
-  export:
+  apply:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/upload-artifact@v4
+      - name: Check out helper branch
+        uses: actions/checkout@v4
         with:
-          name: pr90-source
-          path: |
-            .
-            !.git/**
-          include-hidden-files: true
-          retention-days: 1
+          path: helper
+
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+          path: target
+
+      - name: Apply patch
+        run: |
+          cd target
+          git apply ../helper/pr90-green.patch
+          git diff --check
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install -r target/requirements.txt
+
+      - name: Run targeted tests
+        run: |
+          cd target
+          PYTHONPATH=scripts pytest -q \
+            tests/test_stale_status_review_followups.py \
+            tests/test_cutoff_freshness_consumers.py \
+            tests/test_stale_scrape_status.py \
+            tests/test_skip_stale_existing_snapshots.py \
+            tests/test_retry_stale_scrapes.py \
+            tests/test_changes.py \
+            tests/test_signal_report.py \
+            tests/test_report_redesign.py \
+            tests/test_snapshot_date_validation.py
+
+      - name: Commit and push GREEN
+        run: |
+          cd target
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts/changes.py scripts/pipeline.py scripts/report.py \
+            scripts/retry_stale_scrapes.py tests/test_changes.py \
+            tests/test_stale_scrape_status.py
+          git commit -m "fix: align stale freshness consumers"
+          git push origin HEAD:fix/73-stale-scrape-status
