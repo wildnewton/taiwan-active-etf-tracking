@@ -22,7 +22,8 @@ def _seed_etf(code, retired=0):
         )
 
 
-def _insert_scrape_run(code, *, run_date="2026-07-07", data_date="2026-07-06", status="success"):
+def _insert_scrape_run(code, *, run_date="2026-07-07", data_date="2026-07-06", status="stale"):
+    valid_snapshot = status in {"success", "stale", "skipped_stale_existing"}
     with db._connect() as conn:
         conn.execute(
             """
@@ -37,13 +38,13 @@ def _insert_scrape_run(code, *, run_date="2026-07-07", data_date="2026-07-06", s
             (
                 run_date, data_date, code, status, "moneydj_primary",
                 1 if status == "success" else 0, 0, 0, 0,
-                1 if status == "success" else 0,
-                1 if status == "success" else 0,
+                1 if valid_snapshot else 0,
+                1 if valid_snapshot else 0,
                 0,
-                10.0 if status == "success" else 0.0,
-                10.0 if status == "success" else 0.0,
-                "https://example.test" if status == "success" else "",
-                None if status == "success" else "timeout",
+                10.0 if valid_snapshot else 0.0,
+                10.0 if valid_snapshot else 0.0,
+                "https://example.test" if valid_snapshot else "",
+                None if valid_snapshot else "timeout",
                 "2026-07-07T21:00:00",
                 "2026-07-07T21:00:01",
             ),
@@ -58,13 +59,13 @@ def _seed_retry_rows():
     _seed_etf("00404A")
     _seed_etf("00405A", retired=1)
     _insert_scrape_run("00401A", data_date="2026-07-06")
-    _insert_scrape_run("00402A", data_date="2026-07-07")
+    _insert_scrape_run("00402A", data_date="2026-07-07", status="success")
     _insert_scrape_run("00403A", data_date="2026-07-06", status="failed")
     _insert_scrape_run("00404A", data_date=None)
     _insert_scrape_run("00405A", data_date="2026-07-06")
 
 
-def test_get_stale_scrape_runs_selects_only_active_successful_stale_rows():
+def test_get_stale_scrape_runs_selects_only_active_retry_eligible_rows():
     _seed_retry_rows()
 
     rows = get_stale_scrape_runs("2026-07-07")
@@ -165,7 +166,7 @@ def test_retry_stale_etfs_does_not_overwrite_when_stale_count_does_not_drop(tmp_
 def test_retry_stale_etfs_noops_when_no_stale_rows(tmp_path):
     db_path = _init_db(tmp_path)
     _seed_etf("00401A")
-    _insert_scrape_run("00401A", data_date="2026-07-07")
+    _insert_scrape_run("00401A", data_date="2026-07-07", status="success")
 
     with patch("retry_stale_scrapes.run_selected_scrape_with_browser") as scrape:
         summary = retry_stale_etfs(db_path=db_path, run_date="2026-07-07", report_dir=tmp_path)
