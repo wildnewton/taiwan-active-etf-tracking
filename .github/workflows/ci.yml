@@ -38,16 +38,5 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Run issue 82 targeted tests
-        run: |
-          PYTHONPATH=. pytest -q \
-            tests/test_weight_validation_warnings.py \
-            tests/test_weight_warning_edge_cases.py \
-            tests/test_moneydj.py \
-            tests/test_moneydj_browser.py \
-            tests/test_min_weight_gate.py \
-            tests/test_row_count_validation.py \
-            tests/test_scraper_freshness_target.py
-
       - name: Run tests
         run: PYTHONPATH=. pytest -q
