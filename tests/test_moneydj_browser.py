@@ -1,6 +1,8 @@
 import asyncio
 from unittest.mock import AsyncMock
 
+import pytest
+
 from scrapers.moneydj import build_moneydj_url
 from scrapers.moneydj_browser import (
     extract_all_dom_rows,
@@ -126,3 +128,36 @@ def test_scrape_moneydj_browser_fallback_to_pagination():
     assert result["source_type"] == "moneydj_browser"
     assert page.eval_on_selector_all.await_count == 3
     page.select_option.assert_awaited_once_with("select#pageselect", value="2")
+
+
+@pytest.mark.parametrize(
+    ("weight_text", "expected_total", "expected_reason"),
+    [
+        ("10.00", 50.0, "total_weight_below_expected_range"),
+        ("30.00", 150.0, "total_weight_above_expected_range"),
+    ],
+)
+def test_scrape_moneydj_browser_surfaces_weight_warning(
+    weight_text,
+    expected_total,
+    expected_reason,
+):
+    raw_rows = [
+        [f"測試股票{i}({1000 + i}.TW)", weight_text, "1,000"]
+        for i in range(5)
+    ]
+    page = make_page()
+    page.inner_text = AsyncMock(return_value=f"資料日期 {DATE}")
+    page.eval_on_selector_all = AsyncMock(return_value=raw_rows)
+    page.goto = AsyncMock()
+
+    result = run(scrape_moneydj_browser(ETF_CODE, page))
+
+    assert result["ok"] is True
+    assert result["reason"] == "ok"
+    assert result["weight_warning"] == {
+        "reason": expected_reason,
+        "total_weight_all_rows": expected_total,
+        "minimum_expected_weight": 70.0,
+        "maximum_expected_weight": 140.0,
+    }
