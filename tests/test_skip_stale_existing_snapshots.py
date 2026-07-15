@@ -88,9 +88,9 @@ def test_stale_result_with_existing_snapshot_skips_holding_replacement():
     ]
     assert summary["data_freshness"] == {"fresh": 0, "stale": 1, "unknown": 0}
     assert len(captured_runs) == 1
-    assert captured_runs[0].status == "skipped_stale_existing"
+    assert captured_runs[0].status == "stale"
     assert captured_runs[0].data_date == STALE_DATA_DATE
-    assert captured_runs[0].error == "stale_snapshot_already_exists"
+    assert captured_runs[0].error is None
 
 
 def test_stale_result_without_existing_snapshot_writes_once():

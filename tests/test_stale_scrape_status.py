@@ -163,9 +163,9 @@ def test_existing_stale_snapshot_keeps_explicit_skip_status():
         snapshot_exists=True,
     )
 
-    assert persisted.status == "skipped_stale_existing"
+    assert persisted.status == "stale"
     assert persisted.data_date == STALE_DATE
-    assert persisted.error == "stale_snapshot_already_exists"
+    assert persisted.error is None
     assert summary["skipped_stale_existing"] == 1
     assert summary["data_freshness"] == {"fresh": 0, "stale": 1, "unknown": 0}
     replace_snapshot.assert_not_called()
@@ -250,11 +250,10 @@ def test_retry_query_selects_retry_eligible_stale_statuses():
 
     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
         {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
-        {"etf_code": "00402A", "data_date": STALE_DATE.isoformat()},
     ]
 
 
-@pytest.mark.parametrize("existing_status", ["stale", "skipped_stale_existing"])
+@pytest.mark.parametrize("existing_status", ["stale"])
 def test_failed_retry_preserves_retry_eligible_stale_run(existing_status):
     db.init_db(":memory:")
     _seed_run(ETF_CODE, status=existing_status, data_date=STALE_DATE.isoformat())

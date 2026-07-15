@@ -632,7 +632,7 @@ def _record_result(
                     started_at,
                     finished_at,
                     result,
-                    status="skipped_stale_existing",
+                    status=final_status,
                 )
             )
             return
@@ -831,11 +831,7 @@ def _build_scrape_run(
     final_status = status or ("success" if result["ok"] else "failed")
     usable_result = result["ok"] is True and final_status in {"success", "stale"}
 
-    error = None
-    if final_status == "skipped_stale_existing":
-        error = "stale_snapshot_already_exists"
-    elif final_status == "failed":
-        error = result.get("reason")
+    error = result.get("reason") if final_status == "failed" else None
 
     return ScrapeRun(
         date=scrape_date,

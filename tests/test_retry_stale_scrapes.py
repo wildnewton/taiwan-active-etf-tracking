@@ -23,7 +23,7 @@ def _seed_etf(code, retired=0):
 
 
 def _insert_scrape_run(code, *, run_date="2026-07-07", data_date="2026-07-06", status="stale"):
-    valid_snapshot = status in {"success", "stale", "skipped_stale_existing"}
+    valid_snapshot = status in {"success", "stale"}
     with db._connect() as conn:
         conn.execute(
             """

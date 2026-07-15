@@ -26,7 +26,7 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
             FROM etf_scrape_runs sr
             JOIN etf_universe u ON sr.etf_code = u.code
             WHERE sr.date = ?
-              AND sr.status IN ('stale', 'skipped_stale_existing')
+              AND sr.status = 'stale'
               AND sr.data_date IS NOT NULL
               AND u.retired = 0
             ORDER BY sr.etf_code

@@ -472,10 +472,11 @@ def insert_scrape_run(run):
     row = _row_dict(run)
     status_priority = {
         "failed": 0,
-        "skipped_stale_existing": 1,
-        "stale": 2,
-        "success": 3,
+        "stale": 1,
+        "success": 2,
     }
+    # Legacy statuses such as "skipped_stale_existing" intentionally fall back
+    # to priority 0 so new canonical statuses can replace them.
     with _connect() as conn:
         existing = conn.execute(
             "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
