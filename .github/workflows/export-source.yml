@@ -1,6 +1,7 @@
 name: Export source
 
 on:
+  pull_request:
   push:
     branches:
       - tooling/export-pr90-source
