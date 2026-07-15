@@ -150,7 +150,7 @@ async def test_async_scraper_accepts_warned_moneydj_without_browser_or_official_
     moneydj_browser = AsyncMock()
     official_fallback = AsyncMock()
 
-    with patch("scraper._retry_moneydj", return_value=warned), patch(
+    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=warned)), patch(
         "scraper.scrape_moneydj_browser", new=moneydj_browser
     ), patch(
         "scraper._official_fallback_with_browser", new=official_fallback

@@ -162,7 +162,7 @@ async def test_min_weight_gate_applied_to_async_browser_path():
     browser_result["source_type"] = "moneydj_browser"
     official_fallback = AsyncMock()
 
-    with patch("scraper._retry_moneydj", return_value=make_failed_result()), \
+    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=make_failed_result())), \
         patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)), \
         patch("scraper._is_stale_result", return_value=False), \
         patch("scraper.get_historical_mean_stock_row_count", return_value=None), \

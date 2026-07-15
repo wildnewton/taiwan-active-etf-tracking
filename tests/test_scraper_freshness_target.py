@@ -77,7 +77,7 @@ async def test_browser_scraper_uses_caller_target_for_official_fallback():
     official = make_result(TARGET_DATE, source_type="official_fallback")
     official_fallback = AsyncMock(return_value=official)
 
-    with patch("scraper._retry_moneydj", return_value=moneydj), \
+    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=moneydj)), \
         patch("scraper._official_fallback_with_browser", new=official_fallback), \
         patch("scraper.get_historical_mean_stock_row_count", return_value=None):
         result = await scraper.scrape_holdings_with_browser_async(
