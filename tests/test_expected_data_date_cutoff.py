@@ -141,7 +141,7 @@ def test_browser_wrapper_rejects_none_target_before_async_work():
 @pytest.mark.asyncio
 async def test_async_browser_scraper_rejects_none_target_before_network_work():
     retry_moneydj = AsyncMock()
-    with patch("scraper._retry_moneydj", new=retry_moneydj):
+    with patch("scraper._retry_moneydj_async", new=retry_moneydj):
         with pytest.raises(TypeError, match="target_date is required"):
             await scraper.scrape_holdings_with_browser_async(
                 ETF_CODE,

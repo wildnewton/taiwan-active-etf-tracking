@@ -124,7 +124,8 @@ class _AsyncContext:
 
 class _FakeBrowserStack:
     def __init__(self):
-        self.page = object()
+        self.page = Mock()
+        self.page.close = AsyncMock()
         self.context = Mock()
         self.context.new_page = AsyncMock(return_value=self.page)
         self.context.close = AsyncMock()

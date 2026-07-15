@@ -77,7 +77,7 @@ async def test_browser_scraper_uses_caller_target_for_official_fallback():
     official = make_result(TARGET_DATE, source_type="official_fallback")
     official_fallback = AsyncMock(return_value=official)
 
-    with patch("scraper._retry_moneydj", return_value=moneydj), \
+    with patch("scraper._retry_moneydj_async", new=AsyncMock(return_value=moneydj)), \
         patch("scraper._official_fallback_with_browser", new=official_fallback), \
         patch("scraper.get_historical_mean_stock_row_count", return_value=None):
         result = await scraper.scrape_holdings_with_browser_async(
@@ -97,6 +97,7 @@ async def test_daily_pipeline_passes_expected_data_date_to_browser_scraper():
     with patch("pipeline.date", FixedDate), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \
+        patch("pipeline.successful_snapshot_exists", return_value=False), \
         patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \

@@ -12,7 +12,11 @@ from db import (
 )
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow, ScrapeRun
-from scraper import scrape_holdings, scrape_holdings_with_browser_async
+from scraper import (
+    FAILED_RESULT,
+    scrape_holdings,
+    scrape_holdings_with_browser_async,
+)
 from trading_calendar import is_tw_trading_day, latest_tw_trading_day_on_or_before
 
 
@@ -21,6 +25,7 @@ AsyncScrapeFn = Callable[[str, date], Awaitable[dict]]
 
 TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 DATA_AVAILABILITY_CUTOFF = time(15, 0)
+_ASYNC_SCRAPE_CONCURRENCY = 3
 
 
 def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
@@ -67,10 +72,9 @@ async def run_daily_scrape_with_browser_async(
         try:
             context = await browser.new_context(locale="zh-TW")
             try:
-                browser_page = await context.new_page()
-                return await _execute_scrape_async(
+                return await _execute_scrape_async_with_pages(
                     etfs_to_scrape,
-                    _browser_scrape_fn(browser_page),
+                    context,
                     run_date,
                     expected_data_date,
                     summary,
@@ -320,6 +324,69 @@ async def _execute_scrape_async(
         started_at = datetime.now()
         result = await scrape_fn(etf_code, freshness_target_date)
         finished_at = datetime.now()
+        _record_result(
+            summary,
+            etf_code,
+            run_date,
+            expected_data_date,
+            started_at,
+            finished_at,
+            result,
+        )
+
+    _finalize_data_date_range(summary)
+    return summary
+
+
+async def _execute_scrape_async_with_pages(
+    etfs: list[dict],
+    context,
+    run_date: date,
+    expected_data_date: Optional[date],
+    summary: dict,
+) -> dict:
+    """Scrape concurrently, then record sequentially in ETF input order."""
+    freshness_target_date = expected_data_date or run_date
+    semaphore = asyncio.Semaphore(_ASYNC_SCRAPE_CONCURRENCY)
+
+    async def scrape_one(etf: dict):
+        etf_code = etf["code"]
+        async with semaphore:
+            started_at = datetime.now()
+            page = None
+            try:
+                page = await context.new_page()
+                result = await scrape_holdings_with_browser_async(
+                    etf_code,
+                    page,
+                    target_date=freshness_target_date,
+                )
+            except Exception as exc:
+                result = {
+                    **FAILED_RESULT,
+                    "reason": f"unhandled scraper exception: {exc}",
+                }
+            finally:
+                if page is not None:
+                    try:
+                        await page.close()
+                    except Exception as exc:
+                        close_reason = f"unhandled page close exception: {exc}"
+                        if result.get("ok") is False and result.get("reason"):
+                            result = {
+                                **result,
+                                "reason": f"{result['reason']}; {close_reason}",
+                            }
+                        else:
+                            result = {
+                                **FAILED_RESULT,
+                                "reason": close_reason,
+                            }
+            finished_at = datetime.now()
+            return etf_code, started_at, finished_at, result
+
+    outcomes = await asyncio.gather(*(scrape_one(etf) for etf in etfs))
+    for etf_code, started_at, finished_at, result in outcomes:
         _record_result(
             summary,
             etf_code,

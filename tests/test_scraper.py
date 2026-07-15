@@ -1,7 +1,15 @@
 from datetime import date
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from scraper import scrape_holdings, scrape_holdings_with_browser, _MONEYDJ_RETRY_DELAYS
+
+
+@pytest.fixture(autouse=True)
+def no_historical_row_count_state_leak():
+    with patch("scraper.get_historical_mean_stock_row_count", return_value=None):
+        yield
 
 
 class FixedDate(date):
@@ -165,7 +173,7 @@ def test_scrape_with_browser_retry_then_moneydj_primary():
         patch("scraper.scrape_moneydj_browser", new=AsyncMock()) as browser, \
         patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
-        patch("time.sleep") as sleep:
+        patch("scraper.asyncio.sleep", new=AsyncMock()) as sleep:
         result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
@@ -174,7 +182,7 @@ def test_scrape_with_browser_retry_then_moneydj_primary():
     browser.assert_not_called()
     official_browser.assert_not_called()
     official_static.assert_not_called()
-    assert sleep.call_count == 2
+    assert [item.args[0] for item in sleep.await_args_list] == [2, 2]
 
 
 def test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser():
@@ -214,7 +222,7 @@ def test_scrape_with_browser_retry_all_fail_then_browser():
         patch("scraper.scrape_moneydj_browser", new=AsyncMock(return_value=browser_result)) as browser, \
         patch("scraper.scrape_official_with_browser", new=AsyncMock()) as official_browser, \
         patch("scraper.scrape_official_static") as official_static, \
-        patch("time.sleep") as sleep:
+        patch("scraper.asyncio.sleep", new=AsyncMock()) as sleep:
         result = scrape_holdings_with_browser("00980A", page, target_date=FixedDate.today())
 
     assert result["ok"] is True
@@ -223,7 +231,7 @@ def test_scrape_with_browser_retry_all_fail_then_browser():
     browser.assert_awaited_once_with("00980A", page)
     official_browser.assert_not_called()
     official_static.assert_not_called()
-    assert sleep.call_count == 9
+    assert [item.args[0] for item in sleep.await_args_list] == _MONEYDJ_RETRY_DELAYS
 
 
 def test_scrape_with_browser_first_try_immediate():

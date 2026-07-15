@@ -1,7 +1,7 @@
 """Unified scraper — decision tree for all data sources.
 
 Priority:
-  1. MoneyDJ static (fastest, no browser) — retries up to 3x for transient errors
+  1. MoneyDJ static (fastest, no browser) — retries up to 10 attempts
   2. MoneyDJ browser (Playwright fallback)
   3. Official browser-based (Capital API, Nomura stealth, Mega/Uni-President Playwright)
   4. Official static (Fubon, Taishin)
@@ -58,11 +58,7 @@ _MONEYDJ_RETRY_DELAYS = _build_retry_delays(_MONEYDJ_RETRIES)
 
 
 def _retry_moneydj(etf_code: str) -> dict:
-    """Call scrape_moneydj with up to _MONEYDJ_RETRIES attempts.
-
-    Returns the first successful result, or the last failure result if all fail.
-    Sleeps between attempts using Fibonacci * 2 backoff.
-    """
+    """Call scrape_moneydj synchronously with Fibonacci backoff."""
     last_result = FAILED_RESULT.copy()
     for attempt in range(_MONEYDJ_RETRIES):
         last_result = scrape_moneydj(etf_code)
@@ -70,6 +66,18 @@ def _retry_moneydj(etf_code: str) -> dict:
             return last_result
         if attempt < _MONEYDJ_RETRIES - 1:
             time.sleep(_MONEYDJ_RETRY_DELAYS[attempt])
+    return last_result
+
+
+async def _retry_moneydj_async(etf_code: str) -> dict:
+    """Run MoneyDJ attempts off the event loop with async backoff."""
+    last_result = FAILED_RESULT.copy()
+    for attempt in range(_MONEYDJ_RETRIES):
+        last_result = await asyncio.to_thread(scrape_moneydj, etf_code)
+        if last_result["ok"] is True:
+            return last_result
+        if attempt < _MONEYDJ_RETRIES - 1:
+            await asyncio.sleep(_MONEYDJ_RETRY_DELAYS[attempt])
     return last_result
 
 
@@ -133,8 +141,8 @@ async def scrape_holdings_with_browser_async(
     avoids nesting asyncio.run inside an already-running event loop.
     """
     target_date = _require_target_date(target_date)
-    # 1. MoneyDJ static (fastest) — retries up to 3x for transient errors
-    moneydj_result = _retry_moneydj(etf_code)
+    # 1. MoneyDJ static (fastest) — synchronous request work runs off-loop.
+    moneydj_result = await _retry_moneydj_async(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _apply_min_weight_gate(
             _with_source_type(moneydj_result, "moneydj_primary")
@@ -186,7 +194,7 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
                 _with_source_type(official_browser, "official_fallback")
             )
 
-    return _official_fallback_static(etf_code)
+    return await asyncio.to_thread(_official_fallback_static, etf_code)
 
 
 def _official_fallback_static(etf_code: str) -> dict:
