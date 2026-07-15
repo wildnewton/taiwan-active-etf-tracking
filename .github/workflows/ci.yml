@@ -100,8 +100,8 @@ jobs:
                   run: PYTHONPATH=. pytest -q
           YAML
           git rm scripts/apply_issue83_page_close_fix.py
-          git add scripts/pipeline.py .github/workflows/ci.yml
+          git add scripts/pipeline.py tests/test_scraper.py .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "fix: isolate Playwright page close failures"
+          git commit -m "fix: isolate async worker lifecycle failures"
           git push origin HEAD:fix/83-bounded-async-scraping
