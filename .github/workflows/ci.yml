@@ -47,7 +47,14 @@ jobs:
             tests/test_min_weight_gate.py
 
       - name: Run full suite
-        run: PYTHONPATH=. pytest -q
+        run: PYTHONPATH=. pytest -q --tb=short > issue83-full-suite.log 2>&1
+
+      - name: Upload full-suite log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue83-full-suite-log
+          path: issue83-full-suite.log
 
       - name: Commit GREEN implementation
         run: |
