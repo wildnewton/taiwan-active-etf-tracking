@@ -34,7 +34,21 @@ jobs:
           pip install pytest pytest-asyncio coverage
 
       - name: Apply review fixes
-        run: python scripts/apply_issue83_review_fixes.py
+        run: |
+          set +e
+          python scripts/apply_issue83_review_fixes.py 2>&1 | tee issue83-apply.log
+          echo "${PIPESTATUS[0]}" > issue83-apply.status
+          exit 0
+
+      - name: Upload apply log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue83-apply-log
+          path: issue83-apply.log
+
+      - name: Gate apply fixes
+        run: exit "$(cat issue83-apply.status)"
 
       - name: Run targeted tests
         run: |
@@ -121,7 +135,7 @@ jobs:
                   run: PYTHONPATH=. pytest -q
           YAML
           git rm scripts/apply_issue83_review_fixes.py
-          rm -f issue83-targeted.log issue83-targeted.status issue83-review-coverage.txt issue83-review-coverage.json
+          rm -f issue83-apply.log issue83-apply.status issue83-targeted.log issue83-targeted.status issue83-review-coverage.txt issue83-review-coverage.json
           git add scripts/scraper.py scripts/pipeline.py tests/test_bounded_async_scraping.py tests/test_async_scrape_review_contract.py tests/test_scraper_freshness_target.py .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
