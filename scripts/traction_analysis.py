@@ -277,12 +277,13 @@ def generate_traction_report(
     db_path="data/active_etf_holdings.sqlite",
     window_days=5,
     report_dir=None,
+    latest_date=None,
 ) -> str:
-    """Generate the traction analysis report."""
+    """Generate the traction analysis report through an optional end date."""
     db.init_db(db_path)
 
     with db._connect() as conn:
-        latest_date = _get_latest_date(conn)
+        latest_date = latest_date or _get_latest_date(conn)
         if not latest_date:
             return "⚠️ 無 holding_changes 資料"
 

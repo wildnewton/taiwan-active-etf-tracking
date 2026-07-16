@@ -161,8 +161,9 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
         seen.append("report")
         return "try-run signal report"
 
-    def traction(db_path, window_days):
+    def traction(db_path, window_days, latest_date=None):
         assert window_days == 10
+        assert latest_date == "2026-07-13"
         with sqlite3.connect(db_path) as conn:
             assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "signals"
         seen.append("traction")

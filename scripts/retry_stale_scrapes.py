@@ -117,7 +117,11 @@ def _overwrite_reports(db_path: str, run_date: str, report_dir: str | Path) -> d
     report_dir.mkdir(parents=True, exist_ok=True)
 
     signal_text = generate_signal_report(run_date, quality_run_date=run_date)
-    traction_text = generate_traction_report(db_path=db_path, window_days=10)
+    traction_text = generate_traction_report(
+        db_path=db_path,
+        window_days=10,
+        latest_date=run_date,
+    )
 
     signal_path = report_dir / f"taiwan_active_etf_signal_report_{run_date}.txt"
     traction_path = report_dir / f"traction_raw_{run_date}.txt"

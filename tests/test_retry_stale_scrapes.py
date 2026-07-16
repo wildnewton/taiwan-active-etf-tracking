@@ -122,7 +122,11 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
     signal_report.assert_called_once_with(
         "2026-07-07", quality_run_date="2026-07-07"
     )
-    traction_report.assert_called_once_with(db_path=db_path, window_days=10)
+    traction_report.assert_called_once_with(
+        db_path=db_path,
+        window_days=10,
+        latest_date="2026-07-07",
+    )
 
     assert summary["stale_before"] == 2
     assert summary["stale_after"] == 1

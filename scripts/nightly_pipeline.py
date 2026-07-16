@@ -346,6 +346,7 @@ def run_nightly_pipeline(
         traction_raw = generate_traction_report(
             db_path=db_path,
             window_days=10,
+            latest_date=target_data_date,
         )
         traction_path = report_dir_path / f"traction_raw_{report_date}.txt"
         traction_archive_path = report_dir_path / f"traction_raw_{stamp}.txt"

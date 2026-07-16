@@ -117,7 +117,11 @@ def test_script_calls_all_steps(tmp_path):
         mock_intent.assert_called_once_with("2026-06-26")
         mock_signals.assert_called_once_with("2026-06-26")
         mock_report.assert_called_once_with("2026-06-26", quality_run_date="2026-06-26")
-        mock_traction.assert_called_once()
+        mock_traction.assert_called_once_with(
+            db_path=db_path,
+            window_days=10,
+            latest_date="2026-06-26",
+        )
 
 
 def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
