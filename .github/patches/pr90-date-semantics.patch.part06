@@ -1,0 +1,47 @@
++    )
++    insert_scrape_run(
++        "2026-07-08", "00983A", status="stale", data_date="2026-07-07"
++    )
+ 
+     report = generate_signal_report("2026-07-08")
+ 
+diff --git a/tests/test_stale_scrape_status.py b/tests/test_stale_scrape_status.py
+index ccc6e1c..8d3d184 100644
+--- a/tests/test_stale_scrape_status.py
++++ b/tests/test_stale_scrape_status.py
+@@ -250,7 +250,6 @@ def test_retry_query_selects_retry_eligible_stale_statuses():
+ 
+     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
+         {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
+-        {"etf_code": "00403A", "data_date": STALE_DATE.isoformat()},
+     ]
+ 
+ 
+diff --git a/tests/test_stale_status_review_followups.py b/tests/test_stale_status_review_followups.py
+index 3c6ac90..8e1e445 100644
+--- a/tests/test_stale_status_review_followups.py
++++ b/tests/test_stale_status_review_followups.py
+@@ -127,7 +127,7 @@ def _seed_scrape_run(code: str, *, status: str, data_date: str | None) -> None:
+         )
+ 
+ 
+-def test_report_reads_explicit_stale_and_legacy_success_freshness():
++def test_report_uses_canonical_persisted_freshness_status():
+     db.init_db(":memory:")
+     _seed_scrape_run("00401A", status="stale", data_date=EXPECTED_DATE.isoformat())
+     _seed_scrape_run("00402A", status="success", data_date=EXPECTED_DATE.isoformat())
+@@ -136,10 +136,12 @@ def test_report_reads_explicit_stale_and_legacy_success_freshness():
+     freshness = report._get_scrape_data_freshness(RUN_DATE.isoformat())
+ 
+     assert freshness == {
+-        "fresh": [{"etf_code": "00403A", "data_date": RUN_DATE.isoformat()}],
++        "fresh": [
++            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
++            {"etf_code": "00403A", "data_date": RUN_DATE.isoformat()},
++        ],
+         "stale": [
+             {"etf_code": "00401A", "data_date": EXPECTED_DATE.isoformat()},
+-            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
+         ],
+         "unknown": [],
+     }
