@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from scrapers.official import (
     _is_nomura_assets_response,
@@ -44,7 +45,9 @@ _CAPITAL_STOCKS = [
     {"stocNo": "5880", "stocName": "合庫金", "share": 400000, "weightRound": 2.10},
     {"stocNo": "5871", "stocName": "中租-KY", "share": 100000, "weightRound": 2.00},
 ]
-CAPITAL_API_JSON = json.dumps({"data": {"pcf": {"date2": "2026-06-18"}, "stocks": _CAPITAL_STOCKS}})
+CAPITAL_API_JSON = json.dumps(
+    {"data": {"pcf": {"date2": "2026-06-18"}, "stocks": _CAPITAL_STOCKS}}
+)
 
 _NOMURA_ROWS = [
     ["2330", "台灣積體電路製造", "704000", "9.58"],
@@ -68,14 +71,16 @@ _NOMURA_ROWS = [
     ["5880", "合作金庫金融控股", "400000", "2.00"],
     ["5871", "中租控股", "100000", "1.90"],
 ]
-NOMURA_API_JSON = json.dumps({
-    "Entries": {
-        "Data": {
-            "FundAsset": {"NavDate": "2026-06-22"},
-            "Table": [{"TableTitle": "股票", "Rows": _NOMURA_ROWS}],
+NOMURA_API_JSON = json.dumps(
+    {
+        "Entries": {
+            "Data": {
+                "FundAsset": {"NavDate": "2026-06-22"},
+                "Table": [{"TableTitle": "股票", "Rows": _NOMURA_ROWS}],
+            }
         }
     }
-})
+)
 
 
 class _Response:
@@ -87,49 +92,76 @@ class _Response:
         return self._body
 
 
+class _ResponseInfo:
+    def __init__(self, response):
+        self._response = response
+
+    @property
+    def value(self):
+        async def resolve():
+            return self._response
+
+        return resolve()
+
+
+class _ExpectResponseContext:
+    def __init__(self, response, order, exit_error=None):
+        self._response_info = _ResponseInfo(response)
+        self._order = order
+        self._exit_error = exit_error
+
+    async def __aenter__(self):
+        self._order.append("response_wait_registered")
+        return self._response_info
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        if exc_type is None and self._exit_error is not None:
+            raise self._exit_error
+        return False
+
+
 class _Timeout(Exception):
     pass
 
 
-def _mock_page(response_url=None, response_body=None, body_text=""):
+def _mock_page(
+    response_url=None,
+    response_body=None,
+    body_text="",
+    response_wait_error=None,
+):
     page = AsyncMock()
-    page.goto = AsyncMock()
+    order = []
+
+    async def goto(*args, **kwargs):
+        order.append("goto")
+
+    page.goto = AsyncMock(side_effect=goto)
     page.wait_for_timeout = AsyncMock()
-    page.wait_for_event = AsyncMock()
+    page.wait_for_event = AsyncMock(side_effect=AssertionError("late response wait used"))
     page.wait_for_selector = AsyncMock()
+    page.on = Mock()
     page.remove_listener = Mock()
-
-    callbacks = {}
-
-    def on(event, callback):
-        callbacks[event] = callback
-
-    page.on = on
-    page._callbacks = callbacks
     page.locator = Mock()
     page.locator.return_value.inner_text = AsyncMock(return_value=body_text)
     page.query_selector_all = AsyncMock(return_value=[])
+    page._order = order
 
-    if response_url:
-        response = _Response(response_url, response_body or "{}")
+    response = _Response(response_url or "", response_body or "{}")
 
-        async def wait_for_event(event_name, predicate, timeout):
-            assert event_name == "response"
-            assert timeout <= 10000
+    def expect_response(predicate, timeout):
+        assert timeout <= 10000
+        if response_url:
             assert predicate(response)
-            callback = callbacks.get("response")
-            if callback:
-                await callback(response)
-            return response
+        return _ExpectResponseContext(response, order, response_wait_error)
 
-        page.wait_for_event.side_effect = wait_for_event
-
+    page.expect_response = Mock(side_effect=expect_response)
     return page
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_capital_waits_for_bounded_buyback_response_instead_of_fixed_sleep(mock_config):
+async def test_capital_registers_bounded_response_wait_before_navigation(mock_config):
     mock_config.return_value = {
         "url": CAPITAL_URL,
         "method": "api",
@@ -144,50 +176,57 @@ async def test_capital_waits_for_bounded_buyback_response_instead_of_fixed_sleep
     result = await scrape_capital_playwright("00982A", page)
 
     assert result["ok"] is True
-    page.wait_for_event.assert_awaited_once()
+    assert page._order == ["response_wait_registered", "goto"]
+    page.expect_response.assert_called_once()
+    page.wait_for_event.assert_not_awaited()
     page.wait_for_timeout.assert_not_called()
+    page.on.assert_not_called()
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_capital_removes_response_listener_when_navigation_raises(mock_config):
+async def test_capital_navigation_error_still_propagates(mock_config):
     mock_config.return_value = {
         "url": CAPITAL_URL,
         "method": "api",
         "issuer": "Capital",
         "official_logic": "buyback",
     }
-    page = _mock_page()
+    page = _mock_page(
+        response_url="https://www.capitalfund.com.tw/CFWeb/api/etf/buyback",
+        response_body=CAPITAL_API_JSON,
+    )
     page.goto.side_effect = RuntimeError("navigation failed")
 
     with pytest.raises(RuntimeError, match="navigation failed"):
         await scrape_capital_playwright("00982A", page)
 
-    assert page.remove_listener.called
+    page.expect_response.assert_called_once()
+    page.on.assert_not_called()
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_capital_still_fails_cleanly_when_buyback_response_times_out(mock_config):
+async def test_capital_response_timeout_returns_clean_failure(mock_config):
     mock_config.return_value = {
         "url": CAPITAL_URL,
         "method": "api",
         "issuer": "Capital",
         "official_logic": "buyback",
     }
-    page = _mock_page()
-    page.wait_for_event.side_effect = _Timeout("timed out")
+    page = _mock_page(response_wait_error=PlaywrightTimeoutError("timed out"))
 
     result = await scrape_capital_playwright("00982A", page)
 
     assert result["ok"] is False
     assert "not intercepted" in result["reason"]
-    assert page.remove_listener.called
+    page.expect_response.assert_called_once()
+    page.wait_for_event.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_nomura_waits_for_bounded_assets_response_after_navigation(mock_config):
+async def test_nomura_registers_bounded_response_wait_before_navigation(mock_config):
     mock_config.return_value = {
         "url": NOMURA_URL,
         "method": "stealth_api",
@@ -202,26 +241,33 @@ async def test_nomura_waits_for_bounded_assets_response_after_navigation(mock_co
     result = await scrape_nomura_stealth("00980A", page)
 
     assert result["ok"] is True
-    page.wait_for_event.assert_awaited_once()
+    assert page._order == ["response_wait_registered", "goto"]
+    page.expect_response.assert_called_once()
+    page.wait_for_event.assert_not_awaited()
     page.wait_for_timeout.assert_not_called()
+    page.on.assert_not_called()
 
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_nomura_removes_response_listener_when_navigation_raises(mock_config):
+async def test_nomura_navigation_error_still_propagates(mock_config):
     mock_config.return_value = {
         "url": NOMURA_URL,
         "method": "stealth_api",
         "issuer": "Nomura",
         "official_logic": "GetFundAssets",
     }
-    page = _mock_page()
+    page = _mock_page(
+        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_body=NOMURA_API_JSON,
+    )
     page.goto.side_effect = RuntimeError("navigation failed")
 
     with pytest.raises(RuntimeError, match="navigation failed"):
         await scrape_nomura_stealth("00980A", page)
 
-    assert page.remove_listener.called
+    page.expect_response.assert_called_once()
+    page.on.assert_not_called()
 
 
 def test_nomura_assets_response_predicate_is_case_insensitive():
