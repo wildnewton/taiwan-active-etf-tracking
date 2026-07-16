@@ -39,4 +39,7 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: >-
+          PYTHONPATH=. pytest -q
+          tests/test_ctbc_official_regressions.py
+          tests/test_official_playwright_waits.py
