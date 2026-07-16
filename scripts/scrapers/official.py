@@ -368,9 +368,6 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     except Exception as exc:
         return _failed_result(source_url, f"CTBC API parse error: {exc}")
 
-    if all_rows and any(not row.get("date") for row in all_rows):
-        return _failed_result(source_url, "CTBC holdings date missing")
-
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
