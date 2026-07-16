@@ -1,4 +1,3 @@
-import json
 from unittest.mock import Mock, patch
 
 import pytest
@@ -75,10 +74,4 @@ def adapt_legacy_official_playwright_mocks(monkeypatch, request):
         return page
 
     monkeypatch.setattr(module, "_make_mock_page", make_mock_page)
-
-    if hasattr(module, "CTBC_API_JSON_RICH"):
-        payload = json.loads(module.CTBC_API_JSON_RICH)
-        payload.setdefault("Data", {})["FundAssets"] = [{"資料日期": "2026/07/16"}]
-        monkeypatch.setattr(module, "CTBC_API_JSON_RICH", json.dumps(payload))
-
     yield
