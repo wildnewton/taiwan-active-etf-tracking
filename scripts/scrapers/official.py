@@ -346,15 +346,23 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     try:
         await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
         if not holdings_body:
+            # wait_for_response was renamed to wait_for_event in Playwright 1.61
             try:
-                response = await page.wait_for_response(
-                    _is_ctbc_holdings_response,
-                    timeout=_API_RESPONSE_TIMEOUT_MS,
+                response = await page.wait_for_event(
+                    "response",
+                    predicate=_is_ctbc_holdings_response,
+                    timeout=15000,
                 )
                 if not holdings_body and _is_ctbc_holdings_response(response):
                     holdings_body = await response.text()
             except Exception:
                 pass
+        # Final fallback: poll for a few more seconds
+        if not holdings_body:
+            for _ in range(10):
+                await page.wait_for_timeout(1000)
+                if holdings_body:
+                    break
     finally:
         page.remove_listener("response", on_response)
 
