@@ -58,7 +58,7 @@ def _run_nightly(tmp_path, scrape_summary, *, latest_valid_date=TARGET_DATE, cha
 
 
 def test_nightly_passes_one_validated_target_date_to_every_downstream_stage(tmp_path):
-    result, latest, changes, intent, signals, report, _ = _run_nightly(
+    result, latest, changes, intent, signals, report, traction = _run_nightly(
         tmp_path,
         _scrape_summary(),
     )
@@ -68,6 +68,11 @@ def test_nightly_passes_one_validated_target_date_to_every_downstream_stage(tmp_
     intent.assert_called_once_with(TARGET_DATE)
     signals.assert_called_once_with(TARGET_DATE)
     report.assert_called_once_with(TARGET_DATE, quality_run_date=RUN_DATE)
+    traction.assert_called_once_with(
+        db_path=str(tmp_path / "active.sqlite"),
+        window_days=10,
+        latest_date=TARGET_DATE,
+    )
     assert result["change_summary"]["date"] == TARGET_DATE
 
 
@@ -150,6 +155,30 @@ def test_historical_retry_rebuilds_every_layer_for_the_explicit_date():
     signals.assert_called_once_with(historical_date)
     reports.assert_called_once_with(":memory:", historical_date, Path("reports"))
     assert result["reports_overwritten"] is True
+
+
+def test_historical_retry_traction_uses_the_explicit_retry_date(tmp_path):
+    historical_date = "2026-07-10"
+    with patch.object(
+        retry_stale_scrapes,
+        "generate_signal_report",
+        return_value="signal",
+    ), patch.object(
+        retry_stale_scrapes,
+        "generate_traction_report",
+        return_value="traction",
+    ) as traction:
+        retry_stale_scrapes._overwrite_reports(
+            ":memory:",
+            historical_date,
+            tmp_path,
+        )
+
+    traction.assert_called_once_with(
+        db_path=":memory:",
+        window_days=10,
+        latest_date=historical_date,
+    )
 
 
 def test_retry_does_not_rebuild_or_overwrite_when_change_detection_fails():
