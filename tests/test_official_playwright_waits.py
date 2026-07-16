@@ -95,7 +95,7 @@ def _mock_page(response_url=None, response_body=None, body_text=""):
     page = AsyncMock()
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
-    page.wait_for_response = AsyncMock()
+    page.wait_for_event = AsyncMock()
     page.wait_for_selector = AsyncMock()
     page.remove_listener = Mock()
 
@@ -113,7 +113,8 @@ def _mock_page(response_url=None, response_body=None, body_text=""):
     if response_url:
         response = _Response(response_url, response_body or "{}")
 
-        async def wait_for_response(predicate, timeout):
+        async def wait_for_event(event_name, predicate, timeout):
+            assert event_name == "response"
             assert timeout <= 10000
             assert predicate(response)
             callback = callbacks.get("response")
@@ -121,7 +122,7 @@ def _mock_page(response_url=None, response_body=None, body_text=""):
                 await callback(response)
             return response
 
-        page.wait_for_response.side_effect = wait_for_response
+        page.wait_for_event.side_effect = wait_for_event
 
     return page
 
@@ -143,7 +144,7 @@ async def test_capital_waits_for_bounded_buyback_response_instead_of_fixed_sleep
     result = await scrape_capital_playwright("00982A", page)
 
     assert result["ok"] is True
-    page.wait_for_response.assert_awaited_once()
+    page.wait_for_event.assert_awaited_once()
     page.wait_for_timeout.assert_not_called()
 
 
@@ -175,7 +176,7 @@ async def test_capital_still_fails_cleanly_when_buyback_response_times_out(mock_
         "official_logic": "buyback",
     }
     page = _mock_page()
-    page.wait_for_response.side_effect = _Timeout("timed out")
+    page.wait_for_event.side_effect = _Timeout("timed out")
 
     result = await scrape_capital_playwright("00982A", page)
 
@@ -201,7 +202,7 @@ async def test_nomura_waits_for_bounded_assets_response_after_navigation(mock_co
     result = await scrape_nomura_stealth("00980A", page)
 
     assert result["ok"] is True
-    page.wait_for_response.assert_awaited_once()
+    page.wait_for_event.assert_awaited_once()
     page.wait_for_timeout.assert_not_called()
 
 

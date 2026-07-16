@@ -269,14 +269,20 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
         await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
         if not buyback_body:
             try:
-                response = await page.wait_for_response(
-                    _is_capital_buyback_response,
+                response = await page.wait_for_event(
+                    "response",
+                    predicate=_is_capital_buyback_response,
                     timeout=_API_RESPONSE_TIMEOUT_MS,
                 )
                 if not buyback_body and _is_capital_buyback_response(response):
                     buyback_body = await response.text()
             except Exception:
                 pass
+        if not buyback_body:
+            for _ in range(10):
+                await page.wait_for_timeout(1000)
+                if buyback_body:
+                    break
     finally:
         page.remove_listener("response", on_response)
 
@@ -310,14 +316,20 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
         await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
         if not assets_body:
             try:
-                response = await page.wait_for_response(
-                    _is_nomura_assets_response,
+                response = await page.wait_for_event(
+                    "response",
+                    predicate=_is_nomura_assets_response,
                     timeout=_API_RESPONSE_TIMEOUT_MS,
                 )
                 if not assets_body and _is_nomura_assets_response(response):
                     assets_body = await response.text()
             except Exception:
                 pass
+        if not assets_body:
+            for _ in range(10):
+                await page.wait_for_timeout(1000)
+                if assets_body:
+                    break
     finally:
         page.remove_listener("response", on_response)
 
