@@ -1,0 +1,28 @@
+name: Export PR 90 red source
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR 90 branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          path: target
+
+      - name: Package source
+        run: tar --exclude=.git -czf /tmp/pr90-red-source.tar.gz -C target .
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr90-red-source
+          path: /tmp/pr90-red-source.tar.gz
