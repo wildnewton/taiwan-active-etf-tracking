@@ -89,6 +89,7 @@ def test_retry_selects_only_canonical_stale_rows():
 
 
 def test_valid_date_selection_uses_snapshot_dates_not_scrape_run_dates():
+    # Regression: scrape-run dates must not become holdings chronology.
     db.init_db(":memory:")
     for code in ("A", "B"):
         _seed_etf(code)
