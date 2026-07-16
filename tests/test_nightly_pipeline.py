@@ -240,7 +240,7 @@ def test_stale_etfs_are_reported_then_fail_the_single_date_contract(capsys, tmp_
     out = capsys.readouterr().out
     assert "Data freshness" in out
     assert "fresh 5" in out and "stale 14" in out
-    assert "PROVISIONAL REPORT" in out
+    assert "STALE SCRAPE" in out
     assert "5/19" in out
     assert "00401A" in out and "2026-06-25" in out
     changes.assert_not_called()
