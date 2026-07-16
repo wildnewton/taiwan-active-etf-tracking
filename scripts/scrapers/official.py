@@ -27,6 +27,7 @@ _API_RESPONSE_TIMEOUT_MS = 10_000
 TWSE_URL_TEMPLATE = (
     "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?{code}="
 )
+CTBC_URL_TEMPLATE = "https://www.ctbcinvestments.com/Etf/{internal_id}/Combination"
 
 
 def get_official_config(etf_code: str) -> dict:
@@ -153,6 +154,45 @@ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[d
                 )
             )
     return rows
+
+
+def parse_ctbc_api(api_json: str, etf_code: str, source_url: str) -> list[dict]:
+    data = json.loads(api_json)
+    payload = data.get("Data", {}) if isinstance(data, dict) else {}
+    assets = payload.get("FundAssets", []) if isinstance(payload, dict) else []
+    date = None
+    if assets and isinstance(assets[0], dict):
+        date = assets[0].get("資料日期")
+    date = _normalize_date(date)
+
+    rows = []
+    details = payload.get("FundAssetsDetail", []) if isinstance(payload, dict) else []
+    for group in details:
+        if not isinstance(group, dict):
+            continue
+        for item in group.get("Data", []):
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get("code_") or "").strip()
+            name = str(item.get("name_") or "").strip()
+            shares = _parse_float(str(item.get("qty_") or ""))
+            weight = _parse_float(str(item.get("weights_") or ""))
+            code_match = re.search(r"\b(\d{4})\b", code)
+            if not code_match or not name or weight is None:
+                continue
+            rows.append(
+                _row(
+                    etf_code,
+                    code_match.group(1),
+                    name,
+                    shares,
+                    weight,
+                    source_url,
+                    date,
+                    EXTRACTION_METHOD_API,
+                )
+            )
+    return dedupe_rows(rows)
 
 
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
@@ -288,6 +328,47 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_STEALTH)
 
 
+async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
+    etf_code = etf_code.upper()
+    config = get_official_config(etf_code)
+    source_url = config["url"]
+    holdings_body = None
+
+    async def on_response(response):
+        nonlocal holdings_body
+        if _is_ctbc_holdings_response(response):
+            try:
+                holdings_body = await response.text()
+            except Exception:
+                pass
+
+    page.on("response", on_response)
+    try:
+        await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+        if not holdings_body:
+            try:
+                response = await page.wait_for_response(
+                    _is_ctbc_holdings_response,
+                    timeout=_API_RESPONSE_TIMEOUT_MS,
+                )
+                if not holdings_body and _is_ctbc_holdings_response(response):
+                    holdings_body = await response.text()
+            except Exception:
+                pass
+    finally:
+        page.remove_listener("response", on_response)
+
+    if not holdings_body:
+        return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
+
+    try:
+        all_rows = dedupe_rows(parse_ctbc_api(holdings_body, etf_code, source_url))
+    except Exception as exc:
+        return _failed_result(source_url, f"CTBC API parse error: {exc}")
+
+    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
+
+
 async def scrape_mega_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
@@ -380,6 +461,8 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
         return await scrape_capital_playwright(etf_code, page)
     if method == "stealth_api" and issuer == "Nomura":
         return await scrape_nomura_stealth(etf_code, page)
+    if method == "browser" and issuer == "CTBC":
+        return await scrape_ctbc_playwright(etf_code, page)
     if method == "playwright" and issuer == "Mega":
         return await scrape_mega_playwright(etf_code, page)
     if method == "playwright" and issuer == "Uni-President":
@@ -402,6 +485,10 @@ def _is_capital_buyback_response(response) -> bool:
 
 def _is_nomura_assets_response(response) -> bool:
     return "getfundassets" in _response_url(response).lower()
+
+
+def _is_ctbc_holdings_response(response) -> bool:
+    return "etfholdingweight" in _response_url(response).lower()
 
 
 async def _uni_president_portfolio_pane_text(table) -> str:
