@@ -14,12 +14,21 @@ def _load_module():
 
 
 def _run_with_summary(module, tmp_path, scrape_summary):
+    target_date = scrape_summary["expected_data_date"]
     with patch.object(module.db, "init_db"), patch.object(
         module, "run_daily_scrape_with_browser", return_value=scrape_summary
     ), patch.object(
+        module, "get_latest_valid_date", return_value=target_date
+    ), patch.object(
         module,
         "detect_holding_changes",
-        return_value={"date": "2026-07-14", "skipped_etfs": []},
+        return_value={
+            "ok": True,
+            "date": target_date,
+            "previous_date": "2026-07-13",
+            "rows": 1,
+            "skipped_etfs": [],
+        },
     ), patch.object(
         module, "generate_manager_intent_rollups", return_value={}
     ), patch.object(
@@ -50,12 +59,14 @@ def test_preexisting_successes_do_not_trigger_incomplete_warning(tmp_path, capsy
         "failures": [],
         "moneydj_warnings": [],
         "data_freshness": {"fresh": 2, "stale": 0, "unknown": 0},
+        "data_date_min": "2026-07-14",
+        "data_date_max": "2026-07-14",
     }
 
     _run_with_summary(module, tmp_path, scrape_summary)
 
     output = capsys.readouterr().out
-    assert "\u8cc7\u6599\u4e0d\u5b8c\u6574" not in output
+    assert "資料不完整" not in output
 
 
 def test_mixed_preexisting_and_new_successes_are_complete(tmp_path, capsys):
@@ -72,9 +83,11 @@ def test_mixed_preexisting_and_new_successes_are_complete(tmp_path, capsys):
         "failures": [],
         "moneydj_warnings": [],
         "data_freshness": {"fresh": 3, "stale": 0, "unknown": 0},
+        "data_date_min": "2026-07-14",
+        "data_date_max": "2026-07-14",
     }
 
     _run_with_summary(module, tmp_path, scrape_summary)
 
     output = capsys.readouterr().out
-    assert "\u8cc7\u6599\u4e0d\u5b8c\u6574" not in output
+    assert "資料不完整" not in output
