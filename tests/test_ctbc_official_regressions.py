@@ -31,9 +31,13 @@ def _stock_items():
     ]
 
 
-def _payload(*, include_date=True, include_non_stock=False):
+def _payload(*, include_date=True, include_non_stock=False, stock_items=None):
     groups = [
-        {"Code": "STOCK", "Name": "股票", "Data": _stock_items()},
+        {
+            "Code": "STOCK",
+            "Name": "股票",
+            "Data": _stock_items() if stock_items is None else stock_items,
+        },
     ]
     if include_non_stock:
         groups.append(
@@ -265,6 +269,22 @@ async def test_ctbc_scraper_rejects_missing_source_date(mock_config):
 
     assert result["ok"] is False
     assert "date" in result["reason"].lower()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_ctbc_empty_stock_group_preserves_empty_rows_reason(mock_config):
+    mock_config.return_value = {
+        "url": SOURCE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+    }
+    page = _page_with_response(_payload(stock_items=[]))
+
+    result = await scrape_ctbc_playwright(ETF_CODE, page)
+
+    assert result["ok"] is False
+    assert result["reason"] == "empty rows"
 
 
 @pytest.mark.asyncio
