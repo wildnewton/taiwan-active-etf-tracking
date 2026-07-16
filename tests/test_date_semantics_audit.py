@@ -390,7 +390,7 @@ def test_retry_improvement_is_verified_from_persisted_state(tmp_path):
     signal_report.assert_not_called()
 
 
-def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys, tmp_path):
+def test_nightly_rejects_stale_only_scrape_before_downstream(capsys, tmp_path):
     scrape_summary = {
         "date": RUN_DATE.isoformat(),
         "expected_data_date": EXPECTED_DATE.isoformat(),
@@ -414,14 +414,6 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys, 
         "data_date_min": OLDER_DATE.isoformat(),
         "data_date_max": OLDER_DATE.isoformat(),
     }
-    change_summary = {
-        "ok": False,
-        "date": None,
-        "previous_date": None,
-        "rows": 0,
-        "skipped_etfs": [],
-        "reason": "no previous holdings date",
-    }
     report_dir = tmp_path / "reports"
 
     with patch("nightly_pipeline.db.init_db"), patch(
@@ -429,36 +421,30 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys, 
         return_value=scrape_summary,
     ), patch(
         "nightly_pipeline.detect_holding_changes",
-        return_value=change_summary,
-    ), patch(
-        "nightly_pipeline._latest_holdings_date",
-        return_value=EXPECTED_DATE.isoformat(),
-    ), patch(
+    ) as detect_changes, patch(
         "nightly_pipeline.generate_manager_intent_rollups",
-        return_value={"ok": True, "date": EXPECTED_DATE.isoformat(), "rows": 0},
-    ), patch(
+    ) as intent, patch(
         "nightly_pipeline.generate_manager_signals",
-        return_value={"ok": True, "date": EXPECTED_DATE.isoformat(), "signals": 0},
-    ), patch(
+    ) as signals, patch(
         "nightly_pipeline.generate_signal_report",
-        return_value="report text",
     ) as generate_report, patch(
         "nightly_pipeline.generate_traction_report",
-        return_value="traction text",
-    ):
-        result = nightly_pipeline.run_nightly_pipeline(
-            str(tmp_path / "test.sqlite3"),
-            str(report_dir),
-            skip_discovery=True,
-        )
+    ) as traction:
+        import pytest
 
-    generate_report.assert_called_once_with(
-        EXPECTED_DATE.isoformat(),
-        quality_run_date=RUN_DATE.isoformat(),
-    )
-    assert result["report_path"].endswith(
-        "taiwan_active_etf_signal_report_2026-07-14.txt"
-    )
+        with pytest.raises(RuntimeError, match="scrape data date range"):
+            nightly_pipeline.run_nightly_pipeline(
+                str(tmp_path / "test.sqlite3"),
+                str(report_dir),
+                skip_discovery=True,
+            )
+
+    detect_changes.assert_not_called()
+    intent.assert_not_called()
+    signals.assert_not_called()
+    generate_report.assert_not_called()
+    traction.assert_not_called()
+    assert not list(report_dir.glob("*.txt"))
     output = capsys.readouterr().out
     assert "have 2026-07-14 data" in output
     assert "have 2026-07-15 data" not in output
