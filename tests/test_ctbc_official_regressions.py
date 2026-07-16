@@ -89,9 +89,9 @@ def _page_that_times_out():
     return page
 
 
-def _official_result():
+def _official_result(data_date=DATA_DATE):
     row = {
-        "date": DATA_DATE,
+        "date": data_date,
         "etf_code": ETF_CODE,
         "asset_name": "台積電(2330.TW)",
         "asset_type": "stock",
@@ -122,14 +122,44 @@ async def test_browser_method_reaches_official_browser_scraper():
     browser_scraper = AsyncMock(return_value=_official_result())
     static_scraper = Mock()
 
-    with patch("scraper.get_etf_config", return_value={"official_method": "browser"}), \
-        patch("scraper.scrape_official_with_browser", new=browser_scraper), \
-        patch("scraper._official_fallback_static", new=static_scraper):
+    with patch(
+        "scraper.get_etf_config",
+        return_value={"official_method": "browser", "issuer": "CTBC"},
+    ), patch(
+        "scraper.scrape_official_with_browser",
+        new=browser_scraper,
+    ), patch(
+        "scraper._official_fallback_static",
+        new=static_scraper,
+    ):
         result = await scraper._official_fallback_with_browser(ETF_CODE, page)
 
     browser_scraper.assert_awaited_once_with(ETF_CODE, page)
     static_scraper.assert_not_called()
     assert result["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_production_ctbc_fallback_rejects_missing_source_date():
+    page = object()
+    browser_scraper = AsyncMock(return_value=_official_result(data_date=None))
+    static_scraper = Mock()
+
+    with patch(
+        "scraper.get_etf_config",
+        return_value={"official_method": "browser", "issuer": "CTBC"},
+    ), patch(
+        "scraper.scrape_official_with_browser",
+        new=browser_scraper,
+    ), patch(
+        "scraper._official_fallback_static",
+        new=static_scraper,
+    ):
+        result = await scraper._official_fallback_with_browser(ETF_CODE, page)
+
+    assert result["ok"] is False
+    assert "date" in result["reason"].lower()
+    static_scraper.assert_not_called()
 
 
 def test_ctbc_parser_ignores_non_stock_groups():
@@ -146,22 +176,6 @@ def test_ctbc_parser_ignores_non_stock_groups():
         "2317",
         "2382",
     ]
-
-
-@pytest.mark.asyncio
-@patch("scrapers.official.get_official_config")
-async def test_ctbc_scraper_fails_closed_when_source_date_is_missing(mock_config):
-    mock_config.return_value = {
-        "url": SOURCE_URL,
-        "method": "browser",
-        "issuer": "CTBC",
-    }
-    page = _page_that_fires(_payload(include_date=False))
-
-    result = await scrape_ctbc_playwright(ETF_CODE, page)
-
-    assert result["ok"] is False
-    assert "date" in result["reason"].lower()
 
 
 @pytest.mark.asyncio
