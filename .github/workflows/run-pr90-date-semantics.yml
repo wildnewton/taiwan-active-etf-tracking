@@ -32,53 +32,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r target/requirements.txt pytest
 
-      - name: Extract implementation script
+      - name: Assemble and verify patch
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          workflow = Path("helper/.github/workflows/apply-pr90-date-semantics.yml").read_text(encoding="utf-8")
-          start_marker = "          python - <<'PY'\n"
-          end_marker = "\n          PY\n\n      - name: Run targeted tests"
-          start = workflow.index(start_marker) + len(start_marker)
-          end = workflow.index(end_marker, start)
-          lines = workflow[start:end].splitlines()
-          script = "\n".join(
-              line[10:] if line.startswith("          ") else line
-              for line in lines
-          ) + "\n"
-          script = script.replace(
-              'raise RuntimeError(f"{path}: expected one exact match, found {count}")',
-              'raise RuntimeError(f"{path}: expected one exact match, found {count}; old={old!r}")',
-              1,
-          )
-          Path("/tmp/apply_pr90_date_semantics.py").write_text(script, encoding="utf-8")
-          PY
+          cat helper/.github/patches/pr90-date-semantics.patch.part* > /tmp/pr90-date-semantics.patch
+          echo "946d7403983eda84a85bbc2679d47baf249868c328626bd133038e903c4a5e35  /tmp/pr90-date-semantics.patch" | sha256sum --check
 
       - name: Apply implementation
-        id: apply
-        shell: bash
+        working-directory: target
         run: |
-          set +e
-          cd target
-          python /tmp/apply_pr90_date_semantics.py > ../apply-pr90.log 2>&1
-          status=$?
-          cat ../apply-pr90.log
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          exit 0
-
-      - name: Upload implementation diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: apply-pr90-log
-          path: |
-            apply-pr90.log
-            /tmp/apply_pr90_date_semantics.py
-
-      - name: Stop after implementation failure
-        if: steps.apply.outputs.status != '0'
-        run: exit 1
+          git apply --check /tmp/pr90-date-semantics.patch
+          git apply /tmp/pr90-date-semantics.patch
 
       - name: Run targeted tests
         working-directory: target
@@ -91,7 +54,11 @@ jobs:
             tests/test_stale_scrape_status.py \
             tests/test_stale_status_review_followups.py \
             tests/test_nightly_pipeline.py \
-            tests/test_scrape_run_preservation.py
+            tests/test_scrape_run_preservation.py \
+            tests/test_backfill_changes.py \
+            tests/test_nightly_try_run.py \
+            tests/test_signal_report.py \
+            tests/test_pipeline.py::test_scrape_run_records_per_etf_data_date_not_first_success_date
 
       - name: Run full test suite
         working-directory: target
