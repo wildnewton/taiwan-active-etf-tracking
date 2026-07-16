@@ -13,6 +13,7 @@ SCRIPT = PROJECT_ROOT / "scripts" / "nightly_pipeline.py"
 
 COMPLETE_SCRAPE = {
     "date": "2026-07-13",
+    "expected_data_date": "2026-07-13",
     "total_etfs": 1,
     "moneydj_success": 1,
     "official_success": 0,
@@ -122,12 +123,19 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
         seen.append("scrape")
         return COMPLETE_SCRAPE
 
-    def changes():
+    def changes(current_date=None):
+        assert current_date == "2026-07-13"
         with module.db._connect() as conn:
             assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "scrape"
             conn.execute("UPDATE try_run_probe SET value = 'changes'")
         seen.append("changes")
-        return {"date": "2026-07-13", "skipped_etfs": []}
+        return {
+            "ok": True,
+            "date": current_date,
+            "previous_date": "2026-07-12",
+            "rows": 1,
+            "skipped_etfs": [],
+        }
 
     def intent(target_date):
         assert target_date == "2026-07-13"
@@ -137,12 +145,13 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
         seen.append("intent")
         return {"ok": True, "date": target_date, "rows": 1}
 
-    def signals():
+    def signals(target_date):
+        assert target_date == "2026-07-13"
         with module.db._connect() as conn:
             assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "intent"
             conn.execute("UPDATE try_run_probe SET value = 'signals'")
         seen.append("signals")
-        return {"date": "2026-07-13"}
+        return {"date": target_date}
 
     def report(signal_date, quality_run_date=None):
         assert signal_date == "2026-07-13"
@@ -161,6 +170,7 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
 
     with patch.object(module, "discover_and_reconcile", side_effect=discovery), \
          patch.object(module, "run_daily_scrape_with_browser", side_effect=scrape), \
+         patch.object(module, "get_latest_valid_date", return_value="2026-07-13"), \
          patch.object(module, "detect_holding_changes", side_effect=changes), \
          patch.object(module, "generate_manager_intent_rollups", side_effect=intent), \
          patch.object(module, "generate_manager_signals", side_effect=signals), \
