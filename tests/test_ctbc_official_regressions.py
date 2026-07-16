@@ -2,9 +2,14 @@ import json
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 import scraper
-from scrapers.official import parse_ctbc_api, scrape_ctbc_playwright
+from scrapers.official import (
+    parse_ctbc_api,
+    scrape_ctbc_playwright,
+    scrape_official_with_browser,
+)
 
 
 ETF_CODE = "00406A"
@@ -61,31 +66,54 @@ class _Response:
         return self._body
 
 
-def _page_that_fires(body):
-    page = AsyncMock()
-    callbacks = {}
+class _ResponseInfo:
+    def __init__(self, response):
+        self._response = response
 
-    def on(event, callback):
-        callbacks[event] = callback
+    @property
+    def value(self):
+        async def resolve():
+            return self._response
+
+        return resolve()
+
+
+class _ExpectResponseContext:
+    def __init__(self, response, order, exit_error=None):
+        self._response_info = _ResponseInfo(response)
+        self._order = order
+        self._exit_error = exit_error
+
+    async def __aenter__(self):
+        self._order.append("response_wait_registered")
+        return self._response_info
+
+    async def __aexit__(self, exc_type, exc, traceback):
+        if exc_type is None and self._exit_error is not None:
+            raise self._exit_error
+        return False
+
+
+def _page_with_response(body, response_wait_error=None):
+    page = AsyncMock()
+    order = []
+    response = _Response(body)
 
     async def goto(*args, **kwargs):
-        await callbacks["response"](_Response(body))
+        order.append("goto")
 
-    page.on = Mock(side_effect=on)
+    def expect_response(predicate, timeout):
+        assert timeout <= 10000
+        assert predicate(response)
+        return _ExpectResponseContext(response, order, response_wait_error)
+
     page.goto = AsyncMock(side_effect=goto)
-    page.wait_for_event = AsyncMock()
+    page.expect_response = Mock(side_effect=expect_response)
+    page.wait_for_event = AsyncMock(side_effect=AssertionError("late response wait used"))
     page.wait_for_timeout = AsyncMock()
-    page.remove_listener = Mock()
-    return page
-
-
-def _page_that_times_out():
-    page = AsyncMock()
     page.on = Mock()
-    page.goto = AsyncMock()
-    page.wait_for_event = AsyncMock(side_effect=TimeoutError("timed out"))
-    page.wait_for_timeout = AsyncMock()
     page.remove_listener = Mock()
+    page._order = order
     return page
 
 
@@ -140,52 +168,51 @@ async def test_browser_method_reaches_official_browser_scraper():
 
 
 @pytest.mark.asyncio
-async def test_undated_ctbc_browser_result_falls_through_to_static():
-    page = object()
-    browser_scraper = AsyncMock(return_value=_official_result(data_date=None))
+async def test_undated_ctbc_dispatch_result_falls_through_to_static():
+    page = _page_with_response(_payload(include_date=False))
     static_result = _official_result()
     static_scraper = Mock(return_value=static_result)
+    config = {
+        "code": ETF_CODE,
+        "name": "主動中信台灣收益",
+        "url": SOURCE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+        "official_method": "browser",
+    }
 
-    with patch(
-        "scraper.get_etf_config",
-        return_value={"official_method": "browser", "issuer": "CTBC"},
-    ), patch(
-        "scraper.scrape_official_with_browser",
-        new=browser_scraper,
+    with patch("scraper.get_etf_config", return_value=config), patch(
+        "scrapers.official.get_official_config",
+        return_value=config,
     ), patch(
         "scraper._official_fallback_static",
         new=static_scraper,
     ):
         result = await scraper._official_fallback_with_browser(ETF_CODE, page)
 
-    browser_scraper.assert_awaited_once_with(ETF_CODE, page)
+    page.expect_response.assert_called_once()
     static_scraper.assert_called_once_with(ETF_CODE)
     assert result == static_result
 
 
 @pytest.mark.asyncio
-async def test_unsupported_browser_issuer_still_falls_through_to_static():
-    page = object()
-    browser_failure = {**scraper.FAILED_RESULT, "reason": "unsupported"}
-    browser_scraper = AsyncMock(return_value=browser_failure)
-    static_result = _official_result()
-    static_scraper = Mock(return_value=static_result)
+async def test_unsupported_browser_dispatcher_does_not_navigate():
+    page = AsyncMock()
+    page.goto = AsyncMock()
 
     with patch(
-        "scraper.get_etf_config",
-        return_value={"official_method": "browser", "issuer": "Cathay"},
-    ), patch(
-        "scraper.scrape_official_with_browser",
-        new=browser_scraper,
-    ), patch(
-        "scraper._official_fallback_static",
-        new=static_scraper,
+        "scrapers.official.get_official_config",
+        return_value={
+            "url": "https://example.com/unsupported",
+            "method": "browser",
+            "issuer": "Cathay",
+        },
     ):
-        result = await scraper._official_fallback_with_browser(ETF_CODE, page)
+        result = await scrape_official_with_browser(ETF_CODE, page)
 
-    browser_scraper.assert_awaited_once_with(ETF_CODE, page)
-    static_scraper.assert_called_once_with(ETF_CODE)
-    assert result == static_result
+    assert result["ok"] is False
+    assert "No browser official scraper" in result["reason"]
+    page.goto.assert_not_awaited()
 
 
 def test_ctbc_parser_ignores_non_stock_groups():
@@ -206,18 +233,38 @@ def test_ctbc_parser_ignores_non_stock_groups():
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_ctbc_scraper_returns_one_valid_date_for_all_rows(mock_config):
+async def test_ctbc_scraper_registers_response_wait_before_navigation(mock_config):
     mock_config.return_value = {
         "url": SOURCE_URL,
         "method": "browser",
         "issuer": "CTBC",
     }
-    page = _page_that_fires(_payload())
+    page = _page_with_response(_payload())
 
     result = await scrape_ctbc_playwright(ETF_CODE, page)
 
     assert result["ok"] is True
     assert {row["date"] for row in result["all_rows"]} == {DATA_DATE}
+    assert page._order == ["response_wait_registered", "goto"]
+    page.expect_response.assert_called_once()
+    page.wait_for_event.assert_not_awaited()
+    page.on.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_ctbc_dispatcher_rejects_missing_source_date(mock_config):
+    mock_config.return_value = {
+        "url": SOURCE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+    }
+    page = _page_with_response(_payload(include_date=False))
+
+    result = await scrape_official_with_browser(ETF_CODE, page)
+
+    assert result["ok"] is False
+    assert "date" in result["reason"].lower()
 
 
 @pytest.mark.asyncio
@@ -228,9 +275,32 @@ async def test_ctbc_timeout_does_not_add_fixed_polling_delay(mock_config):
         "method": "browser",
         "issuer": "CTBC",
     }
-    page = _page_that_times_out()
+    page = _page_with_response(
+        _payload(),
+        response_wait_error=PlaywrightTimeoutError("timed out"),
+    )
 
     result = await scrape_ctbc_playwright(ETF_CODE, page)
 
     assert result["ok"] is False
+    page.expect_response.assert_called_once()
+    page.wait_for_event.assert_not_awaited()
     page.wait_for_timeout.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_ctbc_navigation_error_still_propagates(mock_config):
+    mock_config.return_value = {
+        "url": SOURCE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+    }
+    page = _page_with_response(_payload())
+    page.goto.side_effect = RuntimeError("navigation failed")
+
+    with pytest.raises(RuntimeError, match="navigation failed"):
+        await scrape_ctbc_playwright(ETF_CODE, page)
+
+    page.expect_response.assert_called_once()
+    page.on.assert_not_called()
