@@ -1,30 +1,16 @@
-targeted_status=0
-.........................................                                [100%]
-41 passed in 0.69s
+targeted_status=4
+ERROR: file or directory not found: tests/test_traction_analysis.py
 
-full_status=1
+
+no tests ran in 0.00s
+
+full_status=0
 ........................................................................ [ 17%]
-......F................................................................. [ 34%]
+........................................................................ [ 34%]
 ........................................................................ [ 51%]
 ........................................................................ [ 68%]
 ........................................................................ [ 85%]
-..............................................................           [100%]
-=================================== FAILURES ===================================
-___ test_report_and_nightly_latest_date_do_not_fall_back_to_partial_snapshot ___
-
-    def test_report_and_nightly_latest_date_do_not_fall_back_to_partial_snapshot():
-        db.init_db(":memory:")
-        for code in ("A", "B", "C"):
-            _seed_etf(code)
-        _seed_holding(CURRENT_DATE, "A")
-    
-        assert changes.get_latest_valid_date() is None
-        assert report._get_latest_holdings_date() is None
->       assert nightly_pipeline._latest_holdings_date() is None
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-E       AttributeError: module 'nightly_pipeline' has no attribute '_latest_holdings_date'
-
-tests/test_date_semantics_final_review.py:109: AttributeError
+...............................................................          [100%]
 =============================== warnings summary ===============================
 tests/test_official.py::test_scrape_capital_playwright_intercepts_api
 tests/test_official.py::test_scrape_capital_playwright_no_api_intercepted
@@ -44,6 +30,4 @@ tests/test_official.py::test_scrape_official_with_browser_dispatches_nomura
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-=========================== short test summary info ============================
-FAILED tests/test_date_semantics_final_review.py::test_report_and_nightly_latest_date_do_not_fall_back_to_partial_snapshot - AttributeError: module 'nightly_pipeline' has no attribute '_latest_holdings_date'
-1 failed, 421 passed, 7 warnings in 20.08s
+423 passed, 7 warnings in 15.76s
