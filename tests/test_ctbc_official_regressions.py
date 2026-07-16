@@ -140,10 +140,11 @@ async def test_browser_method_reaches_official_browser_scraper():
 
 
 @pytest.mark.asyncio
-async def test_production_ctbc_fallback_rejects_missing_source_date():
+async def test_undated_ctbc_browser_result_falls_through_to_static():
     page = object()
     browser_scraper = AsyncMock(return_value=_official_result(data_date=None))
-    static_scraper = Mock()
+    static_result = _official_result()
+    static_scraper = Mock(return_value=static_result)
 
     with patch(
         "scraper.get_etf_config",
@@ -157,9 +158,34 @@ async def test_production_ctbc_fallback_rejects_missing_source_date():
     ):
         result = await scraper._official_fallback_with_browser(ETF_CODE, page)
 
-    assert result["ok"] is False
-    assert "date" in result["reason"].lower()
-    static_scraper.assert_not_called()
+    browser_scraper.assert_awaited_once_with(ETF_CODE, page)
+    static_scraper.assert_called_once_with(ETF_CODE)
+    assert result == static_result
+
+
+@pytest.mark.asyncio
+async def test_unsupported_browser_issuer_still_falls_through_to_static():
+    page = object()
+    browser_failure = {**scraper.FAILED_RESULT, "reason": "unsupported"}
+    browser_scraper = AsyncMock(return_value=browser_failure)
+    static_result = _official_result()
+    static_scraper = Mock(return_value=static_result)
+
+    with patch(
+        "scraper.get_etf_config",
+        return_value={"official_method": "browser", "issuer": "Cathay"},
+    ), patch(
+        "scraper.scrape_official_with_browser",
+        new=browser_scraper,
+    ), patch(
+        "scraper._official_fallback_static",
+        new=static_scraper,
+    ):
+        result = await scraper._official_fallback_with_browser(ETF_CODE, page)
+
+    browser_scraper.assert_awaited_once_with(ETF_CODE, page)
+    static_scraper.assert_called_once_with(ETF_CODE)
+    assert result == static_result
 
 
 def test_ctbc_parser_ignores_non_stock_groups():
