@@ -1,0 +1,160 @@
+-        "success": 2,
+-    }
+-    # Legacy statuses such as "skipped_stale_existing" intentionally fall back
+-    # to priority 0 so new canonical statuses can replace them.
+     with _connect() as conn:
+         existing = conn.execute(
+-            "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
++            """
++            SELECT status, data_date, started_at
++            FROM etf_scrape_runs
++            WHERE date = ? AND etf_code = ?
++            """,
+             (row["date"], row["etf_code"]),
+         ).fetchone()
+-        if existing and status_priority.get(row["status"], 0) < status_priority.get(existing[0], 0):
++        if not _scrape_run_should_replace(existing, row):
+             return
+         conn.execute("INSERT OR REPLACE INTO etf_scrape_runs (date, data_date, etf_code, status, primary_source, primary_success, moneydj_browser_used, official_fallback_used, official_success, rows_extracted, stock_rows_extracted, non_stock_rows_extracted, total_weight_all_rows, total_weight_stock_rows, source_url, error, started_at, finished_at) VALUES (:date, :data_date, :etf_code, :status, :primary_source, :primary_success, :moneydj_browser_used, :official_fallback_used, :official_success, :rows_extracted, :stock_rows_extracted, :non_stock_rows_extracted, :total_weight_all_rows, :total_weight_stock_rows, :source_url, :error, :started_at, :finished_at)", row)
+ 
++
+ def get_last_scrape_date(etf_code):
+     with _connect() as conn:
+         row = conn.execute("SELECT MAX(date) FROM etf_scrape_runs WHERE etf_code = ? AND status = 'success'", (etf_code,)).fetchone()
+diff --git a/scripts/nightly_pipeline.py b/scripts/nightly_pipeline.py
+index ca2703c..fdd0f19 100644
+--- a/scripts/nightly_pipeline.py
++++ b/scripts/nightly_pipeline.py
+@@ -149,6 +149,12 @@ def run_try_run(
+         )
+ 
+ 
++def _latest_holdings_date():
++    with db._connect() as conn:
++        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
++    return row[0] if row and row[0] else None
++
++
+ def run_nightly_pipeline(
+     db_path,
+     report_dir,
+@@ -247,7 +253,7 @@ def run_nightly_pipeline(
+         if stale > 0:
+             print(
+                 f"PROVISIONAL REPORT: {fresh}/{total_etfs or '?'} ETFs have "
+-                f"{scrape_summary.get('date')} data"
++                f"{scrape_summary.get('expected_data_date') or scrape_summary.get('date')} data"
+             )
+             for item in scrape_summary.get("stale_etfs", [])[:10]:
+                 print(f"  stale: {item.get('etf_code')} data_date={item.get('data_date')}")
+@@ -262,6 +268,7 @@ def run_nightly_pipeline(
+     print("Step 3/7: Detecting holding changes...")
+     change_summary = detect_holding_changes()
+     print(f"  Change summary: {change_summary}")
++    report_data_date = change_summary.get("date") or _latest_holdings_date()
+ 
+     skipped_etfs = change_summary.get("skipped_etfs", [])
+     if skipped_etfs:
+@@ -273,7 +280,7 @@ def run_nightly_pipeline(
+     # bare cross_fund_rotation when same-issuer rotation exists but net direction
+     # is unclear. Report text should present the bare state as unclear/mandate
+     # rotation, not as accumulation or distribution.
+-    manager_intent_summary = generate_manager_intent_rollups(change_summary.get("date"))
++    manager_intent_summary = generate_manager_intent_rollups(report_data_date)
+     print(f"  Manager intent summary: {manager_intent_summary}")
+ 
+     print("Step 5/7: Generating manager signals...")
+@@ -281,14 +288,17 @@ def run_nightly_pipeline(
+     print(f"  Signal summary: {signal_summary}")
+ 
+     print("Step 6/7: Generating signal report...")
+-    report_text = generate_signal_report()
++    report_text = generate_signal_report(
++        report_data_date,
++        quality_run_date=scrape_summary.get("date"),
++    )
+ 
+     report_dir_path = Path(report_dir)
+     report_dir_path.mkdir(parents=True, exist_ok=True)
+ 
+     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+     report_date = (
+-        change_summary.get("date")
++        report_data_date
+         or scrape_summary.get("date")
+         or datetime.now().strftime("%Y-%m-%d")
+     )
+diff --git a/scripts/pipeline.py b/scripts/pipeline.py
+index e6c08cb..1de2de7 100644
+--- a/scripts/pipeline.py
++++ b/scripts/pipeline.py
+@@ -630,7 +630,6 @@ def _record_result(
+ 
+         if final_status == "stale" and _should_skip_stale_existing_snapshot(
+             data_date,
+-            freshness_target_date,
+             etf_code,
+         ):
+             _record_stale_existing(summary, etf_code, data_date, result)
+@@ -681,10 +680,11 @@ def _record_failure(
+         _check_moneydj_warning(summary, etf_code)
+ 
+ 
+-def _should_skip_stale_existing_snapshot(data_date: Optional[date], expected_data_date: date, etf_code: str) -> bool:
+-    if data_date is None or data_date >= expected_data_date:
+-        return False
+-    return snapshot_exists(data_date, etf_code)
++def _should_skip_stale_existing_snapshot(
++    data_date: Optional[date],
++    etf_code: str,
++) -> bool:
++    return data_date is not None and snapshot_exists(data_date, etf_code)
+ 
+ 
+ def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result: dict) -> None:
+@@ -742,7 +742,7 @@ def _record_freshness(
+             "etf_code": etf_code,
+             "data_date": data_date.isoformat(),
+             "source_type": source_type,
+-            "reason": "source_date_before_run_date",
++            "reason": "source_date_before_expected_data_date",
+         })
+         return
+     raise ValueError(f"Unknown scrape status: {status}")
+diff --git a/scripts/report.py b/scripts/report.py
+index cd03f21..f82fac2 100644
+--- a/scripts/report.py
++++ b/scripts/report.py
+@@ -51,7 +51,7 @@ _MANAGER_INTENT_PRIORITY = {
+ }
+ 
+ 
+-def generate_signal_report(signal_date=None) -> str:
++def generate_signal_report(signal_date=None, quality_run_date=None) -> str:
+     """Generate a concise, decision-grade daily report.
+ 
+     The report intentionally separates data trust, manager-action signals,
+@@ -60,6 +60,9 @@ def generate_signal_report(signal_date=None) -> str:
+     """
+     now = datetime.now(CST)
+     data_date = signal_date or _get_latest_holdings_date()
++    quality_run_date = quality_run_date or (
++        signal_date if signal_date is not None else _get_latest_scrape_run_date()
++    )
+     prev_date = _get_previous_holdings_date(data_date)
+ 
+     lines = []
+@@ -67,7 +70,7 @@ def generate_signal_report(signal_date=None) -> str:
+     lines.append(f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST | 資料日期: {data_date or 'N/A'}")
+     lines.append("")
+ 
+-    quality = _get_data_quality(data_date)
++    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
+     lines.extend(_render_data_quality(quality))
+ 
+     stats = _get_summary_stats(data_date)
+@@ -128,6 +131,8 @@ def generate_signal_report(signal_date=None) -> str:
+ def _render_data_quality(quality: dict) -> list[str]:
+     lines = ["═══ 資料品質 / 信任度 ═══"]
+     lines.append(f"資料品質: {quality['status_label']}")
++    if quality.get("quality_run_date"):
