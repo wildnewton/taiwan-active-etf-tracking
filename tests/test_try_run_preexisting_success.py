@@ -90,8 +90,18 @@ def test_complete_try_run_avoids_playwright_and_preserves_production_db(tmp_path
         side_effect=AssertionError("Playwright must not start"),
     ) as async_playwright, patch.object(
         module,
+        "get_latest_valid_date",
+        return_value=RUN_DATE.isoformat(),
+    ), patch.object(
+        module,
         "detect_holding_changes",
-        return_value={"date": RUN_DATE.isoformat(), "skipped_etfs": []},
+        return_value={
+            "ok": True,
+            "date": RUN_DATE.isoformat(),
+            "previous_date": "2026-07-13",
+            "rows": 1,
+            "skipped_etfs": [],
+        },
     ), patch.object(
         module, "generate_manager_intent_rollups", return_value={}
     ), patch.object(
