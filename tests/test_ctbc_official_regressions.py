@@ -168,7 +168,7 @@ async def test_browser_method_reaches_official_browser_scraper():
 
 
 @pytest.mark.asyncio
-async def test_undated_ctbc_dispatch_result_falls_through_to_static():
+async def test_undated_ctbc_result_falls_through_to_static():
     page = _page_with_response(_payload(include_date=False))
     static_result = _official_result()
     static_scraper = Mock(return_value=static_result)
@@ -253,7 +253,7 @@ async def test_ctbc_scraper_registers_response_wait_before_navigation(mock_confi
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
-async def test_ctbc_dispatcher_rejects_missing_source_date(mock_config):
+async def test_ctbc_scraper_rejects_missing_source_date(mock_config):
     mock_config.return_value = {
         "url": SOURCE_URL,
         "method": "browser",
@@ -261,7 +261,7 @@ async def test_ctbc_dispatcher_rejects_missing_source_date(mock_config):
     }
     page = _page_with_response(_payload(include_date=False))
 
-    result = await scrape_official_with_browser(ETF_CODE, page)
+    result = await scrape_ctbc_playwright(ETF_CODE, page)
 
     assert result["ok"] is False
     assert "date" in result["reason"].lower()
@@ -304,3 +304,18 @@ async def test_ctbc_navigation_error_still_propagates(mock_config):
 
     page.expect_response.assert_called_once()
     page.on.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_ctbc_navigation_timeout_still_propagates(mock_config):
+    mock_config.return_value = {
+        "url": SOURCE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+    }
+    page = _page_with_response(_payload())
+    page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
+
+    with pytest.raises(PlaywrightTimeoutError, match="navigation timed out"):
+        await scrape_ctbc_playwright(ETF_CODE, page)
