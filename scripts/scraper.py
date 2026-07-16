@@ -190,6 +190,13 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
     if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
         official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
+            if config.get("issuer") == "CTBC" and _result_data_date(official_browser) is None:
+                return {
+                    **FAILED_RESULT,
+                    "reason": "CTBC holdings date missing",
+                    "source_url": official_browser.get("source_url", ""),
+                    "source_type": "official_fallback",
+                }
             return _apply_min_weight_gate(
                 _with_source_type(official_browser, "official_fallback")
             )
