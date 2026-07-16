@@ -100,7 +100,15 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
         return retry_summary
 
     with patch("retry_stale_scrapes.run_selected_scrape_with_browser", side_effect=retry_side_effect) as scrape, \
-        patch("retry_stale_scrapes.detect_holding_changes", return_value={"date": "2026-07-07"}) as changes, \
+        patch(
+            "retry_stale_scrapes.detect_holding_changes",
+            return_value={
+                "ok": True,
+                "date": "2026-07-07",
+                "previous_date": "2026-07-06",
+                "rows": 1,
+            },
+        ) as changes, \
         patch("retry_stale_scrapes.generate_manager_intent_rollups", return_value={"rows": 3}) as intent, \
         patch("retry_stale_scrapes.generate_manager_signals", return_value={"rows": 4}) as signals, \
         patch("retry_stale_scrapes.generate_signal_report", return_value="updated signal report") as signal_report, \
@@ -110,7 +118,7 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
     scrape.assert_called_once_with(db_path, ["00401A", "00402A"], run_date="2026-07-07")
     changes.assert_called_once_with(current_date="2026-07-07")
     intent.assert_called_once_with("2026-07-07")
-    signals.assert_called_once()
+    signals.assert_called_once_with("2026-07-07")
     signal_report.assert_called_once_with(
         "2026-07-07", quality_run_date="2026-07-07"
     )
