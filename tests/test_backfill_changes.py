@@ -91,6 +91,20 @@ def signal_types(date="2026-06-24"):
         conn.row_factory = old_factory
 
 
+def seed_etf_universe():
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_universe (
+                code, name, issuer, listing_date, retired, created_at, updated_at
+            ) VALUES (
+                '00980A', 'Test ETF', 'Nomura', '2026-01-01', 0,
+                '2026-01-01T00:00:00', '2026-01-01T00:00:00'
+            )
+            """
+        )
+
+
 def seed_previous_day(date="2026-06-23"):
     for code, name, weight in [
         ("2330", "台積電", 10.0),
@@ -174,6 +188,7 @@ def test_backfill_recomputes_old_changes_and_populates_fund_flow_fields():
 
 def test_backfill_is_idempotent_and_can_regenerate_signals():
     db.init_db(":memory:")
+    seed_etf_universe()
     seed_previous_day()
     seed_scaled_current_day()
 

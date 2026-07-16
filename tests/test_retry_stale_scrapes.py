@@ -88,7 +88,18 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
         "stale_etfs": [{"etf_code": "00402A", "data_date": "2026-07-06"}],
     }
 
-    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", return_value=retry_summary) as scrape, \
+    def retry_side_effect(*_args, **_kwargs):
+        with db._connect() as conn:
+            conn.execute(
+                """
+                UPDATE etf_scrape_runs
+                SET status = 'success', data_date = '2026-07-07'
+                WHERE date = '2026-07-07' AND etf_code = '00401A'
+                """
+            )
+        return retry_summary
+
+    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", side_effect=retry_side_effect) as scrape, \
         patch("retry_stale_scrapes.detect_holding_changes", return_value={"date": "2026-07-07"}) as changes, \
         patch("retry_stale_scrapes.generate_manager_intent_rollups", return_value={"rows": 3}) as intent, \
         patch("retry_stale_scrapes.generate_manager_signals", return_value={"rows": 4}) as signals, \
@@ -100,11 +111,14 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
     changes.assert_called_once_with(current_date="2026-07-07")
     intent.assert_called_once_with("2026-07-07")
     signals.assert_called_once()
-    signal_report.assert_called_once_with("2026-07-07")
+    signal_report.assert_called_once_with(
+        "2026-07-07", quality_run_date="2026-07-07"
+    )
     traction_report.assert_called_once_with(db_path=db_path, window_days=10)
 
     assert summary["stale_before"] == 2
     assert summary["stale_after"] == 1
+    assert summary["improved_etfs"] == ["00401A"]
     assert summary["improved"] is True
     assert summary["reports_overwritten"] is True
     assert (tmp_path / "taiwan_active_etf_signal_report_2026-07-07.txt").read_text(encoding="utf-8") == "updated signal report"

@@ -51,7 +51,7 @@ _MANAGER_INTENT_PRIORITY = {
 }
 
 
-def generate_signal_report(signal_date=None) -> str:
+def generate_signal_report(signal_date=None, quality_run_date=None) -> str:
     """Generate a concise, decision-grade daily report.
 
     The report intentionally separates data trust, manager-action signals,
@@ -60,6 +60,9 @@ def generate_signal_report(signal_date=None) -> str:
     """
     now = datetime.now(CST)
     data_date = signal_date or _get_latest_holdings_date()
+    quality_run_date = quality_run_date or (
+        signal_date if signal_date is not None else _get_latest_scrape_run_date()
+    )
     prev_date = _get_previous_holdings_date(data_date)
 
     lines = []
@@ -67,7 +70,7 @@ def generate_signal_report(signal_date=None) -> str:
     lines.append(f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST | 資料日期: {data_date or 'N/A'}")
     lines.append("")
 
-    quality = _get_data_quality(data_date)
+    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
     lines.extend(_render_data_quality(quality))
 
     stats = _get_summary_stats(data_date)
@@ -128,6 +131,8 @@ def generate_signal_report(signal_date=None) -> str:
 def _render_data_quality(quality: dict) -> list[str]:
     lines = ["═══ 資料品質 / 信任度 ═══"]
     lines.append(f"資料品質: {quality['status_label']}")
+    if quality.get("quality_run_date"):
+        lines.append(f"抓取執行日: {quality['quality_run_date']}")
     freshness = quality.get("scrape_freshness") or _empty_scrape_freshness()
     stale_rows = freshness.get("stale") or []
     unknown_rows = freshness.get("unknown") or []
@@ -406,6 +411,15 @@ def _get_latest_holdings_date():
     return row[0] if row and row[0] else None
 
 
+def _get_latest_scrape_run_date():
+    try:
+        with _using_row_factory(None) as conn:
+            row = conn.execute("SELECT MAX(date) FROM etf_scrape_runs").fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row[0] if row and row[0] else None
+
+
 def _get_previous_holdings_date(current_date):
     if not current_date:
         return None
@@ -418,10 +432,12 @@ def _empty_scrape_freshness():
     return {"fresh": [], "stale": [], "unknown": []}
 
 
-def _get_data_quality(data_date):
+def _get_data_quality(data_date, quality_run_date=None):
+    quality_run_date = quality_run_date or data_date or _get_latest_scrape_run_date()
     if not data_date:
         return {
             "status_label": "❌ No data",
+            "quality_run_date": quality_run_date,
             "expected_count": get_active_etf_count(),
             "actual_count": 0,
             "failed_etfs": [],
@@ -431,14 +447,15 @@ def _get_data_quality(data_date):
         }
     expected_count = get_active_etf_count(as_of_date=data_date)
     actual_count = _get_actual_etf_count(data_date)
-    failed_etfs = _get_failed_etfs(data_date)
+    failed_etfs = _get_failed_etfs(quality_run_date)
     change_skips = _get_skipped_change_diagnostics(data_date)
-    scrape_freshness = _get_scrape_data_freshness(data_date)
+    scrape_freshness = _get_scrape_data_freshness(quality_run_date)
     warnings = _get_data_warnings(data_date)
     freshness_issues = bool(scrape_freshness["stale"] or scrape_freshness["unknown"])
     degraded = bool(warnings or failed_etfs or change_skips or freshness_issues or (expected_count and actual_count < expected_count))
     return {
         "status_label": "⚠️ Degraded" if degraded else "✅ Clean",
+        "quality_run_date": quality_run_date,
         "expected_count": expected_count,
         "actual_count": actual_count,
         "failed_etfs": failed_etfs,
@@ -452,8 +469,8 @@ def _get_actual_etf_count(data_date):
     return len({row["etf_code"] for row in _canonical_rows(data_date)})
 
 
-def _get_failed_etfs(data_date):
-    if not data_date:
+def _get_failed_etfs(run_date):
+    if not run_date:
         return []
     try:
         with _using_row_factory(None) as conn:
@@ -465,16 +482,16 @@ def _get_failed_etfs(data_date):
                      AND u.retired = 0
                       AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
                    ORDER BY sr.etf_code""",
-                (data_date,),
+                (run_date,),
             ).fetchall()
         return [row[0] for row in rows]
     except sqlite3.OperationalError:
         return []
 
 
-def _get_scrape_data_freshness(data_date):
+def _get_scrape_data_freshness(run_date):
     freshness = _empty_scrape_freshness()
-    if not data_date:
+    if not run_date:
         return freshness
     try:
         with _using_row_factory(_dict_factory) as conn:
@@ -487,7 +504,7 @@ def _get_scrape_data_freshness(data_date):
                      AND u.retired = 0
                       AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
                    ORDER BY sr.etf_code""",
-                (data_date,),
+                (run_date,),
             ).fetchall()
     except sqlite3.OperationalError:
         return freshness
@@ -496,11 +513,11 @@ def _get_scrape_data_freshness(data_date):
         source_date = row.get("data_date")
         status = row.get("status")
         item = {"etf_code": row.get("etf_code"), "data_date": source_date}
-        if not source_date or source_date > data_date:
+        if not source_date:
             freshness["unknown"].append(item)
-        elif status == "stale" or source_date < data_date:
+        elif status == "stale":
             freshness["stale"].append(item)
-        elif status == "success" and source_date == data_date:
+        elif status == "success":
             freshness["fresh"].append(item)
         else:
             freshness["unknown"].append(item)
@@ -973,7 +990,8 @@ def generate_daily_report(summary: dict) -> str:
         "📊 台灣主動 ETF 每日持倉報告",
         f"📅 {now.strftime('%Y-%m-%d %H:%M')} CST",
         "",
-        f"**數據日期**: {summary.get('date', 'N/A')}",
+        f"**執行日期**: {summary.get('date', 'N/A')}",
+        f"**預期資料日期**: {summary.get('expected_data_date') or 'N/A'}",
         f"**ETF 總數**: {summary['total_etfs']}",
         "",
         "**抓取結果**:",

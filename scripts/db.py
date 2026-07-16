@@ -468,23 +468,48 @@ def _insert_non_stock_assets(conn, rows):
         conn.executemany("INSERT OR REPLACE INTO etf_daily_non_stock_assets (date, etf_code, asset_name, asset_type, weight_pct, source_url, source_type, extraction_method, scraped_at) VALUES (:date, :etf_code, :asset_name, :asset_type, :weight_pct, :source_url, :source_type, :extraction_method, :scraped_at)", rows)
 
 
+_USABLE_SCRAPE_STATUSES = {"success", "stale"}
+
+
+def _scrape_run_should_replace(existing, incoming: dict) -> bool:
+    """Keep the newest usable snapshot state for one run-date/ETF row."""
+    if existing is None:
+        return True
+
+    existing_status, existing_data_date, existing_started_at = existing
+    incoming_status = incoming["status"]
+    existing_usable = existing_status in _USABLE_SCRAPE_STATUSES
+    incoming_usable = incoming_status in _USABLE_SCRAPE_STATUSES
+
+    if incoming_usable and existing_usable:
+        incoming_data_date = incoming.get("data_date") or ""
+        existing_data_date = existing_data_date or ""
+        if incoming_data_date != existing_data_date:
+            return incoming_data_date > existing_data_date
+        return (incoming.get("started_at") or "") >= (existing_started_at or "")
+
+    if incoming_usable:
+        return True
+    if existing_usable:
+        return False
+    return (incoming.get("started_at") or "") >= (existing_started_at or "")
+
+
 def insert_scrape_run(run):
     row = _row_dict(run)
-    status_priority = {
-        "failed": 0,
-        "stale": 1,
-        "success": 2,
-    }
-    # Legacy statuses such as "skipped_stale_existing" intentionally fall back
-    # to priority 0 so new canonical statuses can replace them.
     with _connect() as conn:
         existing = conn.execute(
-            "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
+            """
+            SELECT status, data_date, started_at
+            FROM etf_scrape_runs
+            WHERE date = ? AND etf_code = ?
+            """,
             (row["date"], row["etf_code"]),
         ).fetchone()
-        if existing and status_priority.get(row["status"], 0) < status_priority.get(existing[0], 0):
+        if not _scrape_run_should_replace(existing, row):
             return
         conn.execute("INSERT OR REPLACE INTO etf_scrape_runs (date, data_date, etf_code, status, primary_source, primary_success, moneydj_browser_used, official_fallback_used, official_success, rows_extracted, stock_rows_extracted, non_stock_rows_extracted, total_weight_all_rows, total_weight_stock_rows, source_url, error, started_at, finished_at) VALUES (:date, :data_date, :etf_code, :status, :primary_source, :primary_success, :moneydj_browser_used, :official_fallback_used, :official_success, :rows_extracted, :stock_rows_extracted, :non_stock_rows_extracted, :total_weight_all_rows, :total_weight_stock_rows, :source_url, :error, :started_at, :finished_at)", row)
+
 
 def get_last_scrape_date(etf_code):
     with _connect() as conn:

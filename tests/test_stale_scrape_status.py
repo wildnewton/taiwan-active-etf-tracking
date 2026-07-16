@@ -250,7 +250,6 @@ def test_retry_query_selects_retry_eligible_stale_statuses():
 
     assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
         {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
-        {"etf_code": "00403A", "data_date": STALE_DATE.isoformat()},
     ]
 
 

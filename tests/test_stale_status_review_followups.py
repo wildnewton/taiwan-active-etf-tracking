@@ -127,7 +127,7 @@ def _seed_scrape_run(code: str, *, status: str, data_date: str | None) -> None:
         )
 
 
-def test_report_reads_explicit_stale_and_legacy_success_freshness():
+def test_report_uses_canonical_persisted_freshness_status():
     db.init_db(":memory:")
     _seed_scrape_run("00401A", status="stale", data_date=EXPECTED_DATE.isoformat())
     _seed_scrape_run("00402A", status="success", data_date=EXPECTED_DATE.isoformat())
@@ -136,10 +136,12 @@ def test_report_reads_explicit_stale_and_legacy_success_freshness():
     freshness = report._get_scrape_data_freshness(RUN_DATE.isoformat())
 
     assert freshness == {
-        "fresh": [{"etf_code": "00403A", "data_date": RUN_DATE.isoformat()}],
+        "fresh": [
+            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
+            {"etf_code": "00403A", "data_date": RUN_DATE.isoformat()},
+        ],
         "stale": [
             {"etf_code": "00401A", "data_date": EXPECTED_DATE.isoformat()},
-            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
         ],
         "unknown": [],
     }

@@ -149,6 +149,12 @@ def run_try_run(
         )
 
 
+def _latest_holdings_date():
+    with db._connect() as conn:
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
+    return row[0] if row and row[0] else None
+
+
 def run_nightly_pipeline(
     db_path,
     report_dir,
@@ -247,7 +253,7 @@ def run_nightly_pipeline(
         if stale > 0:
             print(
                 f"PROVISIONAL REPORT: {fresh}/{total_etfs or '?'} ETFs have "
-                f"{scrape_summary.get('date')} data"
+                f"{scrape_summary.get('expected_data_date') or scrape_summary.get('date')} data"
             )
             for item in scrape_summary.get("stale_etfs", [])[:10]:
                 print(f"  stale: {item.get('etf_code')} data_date={item.get('data_date')}")
@@ -262,6 +268,7 @@ def run_nightly_pipeline(
     print("Step 3/7: Detecting holding changes...")
     change_summary = detect_holding_changes()
     print(f"  Change summary: {change_summary}")
+    report_data_date = change_summary.get("date") or _latest_holdings_date()
 
     skipped_etfs = change_summary.get("skipped_etfs", [])
     if skipped_etfs:
@@ -273,7 +280,7 @@ def run_nightly_pipeline(
     # bare cross_fund_rotation when same-issuer rotation exists but net direction
     # is unclear. Report text should present the bare state as unclear/mandate
     # rotation, not as accumulation or distribution.
-    manager_intent_summary = generate_manager_intent_rollups(change_summary.get("date"))
+    manager_intent_summary = generate_manager_intent_rollups(report_data_date)
     print(f"  Manager intent summary: {manager_intent_summary}")
 
     print("Step 5/7: Generating manager signals...")
@@ -281,14 +288,17 @@ def run_nightly_pipeline(
     print(f"  Signal summary: {signal_summary}")
 
     print("Step 6/7: Generating signal report...")
-    report_text = generate_signal_report()
+    report_text = generate_signal_report(
+        report_data_date,
+        quality_run_date=scrape_summary.get("date"),
+    )
 
     report_dir_path = Path(report_dir)
     report_dir_path.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     report_date = (
-        change_summary.get("date")
+        report_data_date
         or scrape_summary.get("date")
         or datetime.now().strftime("%Y-%m-%d")
     )

@@ -403,7 +403,7 @@ def test_scrape_run_records_per_etf_data_date_not_first_success_date():
             "etf_code": "00980A",
             "data_date": "2026-06-22",
             "source_type": "moneydj_primary",
-            "reason": "source_date_before_run_date",
+            "reason": "source_date_before_expected_data_date",
         }
     ]
     assert summary["data_date_min"] == "2026-06-22"

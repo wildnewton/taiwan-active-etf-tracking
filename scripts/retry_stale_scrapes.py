@@ -1,8 +1,8 @@
-"""Retry outdated usable ETF scrape rows for a single report date.
+"""Retry canonically stale ETF scrape rows for a single run date.
 
-The command re-scrapes usable rows whose data date is older than the requested
-report date, then reruns same-date derived layers and overwrites the date-only
-primary reports only when at least one retried ETF becomes fresh.
+The command re-scrapes rows whose persisted freshness status is ``stale``, then
+reruns same-date derived layers and overwrites the date-only primary reports only
+when at least one ETF leaves the persisted stale set.
 """
 import argparse
 import json
@@ -18,7 +18,7 @@ from traction_analysis import generate_traction_report
 
 
 def get_stale_scrape_runs(run_date: str) -> list[dict]:
-    """Return active ETFs with usable data older than the requested run date."""
+    """Return active ETFs whose canonical persisted freshness status is stale."""
     with db._connect() as conn:
         rows = conn.execute(
             """
@@ -26,13 +26,12 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
             FROM etf_scrape_runs sr
             JOIN etf_universe u ON sr.etf_code = u.code
             WHERE sr.date = ?
-              AND sr.status IN ('success', 'stale')
+              AND sr.status = 'stale'
               AND sr.data_date IS NOT NULL
-              AND sr.data_date < ?
               AND u.retired = 0
             ORDER BY sr.etf_code
             """,
-            (run_date, run_date),
+            (run_date,),
         ).fetchall()
     return [{"etf_code": row[0], "data_date": row[1]} for row in rows]
 
@@ -65,13 +64,17 @@ def retry_stale_etfs(
 
     etf_codes = [row["etf_code"] for row in stale_rows]
     retry_summary = run_selected_scrape_with_browser(db_path, etf_codes, run_date=run_date)
-    fresh_after_retry = retry_summary.get("data_freshness", {}).get("fresh", 0)
-    stale_after = max(stale_before - fresh_after_retry, 0)
-    improved = stale_after < stale_before
+    stale_after_rows = get_stale_scrape_runs(run_date)
+    stale_after_codes = {row["etf_code"] for row in stale_after_rows}
+    stale_before_codes = set(etf_codes)
+    improved_etfs = sorted(stale_before_codes - stale_after_codes)
+    stale_after = len(stale_after_rows)
+    improved = bool(improved_etfs)
 
     summary = {
         "date": run_date,
         "retried_etfs": etf_codes,
+        "improved_etfs": improved_etfs,
         "stale_before": stale_before,
         "stale_after": stale_after,
         "improved": improved,
@@ -106,7 +109,7 @@ def _overwrite_reports(db_path: str, run_date: str, report_dir: str | Path) -> d
     report_dir = Path(report_dir)
     report_dir.mkdir(parents=True, exist_ok=True)
 
-    signal_text = generate_signal_report(run_date)
+    signal_text = generate_signal_report(run_date, quality_run_date=run_date)
     traction_text = generate_traction_report(db_path=db_path, window_days=10)
 
     signal_path = report_dir / f"taiwan_active_etf_signal_report_{run_date}.txt"

@@ -153,6 +153,33 @@ def test_same_snapshot_stale_attempt_replaces_pre_cutoff_success_status():
     )
 
 
+def test_earlier_same_snapshot_attempt_does_not_replace_later_status():
+    db.init_db(":memory:")
+    _seed_etf("00980A")
+    db.insert_scrape_run(
+        _scrape_run(
+            "00980A",
+            data_date=EXPECTED_DATE,
+            status="stale",
+            started_at=datetime(2026, 7, 15, 21, 0, 0),
+        )
+    )
+    db.insert_scrape_run(
+        _scrape_run(
+            "00980A",
+            data_date=EXPECTED_DATE,
+            status="success",
+            started_at=datetime(2026, 7, 15, 9, 0, 0),
+        )
+    )
+
+    assert _fetch_scrape_run("00980A") == (
+        "stale",
+        EXPECTED_DATE.isoformat(),
+        "2026-07-15T21:00:00",
+    )
+
+
 def test_newer_snapshot_wins_even_when_its_status_is_stale():
     db.init_db(":memory:")
     _seed_etf("00980A")
@@ -287,6 +314,34 @@ def test_report_quality_uses_run_date_separately_from_holdings_date():
     ]
 
 
+def test_explicit_historical_report_defaults_quality_to_same_run_date():
+    db.init_db(":memory:")
+    _seed_etf("00980A")
+    _seed_holding(EXPECTED_DATE, "00980A")
+    db.insert_scrape_run(
+        _scrape_run(
+            "00980A",
+            run_date=EXPECTED_DATE,
+            data_date=EXPECTED_DATE,
+            status="success",
+            started_at=datetime(2026, 7, 14, 21, 0, 0),
+        )
+    )
+    db.insert_scrape_run(
+        _scrape_run(
+            "00980A",
+            data_date=None,
+            status="failed",
+            started_at=datetime(2026, 7, 15, 21, 0, 0),
+        )
+    )
+
+    text = report.generate_signal_report(EXPECTED_DATE.isoformat())
+
+    assert "抓取執行日: 2026-07-14" in text
+    assert "抓取失敗" not in text
+
+
 def test_retry_selection_uses_canonical_stale_status_only():
     db.init_db(":memory:")
     for code in ("OLD_SUCCESS", "STALE"):
@@ -360,11 +415,12 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys, 
         "data_date_max": OLDER_DATE.isoformat(),
     }
     change_summary = {
-        "ok": True,
-        "date": EXPECTED_DATE.isoformat(),
-        "previous_date": OLDER_DATE.isoformat(),
-        "rows": 1,
+        "ok": False,
+        "date": None,
+        "previous_date": None,
+        "rows": 0,
         "skipped_etfs": [],
+        "reason": "no previous holdings date",
     }
     report_dir = tmp_path / "reports"
 
@@ -374,6 +430,9 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys, 
     ), patch(
         "nightly_pipeline.detect_holding_changes",
         return_value=change_summary,
+    ), patch(
+        "nightly_pipeline._latest_holdings_date",
+        return_value=EXPECTED_DATE.isoformat(),
     ), patch(
         "nightly_pipeline.generate_manager_intent_rollups",
         return_value={"ok": True, "date": EXPECTED_DATE.isoformat(), "rows": 0},

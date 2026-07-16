@@ -144,7 +144,9 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
         seen.append("signals")
         return {"date": "2026-07-13"}
 
-    def report():
+    def report(signal_date, quality_run_date=None):
+        assert signal_date == "2026-07-13"
+        assert quality_run_date == "2026-07-13"
         with module.db._connect() as conn:
             assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "signals"
         seen.append("report")

@@ -252,8 +252,10 @@ def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
     insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
     insert_holding("2026-07-08", "00981A", "2454", "聯發科", 85.0)
     insert_holding("2026-07-08", "00982A", "2383", "台光電", 85.0)
-    insert_scrape_run("2026-07-08", "00980A", data_date="2026-07-07")
-    insert_scrape_run("2026-07-08", "00981A", data_date=None)
+    insert_scrape_run(
+        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
+    )
+    insert_scrape_run("2026-07-08", "00981A", status="failed", data_date=None)
     insert_scrape_run("2026-07-08", "00982A", data_date="2026-07-08")
 
     report = generate_signal_report("2026-07-08")
@@ -261,7 +263,7 @@ def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
     assert "暫定" in report or "Provisional" in report
     assert "資料日期落後" in report
     assert "00980A" in report and "2026-07-07" in report
-    assert "資料日期未知" in report
+    assert "抓取失敗" in report
     assert "00981A" in report
     assert "fresh 1/3" in report
     assert "全部 ETF" not in report
@@ -275,8 +277,12 @@ def test_report_freshness_excludes_retired_etfs():
     ])
     insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
     insert_holding("2026-07-08", "00983A", "2454", "聯發科", 85.0)
-    insert_scrape_run("2026-07-08", "00980A", data_date="2026-07-07")
-    insert_scrape_run("2026-07-08", "00983A", data_date="2026-07-07")
+    insert_scrape_run(
+        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
+    )
+    insert_scrape_run(
+        "2026-07-08", "00983A", status="stale", data_date="2026-07-07"
+    )
 
     report = generate_signal_report("2026-07-08")
 

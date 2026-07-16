@@ -4,7 +4,7 @@ from statistics import median
 from typing import Optional
 
 import db
-from etf_universe import get_active_etf_count, get_etf_config
+from etf_universe import get_etf_config
 from source_priority import source_priority
 
 
@@ -20,44 +20,64 @@ _MIN_ACTIVE_DELTA_PCT = 1.0
 
 
 def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
-    min_successes = _min_successes(min_success_ratio)
-    with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
-            FROM etf_scrape_runs
-            GROUP BY date
-            ORDER BY date DESC
-            """
-        ).fetchall()
-        for row in rows:
-            if row[1] >= min_successes:
-                return row[0]
-        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
-    return row[0] if row and row[0] else None
+    return _get_valid_holding_date(None, min_success_ratio)
 
 
 def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -> Optional[str]:
-    min_successes = _min_successes(min_success_ratio)
+    return _get_valid_holding_date(current_date, min_success_ratio)
+
+
+def _get_valid_holding_date(
+    before_date: Optional[str],
+    min_success_ratio: float,
+) -> Optional[str]:
+    where_clause = "WHERE s.date < ?" if before_date else ""
+    params = (before_date,) if before_date else ()
     with db._connect() as conn:
         rows = conn.execute(
-            """
-            SELECT date, SUM(CASE WHEN status = 'success' AND data_date = date THEN 1 ELSE 0 END) AS successes
-            FROM etf_scrape_runs
-            WHERE date < ?
-            GROUP BY date
-            ORDER BY date DESC
+            f"""
+            WITH snapshots AS (
+                SELECT date, etf_code FROM etf_daily_holdings
+                UNION
+                SELECT date, etf_code FROM etf_daily_non_stock_assets
+            )
+            SELECT
+                s.date,
+                COUNT(DISTINCT s.etf_code) AS snapshot_count,
+                COUNT(DISTINCT CASE
+                    WHEN u.code IS NOT NULL
+                     AND u.retired = 0
+                     AND (u.listing_date IS NULL OR u.listing_date <= s.date)
+                    THEN s.etf_code
+                END) AS eligible_snapshot_count,
+                (
+                    SELECT COUNT(*)
+                    FROM etf_universe expected
+                    WHERE expected.retired = 0
+                      AND (
+                          expected.listing_date IS NULL
+                          OR expected.listing_date <= s.date
+                      )
+                ) AS expected_count
+            FROM snapshots s
+            LEFT JOIN etf_universe u ON u.code = s.etf_code
+            {where_clause}
+            GROUP BY s.date
+            ORDER BY s.date DESC
             """,
-            (current_date,),
+            params,
         ).fetchall()
-        for row in rows:
-            if row[1] >= min_successes:
-                return row[0]
-        row = conn.execute(
-            "SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?",
-            (current_date,),
-        ).fetchone()
-    return row[0] if row and row[0] else None
+
+    for date_value, snapshot_count, eligible_count, expected_count in rows:
+        if expected_count:
+            actual_count = eligible_count
+            required_count = ceil(expected_count * min_success_ratio)
+        else:
+            actual_count = snapshot_count
+            required_count = 1
+        if actual_count >= required_count:
+            return date_value
+    return None
 
 
 def detect_holding_changes(current_date: Optional[str] = None, previous_date: Optional[str] = None, min_success_ratio: float = 0.8) -> dict:
@@ -125,10 +145,6 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
         "removed_positions": sum(row["is_removed_position"] for row in changes),
         "skipped_etfs": skipped_etfs,
     }
-
-
-def _min_successes(min_success_ratio: float) -> int:
-    return ceil(get_active_etf_count() * min_success_ratio)
 
 
 def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) -> dict:

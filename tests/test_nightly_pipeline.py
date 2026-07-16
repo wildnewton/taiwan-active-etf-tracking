@@ -30,8 +30,8 @@ STALE_SCRAPE = {
     "moneydj_warnings": [],
     "data_freshness": {"fresh": 5, "stale": 14, "unknown": 0},
     "stale_etfs": [
-        {"etf_code": "00401A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
-        {"etf_code": "00404A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
+        {"etf_code": "00401A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_expected_data_date"},
+        {"etf_code": "00404A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_expected_data_date"},
     ],
     "unknown_date_etfs": [],
     "data_date_min": "2026-06-25",

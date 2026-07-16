@@ -630,7 +630,6 @@ def _record_result(
 
         if final_status == "stale" and _should_skip_stale_existing_snapshot(
             data_date,
-            freshness_target_date,
             etf_code,
         ):
             _record_stale_existing(summary, etf_code, data_date, result)
@@ -681,10 +680,11 @@ def _record_failure(
         _check_moneydj_warning(summary, etf_code)
 
 
-def _should_skip_stale_existing_snapshot(data_date: Optional[date], expected_data_date: date, etf_code: str) -> bool:
-    if data_date is None or data_date >= expected_data_date:
-        return False
-    return snapshot_exists(data_date, etf_code)
+def _should_skip_stale_existing_snapshot(
+    data_date: Optional[date],
+    etf_code: str,
+) -> bool:
+    return data_date is not None and snapshot_exists(data_date, etf_code)
 
 
 def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result: dict) -> None:
@@ -742,7 +742,7 @@ def _record_freshness(
             "etf_code": etf_code,
             "data_date": data_date.isoformat(),
             "source_type": source_type,
-            "reason": "source_date_before_run_date",
+            "reason": "source_date_before_expected_data_date",
         })
         return
     raise ValueError(f"Unknown scrape status: {status}")
