@@ -86,8 +86,14 @@ def retry_stale_etfs(
         return summary
 
     change_summary = detect_holding_changes(current_date=run_date)
+    if change_summary.get("ok") is not True or change_summary.get("date") != run_date:
+        raise RuntimeError(
+            "holding change detection failed for retry date "
+            f"{run_date}: {change_summary.get('reason') or change_summary}"
+        )
+
     intent_summary = generate_manager_intent_rollups(run_date)
-    signal_summary = generate_manager_signals()
+    signal_summary = generate_manager_signals(run_date)
     report_paths = _overwrite_reports(db_path, run_date, report_dir)
 
     summary.update({
