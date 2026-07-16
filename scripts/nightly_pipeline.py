@@ -283,7 +283,7 @@ def run_nightly_pipeline(
             )
         if stale > 0:
             print(
-                f"PROVISIONAL REPORT: {fresh}/{total_etfs or '?'} ETFs have "
+                f"STALE SCRAPE: {fresh}/{total_etfs or '?'} ETFs have "
                 f"{scrape_summary.get('expected_data_date') or scrape_summary.get('date')} data"
             )
             for item in scrape_summary.get("stale_etfs", [])[:10]:
