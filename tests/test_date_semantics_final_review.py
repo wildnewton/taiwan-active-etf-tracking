@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 import changes
 import db
 import nightly_pipeline
@@ -98,7 +100,7 @@ def test_report_previous_date_uses_complete_holdings_chronology():
     assert report._get_previous_holdings_date(CURRENT_DATE) == COMPLETE_PREVIOUS_DATE
 
 
-def test_report_and_nightly_latest_date_do_not_fall_back_to_partial_snapshot():
+def test_report_and_nightly_do_not_fall_back_to_partial_snapshot():
     db.init_db(":memory:")
     for code in ("A", "B", "C"):
         _seed_etf(code)
@@ -106,7 +108,15 @@ def test_report_and_nightly_latest_date_do_not_fall_back_to_partial_snapshot():
 
     assert changes.get_latest_valid_date() is None
     assert report._get_latest_holdings_date() is None
-    assert nightly_pipeline._latest_holdings_date() is None
+    with pytest.raises(RuntimeError, match="persisted holdings date mismatch"):
+        nightly_pipeline._resolve_target_data_date(
+            {
+                "expected_data_date": CURRENT_DATE,
+                "data_date_min": CURRENT_DATE,
+                "data_date_max": CURRENT_DATE,
+            },
+            ":memory:",
+        )
 
 
 def test_quality_warnings_do_not_import_failures_from_holdings_date():
