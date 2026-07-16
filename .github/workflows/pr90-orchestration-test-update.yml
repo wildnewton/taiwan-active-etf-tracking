@@ -1,0 +1,100 @@
+name: PR90 orchestration test update
+
+on:
+  push:
+    branches:
+      - fix/73-stale-scrape-status
+
+permissions:
+  contents: write
+
+jobs:
+  update-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+      - name: Replace obsolete nightly audit scenario
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test_date_semantics_audit.py')
+          text = path.read_text(encoding='utf-8')
+          start = text.index('def test_nightly_uses_one_holdings_date_for_report_content_and_filename')
+          end = text.index('\ndef test_stale_classifier_controls_existing_snapshot_skip_without_recomparison', start)
+          replacement = '''def test_nightly_rejects_stale_only_scrape_before_downstream(capsys, tmp_path):
+              scrape_summary = {
+                  "date": RUN_DATE.isoformat(),
+                  "expected_data_date": EXPECTED_DATE.isoformat(),
+                  "total_etfs": 1,
+                  "moneydj_success": 1,
+                  "official_success": 0,
+                  "preexisting_success": 0,
+                  "failed": 0,
+                  "failures": [],
+                  "moneydj_warnings": [],
+                  "data_freshness": {"fresh": 0, "stale": 1, "unknown": 0},
+                  "stale_etfs": [
+                      {
+                          "etf_code": "00980A",
+                          "data_date": OLDER_DATE.isoformat(),
+                          "source_type": "moneydj_primary",
+                          "reason": "source_date_before_expected_data_date",
+                      }
+                  ],
+                  "unknown_date_etfs": [],
+                  "data_date_min": OLDER_DATE.isoformat(),
+                  "data_date_max": OLDER_DATE.isoformat(),
+              }
+              report_dir = tmp_path / "reports"
+
+              with patch("nightly_pipeline.db.init_db"), patch(
+                  "nightly_pipeline.run_daily_scrape_with_browser",
+                  return_value=scrape_summary,
+              ), patch(
+                  "nightly_pipeline.detect_holding_changes",
+              ) as detect_changes, patch(
+                  "nightly_pipeline.generate_manager_intent_rollups",
+              ) as intent, patch(
+                  "nightly_pipeline.generate_manager_signals",
+              ) as signals, patch(
+                  "nightly_pipeline.generate_signal_report",
+              ) as generate_report, patch(
+                  "nightly_pipeline.generate_traction_report",
+              ) as traction:
+                  import pytest
+
+                  with pytest.raises(RuntimeError, match="scrape data date range"):
+                      nightly_pipeline.run_nightly_pipeline(
+                          str(tmp_path / "test.sqlite3"),
+                          str(report_dir),
+                          skip_discovery=True,
+                      )
+
+              detect_changes.assert_not_called()
+              intent.assert_not_called()
+              signals.assert_not_called()
+              generate_report.assert_not_called()
+              traction.assert_not_called()
+              assert not list(report_dir.glob("*.txt"))
+              output = capsys.readouterr().out
+              assert "have 2026-07-14 data" in output
+              assert "have 2026-07-15 data" not in output
+
+
+          '''
+          path.write_text(text[:start] + replacement + text[end + 1:], encoding='utf-8')
+          PY
+      - name: Remove temporary workflow
+        run: rm .github/workflows/pr90-orchestration-test-update.yml
+      - name: Commit test update
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/test_date_semantics_audit.py .github/workflows/pr90-orchestration-test-update.yml
+          git commit -m "test: replace obsolete provisional nightly scenario"
+          git push origin HEAD:fix/73-stale-scrape-status
