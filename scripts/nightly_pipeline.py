@@ -149,8 +149,41 @@ def run_try_run(
         )
 
 
-def _latest_holdings_date():
-    return get_latest_valid_date()
+def _resolve_target_data_date(scrape_summary, db_path):
+    """Validate the single holdings date produced and persisted by this run."""
+    target_data_date = scrape_summary.get("expected_data_date")
+    if not target_data_date:
+        raise RuntimeError("nightly scrape did not provide expected_data_date")
+
+    data_date_min = scrape_summary.get("data_date_min")
+    data_date_max = scrape_summary.get("data_date_max")
+    if data_date_min != target_data_date or data_date_max != target_data_date:
+        raise RuntimeError(
+            "scrape data date range does not match target: "
+            f"expected={target_data_date}, range={data_date_min or 'unknown'}~"
+            f"{data_date_max or 'unknown'}"
+        )
+
+    persisted_date = get_latest_valid_date()
+    if persisted_date != target_data_date:
+        resolved_db = ":memory:" if db_path == ":memory:" else str(Path(db_path).resolve())
+        raise RuntimeError(
+            "persisted holdings date mismatch: "
+            f"expected={target_data_date}, latest_valid={persisted_date or 'none'}, "
+            f"db={resolved_db}"
+        )
+    return target_data_date
+
+
+def _require_successful_change_detection(change_summary, target_data_date):
+    if (
+        change_summary.get("ok") is not True
+        or change_summary.get("date") != target_data_date
+    ):
+        raise RuntimeError(
+            "holding change detection failed for target date "
+            f"{target_data_date}: {change_summary.get('reason') or change_summary}"
+        )
 
 
 def run_nightly_pipeline(
@@ -263,10 +296,12 @@ def run_nightly_pipeline(
             ]
             print(f"Unknown source dates: {', '.join(unknown_codes)}")
 
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+
     print("Step 3/7: Detecting holding changes...")
-    change_summary = detect_holding_changes()
+    change_summary = detect_holding_changes(current_date=target_data_date)
     print(f"  Change summary: {change_summary}")
-    report_data_date = change_summary.get("date") or _latest_holdings_date()
+    _require_successful_change_detection(change_summary, target_data_date)
 
     skipped_etfs = change_summary.get("skipped_etfs", [])
     if skipped_etfs:
@@ -278,16 +313,16 @@ def run_nightly_pipeline(
     # bare cross_fund_rotation when same-issuer rotation exists but net direction
     # is unclear. Report text should present the bare state as unclear/mandate
     # rotation, not as accumulation or distribution.
-    manager_intent_summary = generate_manager_intent_rollups(report_data_date)
+    manager_intent_summary = generate_manager_intent_rollups(target_data_date)
     print(f"  Manager intent summary: {manager_intent_summary}")
 
     print("Step 5/7: Generating manager signals...")
-    signal_summary = generate_manager_signals()
+    signal_summary = generate_manager_signals(target_data_date)
     print(f"  Signal summary: {signal_summary}")
 
     print("Step 6/7: Generating signal report...")
     report_text = generate_signal_report(
-        report_data_date,
+        target_data_date,
         quality_run_date=scrape_summary.get("date"),
     )
 
@@ -295,11 +330,7 @@ def run_nightly_pipeline(
     report_dir_path.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_date = (
-        report_data_date
-        or scrape_summary.get("date")
-        or datetime.now().strftime("%Y-%m-%d")
-    )
+    report_date = target_data_date
     report_path = report_dir_path / f"taiwan_active_etf_signal_report_{report_date}.txt"
     report_archive_path = (
         report_dir_path / f"taiwan_active_etf_signal_report_{stamp}.txt"
