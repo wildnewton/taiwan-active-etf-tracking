@@ -1,0 +1,129 @@
+name: PR90 traction date fix
+
+on:
+  push:
+    branches:
+      - fix/73-stale-scrape-status
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+      - name: Apply explicit traction date passthrough
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'scripts/traction_analysis.py',
+              '''def generate_traction_report(
+              db_path="data/active_etf_holdings.sqlite",
+              window_days=5,
+              report_dir=None,
+          ) -> str:
+              """Generate the traction analysis report."""
+              db.init_db(db_path)
+
+              with db._connect() as conn:
+                  latest_date = _get_latest_date(conn)
+          ''',
+              '''def generate_traction_report(
+              db_path="data/active_etf_holdings.sqlite",
+              window_days=5,
+              report_dir=None,
+              latest_date=None,
+          ) -> str:
+              """Generate the traction analysis report through an optional end date."""
+              db.init_db(db_path)
+
+              with db._connect() as conn:
+                  latest_date = latest_date or _get_latest_date(conn)
+          ''',
+          )
+
+          replace_once(
+              'scripts/nightly_pipeline.py',
+              '''        traction_raw = generate_traction_report(
+                      db_path=db_path,
+                      window_days=10,
+                  )
+          ''',
+              '''        traction_raw = generate_traction_report(
+                      db_path=db_path,
+                      window_days=10,
+                      latest_date=target_data_date,
+                  )
+          ''',
+          )
+
+          replace_once(
+              'scripts/retry_stale_scrapes.py',
+              '''    traction_text = generate_traction_report(db_path=db_path, window_days=10)
+          ''',
+              '''    traction_text = generate_traction_report(
+                  db_path=db_path,
+                  window_days=10,
+                  latest_date=run_date,
+              )
+          ''',
+          )
+
+          replace_once(
+              'tests/test_nightly_pipeline.py',
+              '''        mock_traction.assert_called_once()
+          ''',
+              '''        mock_traction.assert_called_once_with(
+                      db_path=db_path,
+                      window_days=10,
+                      latest_date="2026-06-26",
+                  )
+          ''',
+          )
+
+          replace_once(
+              'tests/test_retry_stale_scrapes.py',
+              '''    traction_report.assert_called_once_with(db_path=db_path, window_days=10)
+          ''',
+              '''    traction_report.assert_called_once_with(
+                  db_path=db_path,
+                  window_days=10,
+                  latest_date="2026-07-07",
+              )
+          ''',
+          )
+
+          replace_once(
+              'tests/test_nightly_try_run.py',
+              '''    def traction(db_path, window_days):
+                  assert window_days == 10
+          ''',
+              '''    def traction(db_path, window_days, latest_date=None):
+                  assert window_days == 10
+                  assert latest_date == "2026-07-13"
+          ''',
+          )
+          PY
+      - name: Remove temporary workflow and commit
+        run: |
+          rm .github/workflows/pr90-traction-date-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/traction_analysis.py scripts/nightly_pipeline.py scripts/retry_stale_scrapes.py tests/test_nightly_pipeline.py tests/test_retry_stale_scrapes.py tests/test_nightly_try_run.py .github/workflows/pr90-traction-date-fix.yml
+          git commit -m "fix: keep traction reports on the target date"
+          git push origin HEAD:fix/73-stale-scrape-status
