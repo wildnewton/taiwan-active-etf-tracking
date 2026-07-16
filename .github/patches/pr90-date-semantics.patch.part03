@@ -1,0 +1,160 @@
+ 
+     etf_codes = [row["etf_code"] for row in stale_rows]
+     retry_summary = run_selected_scrape_with_browser(db_path, etf_codes, run_date=run_date)
+-    fresh_after_retry = retry_summary.get("data_freshness", {}).get("fresh", 0)
+-    stale_after = max(stale_before - fresh_after_retry, 0)
+-    improved = stale_after < stale_before
++    stale_after_rows = get_stale_scrape_runs(run_date)
++    stale_after_codes = {row["etf_code"] for row in stale_after_rows}
++    stale_before_codes = set(etf_codes)
++    improved_etfs = sorted(stale_before_codes - stale_after_codes)
++    stale_after = len(stale_after_rows)
++    improved = bool(improved_etfs)
+ 
+     summary = {
+         "date": run_date,
+         "retried_etfs": etf_codes,
++        "improved_etfs": improved_etfs,
+         "stale_before": stale_before,
+         "stale_after": stale_after,
+         "improved": improved,
+@@ -106,7 +109,7 @@ def _overwrite_reports(db_path: str, run_date: str, report_dir: str | Path) -> d
+     report_dir = Path(report_dir)
+     report_dir.mkdir(parents=True, exist_ok=True)
+ 
+-    signal_text = generate_signal_report(run_date)
++    signal_text = generate_signal_report(run_date, quality_run_date=run_date)
+     traction_text = generate_traction_report(db_path=db_path, window_days=10)
+ 
+     signal_path = report_dir / f"taiwan_active_etf_signal_report_{run_date}.txt"
+diff --git a/tests/test_backfill_changes.py b/tests/test_backfill_changes.py
+index 542d794..fcc16b0 100644
+--- a/tests/test_backfill_changes.py
++++ b/tests/test_backfill_changes.py
+@@ -91,6 +91,20 @@ def signal_types(date="2026-06-24"):
+         conn.row_factory = old_factory
+ 
+ 
++def seed_etf_universe():
++    with db._connect() as conn:
++        conn.execute(
++            """
++            INSERT INTO etf_universe (
++                code, name, issuer, listing_date, retired, created_at, updated_at
++            ) VALUES (
++                '00980A', 'Test ETF', 'Nomura', '2026-01-01', 0,
++                '2026-01-01T00:00:00', '2026-01-01T00:00:00'
++            )
++            """
++        )
++
++
+ def seed_previous_day(date="2026-06-23"):
+     for code, name, weight in [
+         ("2330", "台積電", 10.0),
+@@ -174,6 +188,7 @@ def test_backfill_recomputes_old_changes_and_populates_fund_flow_fields():
+ 
+ def test_backfill_is_idempotent_and_can_regenerate_signals():
+     db.init_db(":memory:")
++    seed_etf_universe()
+     seed_previous_day()
+     seed_scaled_current_day()
+ 
+diff --git a/tests/test_changes.py b/tests/test_changes.py
+index 2230ace..5730433 100644
+--- a/tests/test_changes.py
++++ b/tests/test_changes.py
+@@ -40,25 +40,6 @@ def fetch_change(stock_code, etf_code="00980A", date="2026-06-23"):
+         ).fetchone()
+ 
+ 
+-def insert_success_runs(date_value, count=16):
+-    with db._connect() as conn:
+-        for idx in range(count):
+-            conn.execute(
+-                """
+-                INSERT OR REPLACE INTO etf_scrape_runs (
+-                    date, data_date, etf_code, status, primary_source, primary_success,
+-                    moneydj_browser_used, official_fallback_used, official_success,
+-                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+-                    total_weight_all_rows, total_weight_stock_rows, source_url,
+-                    error, started_at, finished_at
+-                ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
+-                    10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
+-                    '2026-06-23T00:00:00', '2026-06-23T00:01:00')
+-                """,
+-                (date_value, date_value, f"ETF{idx:02d}"),
+-            )
+-
+-
+ def test_init_db_creates_change_detection_table():
+     db.init_db(":memory:")
+ 
+@@ -76,14 +57,28 @@ def test_init_db_creates_change_detection_table():
+ 
+ def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
+     db.init_db(":memory:")
+-    insert_success_runs("2026-06-20", count=15)
+-    insert_success_runs("2026-06-21", count=16)
+-    insert_success_runs("2026-06-22", count=16)
++    for idx in range(19):
++        _insert_etf_universe_entry(f"ETF{idx:02d}", f"ETF {idx}", "Issuer", 0)
++    for date_value, count in (
++        ("2026-06-20", 15),
++        ("2026-06-21", 16),
++        ("2026-06-22", 16),
++    ):
++        for idx in range(count):
++            insert_holding(
++                date_value,
++                f"ETF{idx:02d}",
++                f"{idx:04d}",
++                f"Stock {idx}",
++                100,
++                5.0,
++            )
+ 
+     assert get_latest_valid_date() == "2026-06-22"
+     assert get_previous_valid_date("2026-06-22") == "2026-06-21"
+ 
+ 
++
+ def test_detects_new_removed_and_existing_position_changes():
+     db.init_db(":memory:")
+ 
+diff --git a/tests/test_cutoff_freshness_consumers.py b/tests/test_cutoff_freshness_consumers.py
+index df6bc22..7285c00 100644
+--- a/tests/test_cutoff_freshness_consumers.py
++++ b/tests/test_cutoff_freshness_consumers.py
+@@ -12,20 +12,31 @@ def _seed_etf(code: str, *, retired: int = 0) -> None:
+     with db._connect() as conn:
+         conn.execute(
+             """
+-            INSERT INTO etf_universe (code, name, retired, created_at, updated_at)
+-            VALUES (?, ?, ?, ?, ?)
++            INSERT INTO etf_universe (
++                code, name, listing_date, retired, created_at, updated_at
++            ) VALUES (?, ?, '2026-07-01', ?, ?, ?)
+             """,
+             (code, code, retired, f"{RUN_DATE}T00:00:00", f"{RUN_DATE}T00:00:00"),
+         )
+ 
+ 
+-def _seed_scrape_run(
+-    code: str,
+-    *,
+-    run_date: str = RUN_DATE,
+-    data_date: str | None,
+-    status: str,
+-) -> None:
++def _seed_holding(code: str, data_date: str) -> None:
++    with db._connect() as conn:
++        conn.execute(
++            """
++            INSERT INTO etf_daily_holdings (
++                date, etf_code, asset_name, asset_type, stock_code, stock_name,
++                shares, weight_pct, source_url, source_type, extraction_method,
++                scraped_at
++            ) VALUES (?, ?, '台積電(2330.TW)', 'stock', '2330', '台積電',
++                      1000, 10.0, 'https://example.test', 'moneydj_primary',
++                      'test', ?)
