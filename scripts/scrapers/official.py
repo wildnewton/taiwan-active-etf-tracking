@@ -27,7 +27,6 @@ _API_RESPONSE_TIMEOUT_MS = 10_000
 TWSE_URL_TEMPLATE = (
     "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?{code}="
 )
-CTBC_URL_TEMPLATE = "https://www.ctbcinvestments.com/Etf/{internal_id}/Combination"
 
 
 def get_official_config(etf_code: str) -> dict:
@@ -168,7 +167,7 @@ def parse_ctbc_api(api_json: str, etf_code: str, source_url: str) -> list[dict]:
     rows = []
     details = payload.get("FundAssetsDetail", []) if isinstance(payload, dict) else []
     for group in details:
-        if not isinstance(group, dict):
+        if not isinstance(group, dict) or str(group.get("Code") or "").upper() != "STOCK":
             continue
         for item in group.get("Data", []):
             if not isinstance(item, dict):
@@ -278,11 +277,6 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
                     buyback_body = await response.text()
             except Exception:
                 pass
-        if not buyback_body:
-            for _ in range(10):
-                await page.wait_for_timeout(1000)
-                if buyback_body:
-                    break
     finally:
         page.remove_listener("response", on_response)
 
@@ -325,11 +319,6 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
                     assets_body = await response.text()
             except Exception:
                 pass
-        if not assets_body:
-            for _ in range(10):
-                await page.wait_for_timeout(1000)
-                if assets_body:
-                    break
     finally:
         page.remove_listener("response", on_response)
 
@@ -358,23 +347,16 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     try:
         await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
         if not holdings_body:
-            # wait_for_response was renamed to wait_for_event in Playwright 1.61
             try:
                 response = await page.wait_for_event(
                     "response",
                     predicate=_is_ctbc_holdings_response,
-                    timeout=15000,
+                    timeout=_API_RESPONSE_TIMEOUT_MS,
                 )
                 if not holdings_body and _is_ctbc_holdings_response(response):
                     holdings_body = await response.text()
             except Exception:
                 pass
-        # Final fallback: poll for a few more seconds
-        if not holdings_body:
-            for _ in range(10):
-                await page.wait_for_timeout(1000)
-                if holdings_body:
-                    break
     finally:
         page.remove_listener("response", on_response)
 
@@ -385,6 +367,9 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
         all_rows = dedupe_rows(parse_ctbc_api(holdings_body, etf_code, source_url))
     except Exception as exc:
         return _failed_result(source_url, f"CTBC API parse error: {exc}")
+
+    if all_rows and any(not row.get("date") for row in all_rows):
+        return _failed_result(source_url, "CTBC holdings date missing")
 
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
