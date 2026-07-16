@@ -1,0 +1,732 @@
+name: Apply PR 90 date semantics green
+
+on:
+  push:
+    branches:
+      - tooling/pr90-date-semantics-green
+
+permissions:
+  contents: write
+
+jobs:
+  apply-green:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Apply minimal date-semantics implementation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+
+          def read(path):
+              return Path(path).read_text(encoding="utf-8")
+
+
+          def write(path, text):
+              Path(path).write_text(text, encoding="utf-8")
+
+
+          def replace_exact(path, old, new):
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one exact match, found {count}")
+              write(path, text.replace(old, new, 1))
+
+
+          def replace_regex(path, pattern, replacement):
+              text = read(path)
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected one regex match, found {count}")
+              write(path, updated)
+
+
+          replace_regex(
+              "scripts/db.py",
+              r"def insert_scrape_run\(run\):.*?\n\ndef get_last_scrape_date",
+              '''_USABLE_SCRAPE_STATUSES = {"success", "stale"}
+
+
+def _scrape_run_should_replace(existing, incoming: dict) -> bool:
+    """Keep the newest usable snapshot state for one run-date/ETF row."""
+    if existing is None:
+        return True
+
+    existing_status, existing_data_date, existing_started_at = existing
+    incoming_status = incoming["status"]
+    existing_usable = existing_status in _USABLE_SCRAPE_STATUSES
+    incoming_usable = incoming_status in _USABLE_SCRAPE_STATUSES
+
+    if incoming_usable and existing_usable:
+        incoming_data_date = incoming.get("data_date") or ""
+        existing_data_date = existing_data_date or ""
+        if incoming_data_date != existing_data_date:
+            return incoming_data_date > existing_data_date
+        return (incoming.get("started_at") or "") >= (existing_started_at or "")
+
+    if incoming_usable:
+        return True
+    if existing_usable:
+        return False
+    return (incoming.get("started_at") or "") >= (existing_started_at or "")
+
+
+def insert_scrape_run(run):
+    row = _row_dict(run)
+    with _connect() as conn:
+        existing = conn.execute(
+            """
+            SELECT status, data_date, started_at
+            FROM etf_scrape_runs
+            WHERE date = ? AND etf_code = ?
+            """,
+            (row["date"], row["etf_code"]),
+        ).fetchone()
+        if not _scrape_run_should_replace(existing, row):
+            return
+        conn.execute("INSERT OR REPLACE INTO etf_scrape_runs (date, data_date, etf_code, status, primary_source, primary_success, moneydj_browser_used, official_fallback_used, official_success, rows_extracted, stock_rows_extracted, non_stock_rows_extracted, total_weight_all_rows, total_weight_stock_rows, source_url, error, started_at, finished_at) VALUES (:date, :data_date, :etf_code, :status, :primary_source, :primary_success, :moneydj_browser_used, :official_fallback_used, :official_success, :rows_extracted, :stock_rows_extracted, :non_stock_rows_extracted, :total_weight_all_rows, :total_weight_stock_rows, :source_url, :error, :started_at, :finished_at)", row)
+
+
+def get_last_scrape_date''',
+          )
+
+          replace_exact(
+              "scripts/changes.py",
+              "from etf_universe import get_active_etf_count, get_etf_config",
+              "from etf_universe import get_etf_config",
+          )
+          replace_regex(
+              "scripts/changes.py",
+              r"def get_latest_valid_date\(.*?(?=\ndef detect_holding_changes)",
+              '''def get_latest_valid_date(min_success_ratio: float = 0.8) -> Optional[str]:
+    return _get_valid_holding_date(None, min_success_ratio)
+
+
+def get_previous_valid_date(current_date: str, min_success_ratio: float = 0.8) -> Optional[str]:
+    return _get_valid_holding_date(current_date, min_success_ratio)
+
+
+def _get_valid_holding_date(
+    before_date: Optional[str],
+    min_success_ratio: float,
+) -> Optional[str]:
+    where_clause = "WHERE s.date < ?" if before_date else ""
+    params = (before_date,) if before_date else ()
+    with db._connect() as conn:
+        rows = conn.execute(
+            f"""
+            WITH snapshots AS (
+                SELECT date, etf_code FROM etf_daily_holdings
+                UNION
+                SELECT date, etf_code FROM etf_daily_non_stock_assets
+            )
+            SELECT
+                s.date,
+                COUNT(DISTINCT s.etf_code) AS snapshot_count,
+                COUNT(DISTINCT CASE
+                    WHEN u.code IS NOT NULL
+                     AND u.retired = 0
+                     AND (u.listing_date IS NULL OR u.listing_date <= s.date)
+                    THEN s.etf_code
+                END) AS eligible_snapshot_count,
+                (
+                    SELECT COUNT(*)
+                    FROM etf_universe expected
+                    WHERE expected.retired = 0
+                      AND (
+                          expected.listing_date IS NULL
+                          OR expected.listing_date <= s.date
+                      )
+                ) AS expected_count
+            FROM snapshots s
+            LEFT JOIN etf_universe u ON u.code = s.etf_code
+            {where_clause}
+            GROUP BY s.date
+            ORDER BY s.date DESC
+            """,
+            params,
+        ).fetchall()
+
+    for date_value, snapshot_count, eligible_count, expected_count in rows:
+        if expected_count:
+            actual_count = eligible_count
+            required_count = ceil(expected_count * min_success_ratio)
+        else:
+            actual_count = snapshot_count
+            required_count = 1
+        if actual_count >= required_count:
+            return date_value
+    return None
+
+
+''',
+          )
+          replace_regex(
+              "scripts/changes.py",
+              r"\n\ndef _min_successes\(.*?(?=\n\ndef _empty_summary)",
+              "",
+          )
+
+          replace_exact(
+              "scripts/pipeline.py",
+              '''        if final_status == "stale" and _should_skip_stale_existing_snapshot(
+            data_date,
+            freshness_target_date,
+            etf_code,
+        ):''',
+              '''        if final_status == "stale" and _should_skip_stale_existing_snapshot(
+            data_date,
+            etf_code,
+        ):''',
+          )
+          replace_exact(
+              "scripts/pipeline.py",
+              '''def _should_skip_stale_existing_snapshot(data_date: Optional[date], expected_data_date: date, etf_code: str) -> bool:
+    if data_date is None or data_date >= expected_data_date:
+        return False
+    return snapshot_exists(data_date, etf_code)''',
+              '''def _should_skip_stale_existing_snapshot(
+    data_date: Optional[date],
+    etf_code: str,
+) -> bool:
+    return data_date is not None and snapshot_exists(data_date, etf_code)''',
+          )
+          replace_exact(
+              "scripts/pipeline.py",
+              '"reason": "source_date_before_run_date",',
+              '"reason": "source_date_before_expected_data_date",',
+          )
+
+          replace_exact(
+              "scripts/report.py",
+              "def generate_signal_report(signal_date=None) -> str:",
+              "def generate_signal_report(signal_date=None, quality_run_date=None) -> str:",
+          )
+          replace_exact(
+              "scripts/report.py",
+              '''    data_date = signal_date or _get_latest_holdings_date()
+    prev_date = _get_previous_holdings_date(data_date)''',
+              '''    data_date = signal_date or _get_latest_holdings_date()
+    quality_run_date = quality_run_date or _get_latest_scrape_run_date()
+    prev_date = _get_previous_holdings_date(data_date)''',
+          )
+          replace_exact(
+              "scripts/report.py",
+              "    quality = _get_data_quality(data_date)",
+              "    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)",
+          )
+          replace_exact(
+              "scripts/report.py",
+              '''def _get_latest_holdings_date():
+    with _using_row_factory(None) as conn:
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
+    return row[0] if row and row[0] else None
+
+
+''',
+              '''def _get_latest_holdings_date():
+    with _using_row_factory(None) as conn:
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
+    return row[0] if row and row[0] else None
+
+
+def _get_latest_scrape_run_date():
+    try:
+        with _using_row_factory(None) as conn:
+            row = conn.execute("SELECT MAX(date) FROM etf_scrape_runs").fetchone()
+    except sqlite3.OperationalError:
+        return None
+    return row[0] if row and row[0] else None
+
+
+''',
+          )
+          replace_regex(
+              "scripts/report.py",
+              r"def _get_data_quality\(data_date\):.*?(?=\ndef _get_actual_etf_count)",
+              '''def _get_data_quality(data_date, quality_run_date=None):
+    quality_run_date = quality_run_date or _get_latest_scrape_run_date()
+    if not data_date:
+        return {
+            "status_label": "❌ No data",
+            "quality_run_date": quality_run_date,
+            "expected_count": get_active_etf_count(),
+            "actual_count": 0,
+            "failed_etfs": [],
+            "change_skips": [],
+            "scrape_freshness": _empty_scrape_freshness(),
+            "warnings": ["⚠️ 無持倉資料"],
+        }
+    expected_count = get_active_etf_count(as_of_date=data_date)
+    actual_count = _get_actual_etf_count(data_date)
+    failed_etfs = _get_failed_etfs(quality_run_date)
+    change_skips = _get_skipped_change_diagnostics(data_date)
+    scrape_freshness = _get_scrape_data_freshness(quality_run_date)
+    warnings = _get_data_warnings(data_date)
+    freshness_issues = bool(scrape_freshness["stale"] or scrape_freshness["unknown"])
+    degraded = bool(warnings or failed_etfs or change_skips or freshness_issues or (expected_count and actual_count < expected_count))
+    return {
+        "status_label": "⚠️ Degraded" if degraded else "✅ Clean",
+        "quality_run_date": quality_run_date,
+        "expected_count": expected_count,
+        "actual_count": actual_count,
+        "failed_etfs": failed_etfs,
+        "change_skips": change_skips,
+        "scrape_freshness": scrape_freshness,
+        "warnings": warnings,
+    }
+
+
+''',
+          )
+          replace_regex(
+              "scripts/report.py",
+              r"def _get_failed_etfs\(data_date\):.*?(?=\ndef _get_scrape_data_freshness)",
+              '''def _get_failed_etfs(run_date):
+    if not run_date:
+        return []
+    try:
+        with _using_row_factory(None) as conn:
+            rows = conn.execute(
+                """SELECT sr.etf_code
+                   FROM etf_scrape_runs sr
+                   JOIN etf_universe u ON sr.etf_code = u.code
+                   WHERE sr.date = ? AND sr.status = 'failed'
+                     AND u.retired = 0
+                      AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
+                   ORDER BY sr.etf_code""",
+                (run_date,),
+            ).fetchall()
+        return [row[0] for row in rows]
+    except sqlite3.OperationalError:
+        return []
+
+
+''',
+          )
+          replace_regex(
+              "scripts/report.py",
+              r"def _get_scrape_data_freshness\(data_date\):.*?(?=\ndef _get_skipped_change_diagnostics)",
+              '''def _get_scrape_data_freshness(run_date):
+    freshness = _empty_scrape_freshness()
+    if not run_date:
+        return freshness
+    try:
+        with _using_row_factory(_dict_factory) as conn:
+            rows = conn.execute(
+                """SELECT sr.etf_code, sr.data_date, sr.status
+                   FROM etf_scrape_runs sr
+                   JOIN etf_universe u ON sr.etf_code = u.code
+                   WHERE sr.date = ?
+                     AND sr.status IN ('success', 'stale')
+                     AND u.retired = 0
+                      AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
+                   ORDER BY sr.etf_code""",
+                (run_date,),
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return freshness
+
+    for row in rows:
+        source_date = row.get("data_date")
+        status = row.get("status")
+        item = {"etf_code": row.get("etf_code"), "data_date": source_date}
+        if not source_date:
+            freshness["unknown"].append(item)
+        elif status == "stale":
+            freshness["stale"].append(item)
+        elif status == "success":
+            freshness["fresh"].append(item)
+        else:
+            freshness["unknown"].append(item)
+    return freshness
+
+
+''',
+          )
+          replace_exact(
+              "scripts/report.py",
+              '''    lines = ["═══ 資料品質 / 信任度 ═══"]
+    lines.append(f"資料品質: {quality['status_label']}")''',
+              '''    lines = ["═══ 資料品質 / 信任度 ═══"]
+    lines.append(f"資料品質: {quality['status_label']}")
+    if quality.get("quality_run_date"):
+        lines.append(f"抓取執行日: {quality['quality_run_date']}")''',
+          )
+          replace_exact(
+              "scripts/report.py",
+              '''        f"**數據日期**: {summary.get('date', 'N/A')}",
+        f"**ETF 總數**: {summary['total_etfs']}",''',
+              '''        f"**執行日期**: {summary.get('date', 'N/A')}",
+        f"**預期資料日期**: {summary.get('expected_data_date') or 'N/A'}",
+        f"**ETF 總數**: {summary['total_etfs']}",''',
+          )
+
+          replace_exact(
+              "scripts/retry_stale_scrapes.py",
+              '''              AND sr.status IN ('success', 'stale')
+              AND sr.data_date IS NOT NULL
+              AND sr.data_date < ?
+              AND u.retired = 0''',
+              '''              AND sr.status = 'stale'
+              AND sr.data_date IS NOT NULL
+              AND u.retired = 0''',
+          )
+          replace_exact(
+              "scripts/retry_stale_scrapes.py",
+              "            (run_date, run_date),",
+              "            (run_date,),",
+          )
+          replace_exact(
+              "scripts/retry_stale_scrapes.py",
+              '''    retry_summary = run_selected_scrape_with_browser(db_path, etf_codes, run_date=run_date)
+    fresh_after_retry = retry_summary.get("data_freshness", {}).get("fresh", 0)
+    stale_after = max(stale_before - fresh_after_retry, 0)
+    improved = stale_after < stale_before
+
+    summary = {
+        "date": run_date,
+        "retried_etfs": etf_codes,
+        "stale_before": stale_before,
+        "stale_after": stale_after,
+        "improved": improved,
+        "reports_overwritten": False,
+        "retry_summary": retry_summary,
+    }''',
+              '''    retry_summary = run_selected_scrape_with_browser(db_path, etf_codes, run_date=run_date)
+    stale_after_rows = get_stale_scrape_runs(run_date)
+    stale_after_codes = {row["etf_code"] for row in stale_after_rows}
+    stale_before_codes = set(etf_codes)
+    improved_etfs = sorted(stale_before_codes - stale_after_codes)
+    stale_after = len(stale_after_rows)
+    improved = bool(improved_etfs)
+
+    summary = {
+        "date": run_date,
+        "retried_etfs": etf_codes,
+        "improved_etfs": improved_etfs,
+        "stale_before": stale_before,
+        "stale_after": stale_after,
+        "improved": improved,
+        "reports_overwritten": False,
+        "retry_summary": retry_summary,
+    }''',
+          )
+          replace_exact(
+              "scripts/retry_stale_scrapes.py",
+              "    signal_text = generate_signal_report(run_date)",
+              "    signal_text = generate_signal_report(run_date, quality_run_date=run_date)",
+          )
+
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              '''    change_summary = detect_holding_changes()
+    print(f"  Change summary: {change_summary}")
+
+    skipped_etfs = change_summary.get("skipped_etfs", [])''',
+              '''    change_summary = detect_holding_changes()
+    print(f"  Change summary: {change_summary}")
+    report_data_date = change_summary.get("date") or _latest_holdings_date()
+
+    skipped_etfs = change_summary.get("skipped_etfs", [])''',
+          )
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              "    manager_intent_summary = generate_manager_intent_rollups(change_summary.get(\"date\"))",
+              "    manager_intent_summary = generate_manager_intent_rollups(report_data_date)",
+          )
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              "    report_text = generate_signal_report()",
+              '''    report_text = generate_signal_report(
+        report_data_date,
+        quality_run_date=scrape_summary.get("date"),
+    )''',
+          )
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              '''    report_date = (
+        change_summary.get("date")
+        or scrape_summary.get("date")
+        or datetime.now().strftime("%Y-%m-%d")
+    )''',
+              '''    report_date = (
+        report_data_date
+        or scrape_summary.get("date")
+        or datetime.now().strftime("%Y-%m-%d")
+    )''',
+          )
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              '''                f"{scrape_summary.get('date')} data"''',
+              '''                f"{scrape_summary.get('expected_data_date') or scrape_summary.get('date')} data"''',
+          )
+          replace_exact(
+              "scripts/nightly_pipeline.py",
+              '''def run_nightly_pipeline(
+    db_path,''',
+              '''def _latest_holdings_date():
+    with db._connect() as conn:
+        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
+    return row[0] if row and row[0] else None
+
+
+def run_nightly_pipeline(
+    db_path,''',
+          )
+
+          replace_regex(
+              "tests/test_changes.py",
+              r"\n\ndef insert_success_runs\(.*?(?=\n\ndef test_init_db_creates_change_detection_table)",
+              "",
+          )
+          replace_regex(
+              "tests/test_changes.py",
+              r"def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold\(\):.*?(?=\n\ndef test_detects_new_removed_and_existing_position_changes)",
+              '''def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
+    db.init_db(":memory:")
+    for idx in range(19):
+        _insert_etf_universe_entry(f"ETF{idx:02d}", f"ETF {idx}", "Issuer", 0)
+    for date_value, count in (
+        ("2026-06-20", 15),
+        ("2026-06-21", 16),
+        ("2026-06-22", 16),
+    ):
+        for idx in range(count):
+            insert_holding(
+                date_value,
+                f"ETF{idx:02d}",
+                f"{idx:04d}",
+                f"Stock {idx}",
+                100,
+                5.0,
+            )
+
+    assert get_latest_valid_date() == "2026-06-22"
+    assert get_previous_valid_date("2026-06-22") == "2026-06-21"
+
+
+''',
+          )
+
+          write(
+              "tests/test_cutoff_freshness_consumers.py",
+              '''import db
+from changes import get_latest_valid_date, get_previous_valid_date
+from retry_stale_scrapes import get_stale_scrape_runs
+
+
+RUN_DATE = "2026-07-15"
+PREVIOUS_DATE = "2026-07-14"
+OLDER_DATE = "2026-07-13"
+
+
+def _seed_etf(code: str, *, retired: int = 0) -> None:
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_universe (
+                code, name, listing_date, retired, created_at, updated_at
+            ) VALUES (?, ?, '2026-07-01', ?, ?, ?)
+            """,
+            (code, code, retired, f"{RUN_DATE}T00:00:00", f"{RUN_DATE}T00:00:00"),
+        )
+
+
+def _seed_holding(code: str, data_date: str) -> None:
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_daily_holdings (
+                date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                shares, weight_pct, source_url, source_type, extraction_method,
+                scraped_at
+            ) VALUES (?, ?, '台積電(2330.TW)', 'stock', '2330', '台積電',
+                      1000, 10.0, 'https://example.test', 'moneydj_primary',
+                      'test', ?)
+            """,
+            (data_date, code, f"{data_date}T21:00:00"),
+        )
+
+
+def _seed_scrape_run(code: str, *, run_date: str, data_date: str, status: str) -> None:
+    usable = status in {"success", "stale"}
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_scrape_runs (
+                date, data_date, etf_code, status, primary_source, primary_success,
+                moneydj_browser_used, official_fallback_used, official_success,
+                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                total_weight_all_rows, total_weight_stock_rows, source_url, error,
+                started_at, finished_at
+            ) VALUES (?, ?, ?, ?, 'moneydj_primary', ?, 0, 0, 0, ?, ?, 0,
+                      ?, ?, 'https://example.test', NULL, ?, ?)
+            """,
+            (
+                run_date,
+                data_date,
+                code,
+                status,
+                1 if usable else 0,
+                1 if usable else 0,
+                1 if usable else 0,
+                10.0 if usable else 0.0,
+                10.0 if usable else 0.0,
+                f"{run_date}T21:00:00",
+                f"{run_date}T21:00:01",
+            ),
+        )
+
+
+def test_retry_selects_only_canonical_stale_rows():
+    db.init_db(":memory:")
+    for code in ("OLD_SUCCESS", "STALE", "FAILED", "RETIRED"):
+        _seed_etf(code, retired=1 if code == "RETIRED" else 0)
+    _seed_scrape_run(
+        "OLD_SUCCESS", run_date=RUN_DATE, data_date=PREVIOUS_DATE, status="success"
+    )
+    _seed_scrape_run(
+        "STALE", run_date=RUN_DATE, data_date=PREVIOUS_DATE, status="stale"
+    )
+    _seed_scrape_run(
+        "FAILED", run_date=RUN_DATE, data_date=PREVIOUS_DATE, status="failed"
+    )
+    _seed_scrape_run(
+        "RETIRED", run_date=RUN_DATE, data_date=PREVIOUS_DATE, status="stale"
+    )
+
+    assert get_stale_scrape_runs(RUN_DATE) == [
+        {"etf_code": "STALE", "data_date": PREVIOUS_DATE}
+    ]
+
+
+def test_valid_date_selection_uses_snapshot_dates_not_scrape_run_dates():
+    db.init_db(":memory:")
+    for code in ("A", "B"):
+        _seed_etf(code)
+        _seed_holding(code, OLDER_DATE)
+        _seed_scrape_run(
+            code, run_date=OLDER_DATE, data_date=OLDER_DATE, status="success"
+        )
+        _seed_holding(code, PREVIOUS_DATE)
+        _seed_scrape_run(
+            code, run_date=RUN_DATE, data_date=PREVIOUS_DATE, status="stale"
+        )
+
+    assert get_latest_valid_date() == PREVIOUS_DATE
+    assert get_previous_valid_date(RUN_DATE) == PREVIOUS_DATE
+''',
+          )
+
+          replace_exact(
+              "tests/test_stale_scrape_status.py",
+              '''    assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
+        {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
+        {"etf_code": "00403A", "data_date": STALE_DATE.isoformat()},
+    ]''',
+              '''    assert get_stale_scrape_runs(RUN_DATE.isoformat()) == [
+        {"etf_code": "00401A", "data_date": STALE_DATE.isoformat()},
+    ]''',
+          )
+          replace_exact(
+              "tests/test_stale_status_review_followups.py",
+              "def test_report_reads_explicit_stale_and_legacy_success_freshness():",
+              "def test_report_uses_canonical_persisted_freshness_status():",
+          )
+          replace_exact(
+              "tests/test_stale_status_review_followups.py",
+              '''    assert freshness == {
+        "fresh": [{"etf_code": "00403A", "data_date": RUN_DATE.isoformat()}],
+        "stale": [
+            {"etf_code": "00401A", "data_date": EXPECTED_DATE.isoformat()},
+            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
+        ],
+        "unknown": [],
+    }''',
+              '''    assert freshness == {
+        "fresh": [
+            {"etf_code": "00402A", "data_date": EXPECTED_DATE.isoformat()},
+            {"etf_code": "00403A", "data_date": RUN_DATE.isoformat()},
+        ],
+        "stale": [
+            {"etf_code": "00401A", "data_date": EXPECTED_DATE.isoformat()},
+        ],
+        "unknown": [],
+    }''',
+          )
+
+          replace_exact(
+              "tests/test_retry_stale_scrapes.py",
+              '''    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", return_value=retry_summary) as scrape, \\
+        patch("retry_stale_scrapes.detect_holding_changes", return_value={"date": "2026-07-07"}) as changes, \\
+        patch("retry_stale_scrapes.generate_manager_intent_rollups", return_value={"rows": 3}) as intent, \\
+        patch("retry_stale_scrapes.generate_manager_signals", return_value={"rows": 4}) as signals, \\
+        patch("retry_stale_scrapes.generate_signal_report", return_value="updated signal report") as signal_report, \\
+        patch("retry_stale_scrapes.generate_traction_report", return_value="updated traction report") as traction_report:
+        summary = retry_stale_etfs(db_path=db_path, run_date="2026-07-07", report_dir=tmp_path)''',
+              '''    def retry_side_effect(*_args, **_kwargs):
+        with db._connect() as conn:
+            conn.execute(
+                """
+                UPDATE etf_scrape_runs
+                SET status = 'success', data_date = '2026-07-07'
+                WHERE date = '2026-07-07' AND etf_code = '00401A'
+                """
+            )
+        return retry_summary
+
+    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", side_effect=retry_side_effect) as scrape, \\
+        patch("retry_stale_scrapes.detect_holding_changes", return_value={"date": "2026-07-07"}) as changes, \\
+        patch("retry_stale_scrapes.generate_manager_intent_rollups", return_value={"rows": 3}) as intent, \\
+        patch("retry_stale_scrapes.generate_manager_signals", return_value={"rows": 4}) as signals, \\
+        patch("retry_stale_scrapes.generate_signal_report", return_value="updated signal report") as signal_report, \\
+        patch("retry_stale_scrapes.generate_traction_report", return_value="updated traction report") as traction_report:
+        summary = retry_stale_etfs(db_path=db_path, run_date="2026-07-07", report_dir=tmp_path)''',
+          )
+          replace_exact(
+              "tests/test_retry_stale_scrapes.py",
+              '    signal_report.assert_called_once_with("2026-07-07")',
+              '''    signal_report.assert_called_once_with(
+        "2026-07-07", quality_run_date="2026-07-07"
+    )''',
+          )
+          PY
+
+      - name: Run targeted tests
+        run: |
+          PYTHONPATH=scripts pytest -q \
+            tests/test_date_semantics_audit.py \
+            tests/test_changes.py \
+            tests/test_cutoff_freshness_consumers.py \
+            tests/test_retry_stale_scrapes.py \
+            tests/test_stale_scrape_status.py \
+            tests/test_stale_status_review_followups.py \
+            tests/test_nightly_pipeline.py \
+            tests/test_scrape_run_preservation.py
+
+      - name: Run full test suite
+        run: PYTHONPATH=scripts pytest -q
+
+      - name: Commit and push GREEN implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add scripts tests
+          git commit -m "fix: align date semantics across pipeline"
+          git push origin HEAD:fix/73-stale-scrape-status
