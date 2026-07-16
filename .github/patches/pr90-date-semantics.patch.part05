@@ -1,0 +1,160 @@
++            "00980A",
++            data_date=None,
++            status="failed",
++            started_at=datetime(2026, 7, 15, 21, 0, 0),
++        )
++    )
++
++    text = report.generate_signal_report(EXPECTED_DATE.isoformat())
++
++    assert "抓取執行日: 2026-07-14" in text
++    assert "抓取失敗" not in text
++
++
+ def test_retry_selection_uses_canonical_stale_status_only():
+     db.init_db(":memory:")
+     for code in ("OLD_SUCCESS", "STALE"):
+@@ -360,11 +415,12 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys,
+         "data_date_max": OLDER_DATE.isoformat(),
+     }
+     change_summary = {
+-        "ok": True,
+-        "date": EXPECTED_DATE.isoformat(),
+-        "previous_date": OLDER_DATE.isoformat(),
+-        "rows": 1,
++        "ok": False,
++        "date": None,
++        "previous_date": None,
++        "rows": 0,
+         "skipped_etfs": [],
++        "reason": "no previous holdings date",
+     }
+     report_dir = tmp_path / "reports"
+ 
+@@ -374,6 +430,9 @@ def test_nightly_uses_one_holdings_date_for_report_content_and_filename(capsys,
+     ), patch(
+         "nightly_pipeline.detect_holding_changes",
+         return_value=change_summary,
++    ), patch(
++        "nightly_pipeline._latest_holdings_date",
++        return_value=EXPECTED_DATE.isoformat(),
+     ), patch(
+         "nightly_pipeline.generate_manager_intent_rollups",
+         return_value={"ok": True, "date": EXPECTED_DATE.isoformat(), "rows": 0},
+diff --git a/tests/test_nightly_pipeline.py b/tests/test_nightly_pipeline.py
+index 6fdd786..f049449 100644
+--- a/tests/test_nightly_pipeline.py
++++ b/tests/test_nightly_pipeline.py
+@@ -30,8 +30,8 @@ STALE_SCRAPE = {
+     "moneydj_warnings": [],
+     "data_freshness": {"fresh": 5, "stale": 14, "unknown": 0},
+     "stale_etfs": [
+-        {"etf_code": "00401A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
+-        {"etf_code": "00404A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_run_date"},
++        {"etf_code": "00401A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_expected_data_date"},
++        {"etf_code": "00404A", "data_date": "2026-06-25", "source_type": "moneydj_browser", "reason": "source_date_before_expected_data_date"},
+     ],
+     "unknown_date_etfs": [],
+     "data_date_min": "2026-06-25",
+diff --git a/tests/test_nightly_try_run.py b/tests/test_nightly_try_run.py
+index 2034c67..92e667f 100644
+--- a/tests/test_nightly_try_run.py
++++ b/tests/test_nightly_try_run.py
+@@ -144,7 +144,9 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
+         seen.append("signals")
+         return {"date": "2026-07-13"}
+ 
+-    def report():
++    def report(signal_date, quality_run_date=None):
++        assert signal_date == "2026-07-13"
++        assert quality_run_date == "2026-07-13"
+         with module.db._connect() as conn:
+             assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "signals"
+         seen.append("report")
+diff --git a/tests/test_pipeline.py b/tests/test_pipeline.py
+index 1ce6f00..3483022 100644
+--- a/tests/test_pipeline.py
++++ b/tests/test_pipeline.py
+@@ -403,7 +403,7 @@ def test_scrape_run_records_per_etf_data_date_not_first_success_date():
+             "etf_code": "00980A",
+             "data_date": "2026-06-22",
+             "source_type": "moneydj_primary",
+-            "reason": "source_date_before_run_date",
++            "reason": "source_date_before_expected_data_date",
+         }
+     ]
+     assert summary["data_date_min"] == "2026-06-22"
+diff --git a/tests/test_retry_stale_scrapes.py b/tests/test_retry_stale_scrapes.py
+index dfeff19..2d3d385 100644
+--- a/tests/test_retry_stale_scrapes.py
++++ b/tests/test_retry_stale_scrapes.py
+@@ -88,7 +88,18 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
+         "stale_etfs": [{"etf_code": "00402A", "data_date": "2026-07-06"}],
+     }
+ 
+-    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", return_value=retry_summary) as scrape, \
++    def retry_side_effect(*_args, **_kwargs):
++        with db._connect() as conn:
++            conn.execute(
++                """
++                UPDATE etf_scrape_runs
++                SET status = 'success', data_date = '2026-07-07'
++                WHERE date = '2026-07-07' AND etf_code = '00401A'
++                """
++            )
++        return retry_summary
++
++    with patch("retry_stale_scrapes.run_selected_scrape_with_browser", side_effect=retry_side_effect) as scrape, \
+         patch("retry_stale_scrapes.detect_holding_changes", return_value={"date": "2026-07-07"}) as changes, \
+         patch("retry_stale_scrapes.generate_manager_intent_rollups", return_value={"rows": 3}) as intent, \
+         patch("retry_stale_scrapes.generate_manager_signals", return_value={"rows": 4}) as signals, \
+@@ -100,11 +111,14 @@ def test_retry_stale_etfs_retries_only_stale_and_overwrites_reports_when_improve
+     changes.assert_called_once_with(current_date="2026-07-07")
+     intent.assert_called_once_with("2026-07-07")
+     signals.assert_called_once()
+-    signal_report.assert_called_once_with("2026-07-07")
++    signal_report.assert_called_once_with(
++        "2026-07-07", quality_run_date="2026-07-07"
++    )
+     traction_report.assert_called_once_with(db_path=db_path, window_days=10)
+ 
+     assert summary["stale_before"] == 2
+     assert summary["stale_after"] == 1
++    assert summary["improved_etfs"] == ["00401A"]
+     assert summary["improved"] is True
+     assert summary["reports_overwritten"] is True
+     assert (tmp_path / "taiwan_active_etf_signal_report_2026-07-07.txt").read_text(encoding="utf-8") == "updated signal report"
+diff --git a/tests/test_signal_report.py b/tests/test_signal_report.py
+index efe24f5..c61f3b1 100644
+--- a/tests/test_signal_report.py
++++ b/tests/test_signal_report.py
+@@ -252,8 +252,10 @@ def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
+     insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
+     insert_holding("2026-07-08", "00981A", "2454", "聯發科", 85.0)
+     insert_holding("2026-07-08", "00982A", "2383", "台光電", 85.0)
+-    insert_scrape_run("2026-07-08", "00980A", data_date="2026-07-07")
+-    insert_scrape_run("2026-07-08", "00981A", data_date=None)
++    insert_scrape_run(
++        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
++    )
++    insert_scrape_run("2026-07-08", "00981A", status="failed", data_date=None)
+     insert_scrape_run("2026-07-08", "00982A", data_date="2026-07-08")
+ 
+     report = generate_signal_report("2026-07-08")
+@@ -261,7 +263,7 @@ def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
+     assert "暫定" in report or "Provisional" in report
+     assert "資料日期落後" in report
+     assert "00980A" in report and "2026-07-07" in report
+-    assert "資料日期未知" in report
++    assert "抓取失敗" in report
+     assert "00981A" in report
+     assert "fresh 1/3" in report
+     assert "全部 ETF" not in report
+@@ -275,8 +277,12 @@ def test_report_freshness_excludes_retired_etfs():
+     ])
+     insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
+     insert_holding("2026-07-08", "00983A", "2454", "聯發科", 85.0)
+-    insert_scrape_run("2026-07-08", "00980A", data_date="2026-07-07")
+-    insert_scrape_run("2026-07-08", "00983A", data_date="2026-07-07")
++    insert_scrape_run(
++        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
