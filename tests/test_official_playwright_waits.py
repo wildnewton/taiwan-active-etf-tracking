@@ -207,6 +207,25 @@ async def test_capital_navigation_error_still_propagates(mock_config):
 
 @pytest.mark.asyncio
 @patch("scrapers.official.get_official_config")
+async def test_capital_navigation_timeout_still_propagates(mock_config):
+    mock_config.return_value = {
+        "url": CAPITAL_URL,
+        "method": "api",
+        "issuer": "Capital",
+        "official_logic": "buyback",
+    }
+    page = _mock_page(
+        response_url="https://www.capitalfund.com.tw/CFWeb/api/etf/buyback",
+        response_body=CAPITAL_API_JSON,
+    )
+    page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
+
+    with pytest.raises(PlaywrightTimeoutError, match="navigation timed out"):
+        await scrape_capital_playwright("00982A", page)
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
 async def test_capital_response_timeout_returns_clean_failure(mock_config):
     mock_config.return_value = {
         "url": CAPITAL_URL,
@@ -268,6 +287,25 @@ async def test_nomura_navigation_error_still_propagates(mock_config):
 
     page.expect_response.assert_called_once()
     page.on.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_nomura_navigation_timeout_still_propagates(mock_config):
+    mock_config.return_value = {
+        "url": NOMURA_URL,
+        "method": "stealth_api",
+        "issuer": "Nomura",
+        "official_logic": "GetFundAssets",
+    }
+    page = _mock_page(
+        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_body=NOMURA_API_JSON,
+    )
+    page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
+
+    with pytest.raises(PlaywrightTimeoutError, match="navigation timed out"):
+        await scrape_nomura_stealth("00980A", page)
 
 
 def test_nomura_assets_response_predicate_is_case_insensitive():
