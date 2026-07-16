@@ -255,6 +255,7 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
+    navigation_completed = False
 
     try:
         async with page.expect_response(
@@ -262,8 +263,11 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
             timeout=_API_RESPONSE_TIMEOUT_MS,
         ) as response_info:
             await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
         response = await response_info.value
     except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
         return _failed_result(source_url, "Capital buyback API not intercepted")
 
     try:
@@ -283,6 +287,7 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
+    navigation_completed = False
 
     try:
         async with page.expect_response(
@@ -290,8 +295,11 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
             timeout=_API_RESPONSE_TIMEOUT_MS,
         ) as response_info:
             await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
         response = await response_info.value
     except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
         return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
 
     try:
@@ -310,6 +318,7 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
+    navigation_completed = False
 
     try:
         async with page.expect_response(
@@ -317,8 +326,11 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
             timeout=_API_RESPONSE_TIMEOUT_MS,
         ) as response_info:
             await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
         response = await response_info.value
     except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
         return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
 
     try:
@@ -331,6 +343,8 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     except Exception as exc:
         return _failed_result(source_url, f"CTBC API parse error: {exc}")
 
+    if _single_source_date(all_rows) is None:
+        return _failed_result(source_url, "CTBC holdings date missing or inconsistent")
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
@@ -427,10 +441,7 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
     if method == "stealth_api" and issuer == "Nomura":
         return await scrape_nomura_stealth(etf_code, page)
     if method == "browser" and issuer == "CTBC":
-        result = await scrape_ctbc_playwright(etf_code, page)
-        if result["ok"] is True and _single_source_date(result["all_rows"]) is None:
-            return _failed_result(config["url"], "CTBC holdings date missing or inconsistent")
-        return result
+        return await scrape_ctbc_playwright(etf_code, page)
     if method == "playwright" and issuer == "Mega":
         return await scrape_mega_playwright(etf_code, page)
     if method == "playwright" and issuer == "Uni-President":
