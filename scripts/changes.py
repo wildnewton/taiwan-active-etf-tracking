@@ -68,6 +68,10 @@ def _get_valid_holding_date(
             params,
         ).fetchall()
 
+    # ISO dates sort chronologically as strings. Sort in Python as a final guard
+    # against SQLite planner/version differences in compound CTE ordering.
+    rows = sorted(rows, key=lambda row: row[0], reverse=True)
+
     for date_value, snapshot_count, eligible_count, expected_count in rows:
         if expected_count:
             actual_count = eligible_count

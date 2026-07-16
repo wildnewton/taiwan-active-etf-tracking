@@ -5,7 +5,11 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 import db
-from changes import _select_canonical_sources
+from changes import (
+    _select_canonical_sources,
+    get_latest_valid_date,
+    get_previous_valid_date,
+)
 from etf_universe import get_active_etf_count
 
 CST = timezone(timedelta(hours=8))
@@ -406,9 +410,7 @@ def _canonical_stock_rows(data_date: str) -> list[dict]:
 
 
 def _get_latest_holdings_date():
-    with _using_row_factory(None) as conn:
-        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
-    return row[0] if row and row[0] else None
+    return get_latest_valid_date()
 
 
 def _get_latest_scrape_run_date():
@@ -423,9 +425,7 @@ def _get_latest_scrape_run_date():
 def _get_previous_holdings_date(current_date):
     if not current_date:
         return None
-    with _using_row_factory(None) as conn:
-        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)).fetchone()
-    return row[0] if row and row[0] else None
+    return get_previous_valid_date(current_date)
 
 
 def _empty_scrape_freshness():
@@ -852,9 +852,6 @@ def _get_data_warnings(data_date):
             if total_weight < 80.0:
                 warnings.append(f"⚠️ {etf_code}: 股票權重僅 {total_weight:.1f}%，可能資料不完整")
 
-        failed = _get_failed_etfs(data_date)
-        if failed:
-            warnings.append(f"⚠️ 抓取失敗: {', '.join(failed)}")
     except sqlite3.OperationalError:
         pass
 

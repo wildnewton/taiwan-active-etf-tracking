@@ -29,6 +29,7 @@ def get_stale_scrape_runs(run_date: str) -> list[dict]:
               AND sr.status = 'stale'
               AND sr.data_date IS NOT NULL
               AND u.retired = 0
+              AND (u.listing_date IS NULL OR u.listing_date <= sr.date)
             ORDER BY sr.etf_code
             """,
             (run_date,),

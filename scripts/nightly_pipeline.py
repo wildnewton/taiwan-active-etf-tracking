@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 
 import db
-from changes import detect_holding_changes
+from changes import detect_holding_changes, get_latest_valid_date
 from discover_active_etfs import discover_and_reconcile
 from manager_intent import generate_manager_intent_rollups
 from pipeline import run_daily_scrape_with_browser
@@ -150,9 +150,7 @@ def run_try_run(
 
 
 def _latest_holdings_date():
-    with db._connect() as conn:
-        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()
-    return row[0] if row and row[0] else None
+    return get_latest_valid_date()
 
 
 def run_nightly_pipeline(

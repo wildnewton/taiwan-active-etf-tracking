@@ -9,7 +9,8 @@ def _seed_universe(conn, codes_with_status):
     conn.execute("""
         CREATE TABLE etf_universe (
             code TEXT PRIMARY KEY, name TEXT NOT NULL, issuer TEXT,
-            market TEXT, isin TEXT, retired INTEGER NOT NULL DEFAULT 0,
+            market TEXT, isin TEXT, listing_date TEXT,
+            retired INTEGER NOT NULL DEFAULT 0,
             first_seen_date TEXT, last_active_date TEXT,
             pending_retirement_since TEXT,
             official_url TEXT, official_method TEXT, official_logic TEXT,
