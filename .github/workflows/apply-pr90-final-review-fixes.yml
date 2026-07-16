@@ -1,0 +1,89 @@
+name: Apply PR90 final review fixes
+
+on:
+  push:
+    branches:
+      - tooling/export-pr90-source
+    paths:
+      - .github/workflows/apply-pr90-final-review-fixes.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply direct fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          changes = Path('scripts/changes.py')
+          text = changes.read_text(encoding='utf-8')
+          old = '''    for date_value, snapshot_count, eligible_count, expected_count in rows:\n'''
+          new = '''    # ISO dates sort chronologically as strings. Sort in Python as a final guard\n    # against SQLite planner/version differences in compound CTE ordering.\n    rows = sorted(rows, key=lambda row: row[0], reverse=True)\n\n    for date_value, snapshot_count, eligible_count, expected_count in rows:\n'''
+          if old not in text:
+              raise RuntimeError('changes.py insertion point not found')
+          changes.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          report = Path('scripts/report.py')
+          text = report.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  'from changes import _select_canonical_sources\n',
+                  'from changes import (\n'
+                  '    _select_canonical_sources,\n'
+                  '    get_latest_valid_date,\n'
+                  '    get_previous_valid_date,\n'
+                  ')\n',
+              ),
+              (
+                  '''def _get_latest_holdings_date():\n    with _using_row_factory(None) as conn:\n        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings").fetchone()\n    return row[0] if row and row[0] else None\n''',
+                  '''def _get_latest_holdings_date():\n    return get_latest_valid_date()\n''',
+              ),
+              (
+                  '''def _get_previous_holdings_date(current_date):\n    if not current_date:\n        return None\n    with _using_row_factory(None) as conn:\n        row = conn.execute("SELECT MAX(date) FROM etf_daily_holdings WHERE date < ?", (current_date,)).fetchone()\n    return row[0] if row and row[0] else None\n''',
+                  '''def _get_previous_holdings_date(current_date):\n    if not current_date:\n        return None\n    return get_previous_valid_date(current_date)\n''',
+              ),
+              (
+                  '''        failed = _get_failed_etfs(data_date)\n        if failed:\n            warnings.append(f"⚠️ 抓取失敗: {', '.join(failed)}")\n''',
+                  '',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in text:
+                  raise RuntimeError(f'report.py replacement not found: {old[:60]!r}')
+              text = text.replace(old, new, 1)
+          report.write_text(text, encoding='utf-8')
+
+      - name: Run focused regressions
+        run: |
+          pytest -q \
+            tests/test_date_semantics_final_review.py \
+            tests/test_date_semantics_audit.py \
+            tests/test_retry_stale_scrapes.py \
+            tests/test_signal_report.py \
+            tests/test_nightly_pipeline.py
+
+      - name: Commit and push
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/changes.py scripts/report.py
+          git commit -m "fix: complete valid date semantics"
+          git push origin HEAD:fix/73-stale-scrape-status
