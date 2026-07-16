@@ -1,8 +1,6 @@
-targeted_status=4
-ERROR: file or directory not found: tests/test_traction_analysis.py
-
-
-no tests ran in 0.00s
+targeted_status=0
+................................................                         [100%]
+48 passed in 0.84s
 
 full_status=0
 ........................................................................ [ 17%]
@@ -30,4 +28,4 @@ tests/test_official.py::test_scrape_official_with_browser_dispatches_nomura
   See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-423 passed, 7 warnings in 15.76s
+423 passed, 7 warnings in 16.95s
