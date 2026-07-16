@@ -6,12 +6,14 @@ from scrapers.official import (
     fetch_static,
     get_official_config,
     parse_capital_api,
+    parse_ctbc_api,
     parse_fubon,
     parse_mega_text,
     parse_nomura_api,
     parse_taishin,
     parse_uni_president_table,
     scrape_capital_playwright,
+    scrape_ctbc_playwright,
     scrape_nomura_stealth,
     scrape_mega_playwright,
     scrape_uni_president_playwright,
@@ -954,3 +956,154 @@ async def test_scrape_official_with_browser_unsupported_issuer(mock_config):
 
     assert result["ok"] is False
     assert "No browser official scraper" in result["reason"]
+
+
+CTBC_URL = (
+    "https://www.ctbcinvestments.com/Etf/00682450/Combination"
+)
+
+# ── CTBC API JSON fixtures ──
+
+CTBC_API_STOCKS = [
+    {"code_": "2330", "name_": "台灣積體電路製造", "qty_": "353,000.00", "weights_": "9.50"},
+    {"code_": "2383", "name_": "台光電子材料", "qty_": "112,000.00", "weights_": "6.08"},
+    {"code_": "6223", "name_": "旺矽科技", "qty_": "71,000.00", "weights_": "4.81"},
+]
+CTBC_API_JSON = json.dumps({
+    "Data": {
+        "FundAssetsDetail": [
+            {
+                "Code": "STOCK",
+                "Name": "股票",
+                "Data": CTBC_API_STOCKS,
+            }
+        ]
+    }
+})
+
+# Rich fixture with enough stocks to pass weight validation (>= 80% total)
+_CTBC_STOCKS_RICH = [
+    {"code_": c, "name_": n, "qty_": "100,000.00", "weights_": w}
+    for c, n, w in [
+        ("2330", "台積電", "15.00"), ("2308", "台達電", "8.00"),
+        ("2454", "聯發科", "7.00"), ("2317", "鴻海", "6.50"),
+        ("2382", "廣達", "6.00"), ("2881", "富邦金", "5.50"),
+        ("2882", "國泰金", "5.00"), ("2891", "中信金", "4.80"),
+        ("3711", "日月光投控", "4.50"), ("2412", "中華電", "4.30"),
+        ("3034", "聯詠", "4.00"), ("2395", "研華", "3.80"),
+        ("3008", "大立光", "3.50"), ("2002", "中鋼", "3.30"),
+        ("1301", "台塑", "3.10"), ("1303", "南亞", "2.90"),
+        ("3045", "台灣大", "2.70"), ("6505", "台塑化", "2.50"),
+        ("5880", "合庫金", "2.30"), ("5871", "中租-KY", "2.10"),
+    ]
+]
+CTBC_API_JSON_RICH = json.dumps({
+    "Data": {
+        "FundAssetsDetail": [
+            {"Code": "STOCK", "Name": "股票", "Data": _CTBC_STOCKS_RICH}
+        ]
+    }
+})
+
+
+# ── CTBC parser tests ──
+
+def test_parse_ctbc_api_rows():
+    rows = parse_ctbc_api(CTBC_API_JSON, "00406A", CTBC_URL)
+
+    assert len(rows) == 3
+    assert rows[0]["stock_code"] == "2330"
+    assert rows[0]["stock_name"] == "台灣積體電路製造"
+    assert rows[0]["shares"] == 353000
+    assert rows[0]["weight_pct"] == 9.50
+    assert rows[0]["extraction_method"] == "playwright_api_intercept"
+    assert rows[0]["source_type"] == "official_fallback"
+
+
+def test_parse_ctbc_api_date_extracted():
+    """CTBC API response may include a date field; parser should extract it."""
+    api_with_date = json.dumps({
+        "Data": {
+            "FundAssetsDetail": [
+                {"Code": "STOCK", "Name": "股票", "Data": CTBC_API_STOCKS}
+            ],
+            "FundAssets": [{"資料日期": "2026/07/16"}],
+        }
+    })
+    rows = parse_ctbc_api(api_with_date, "00406A", CTBC_URL)
+
+    assert len(rows) == 3
+    assert rows[0]["date"] == "2026/07/16"
+
+
+# ── Async CTBC playwright scraper tests ──
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_ctbc_playwright_intercepts_api(mock_config):
+    mock_config.return_value = {
+        "url": CTBC_URL, "method": "browser",
+        "issuer": "CTBC", "internal_id": "00682450",
+        "official_logic": "campaign_page=202605_00406A",
+    }
+    page = _make_mock_page(
+        responses=[(
+            "https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight?token=fake",
+            CTBC_API_JSON_RICH,
+        )]
+    )
+
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_ctbc_playwright("00406A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
+    assert result["stock_rows"][0]["stock_code"] == "2330"
+    assert result["source_type"] == "official_fallback"
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_scrape_ctbc_playwright_no_api_intercepted(mock_config):
+    mock_config.return_value = {
+        "url": CTBC_URL, "method": "browser",
+        "issuer": "CTBC", "internal_id": "00682450",
+        "official_logic": "campaign_page=202605_00406A",
+    }
+    page = _make_mock_page(responses=[])
+
+    result = await scrape_ctbc_playwright("00406A", page)
+
+    assert result["ok"] is False
+    assert "not intercepted" in result["reason"]
+
+
+@pytest.mark.asyncio
+@patch("scrapers.official.get_official_config")
+async def test_ctbc_added_to_official_with_browser_dispatcher(mock_config):
+    """CTBC with method=browser should route to scrape_ctbc_playwright."""
+    mock_config.return_value = {
+        "url": CTBC_URL, "method": "browser",
+        "issuer": "CTBC", "internal_id": "00682450",
+        "official_logic": "campaign_page=202605_00406A",
+    }
+    page = _make_mock_page(
+        responses=[(
+            "https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight?token=fake",
+            CTBC_API_JSON_RICH,
+        )]
+    )
+
+    async def goto_side_effect(*a, **kw):
+        await _fire_response_events(page)
+
+    page.goto.side_effect = goto_side_effect
+
+    result = await scrape_official_with_browser("00406A", page)
+
+    assert result["ok"] is True
+    assert len(result["stock_rows"]) == 20
