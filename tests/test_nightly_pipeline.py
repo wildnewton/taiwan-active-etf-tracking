@@ -2,12 +2,15 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = PROJECT_ROOT / "scripts" / "nightly_pipeline.py"
 
 DISCOVERY = {"inserted": [], "reactivated": [], "updated": [], "retired": [], "active_total": 19}
 COMPLETE_SCRAPE = {
     "date": "2026-06-26",
+    "expected_data_date": "2026-06-26",
     "total_etfs": 19,
     "moneydj_success": 19,
     "official_success": 0,
@@ -22,6 +25,7 @@ COMPLETE_SCRAPE = {
 }
 STALE_SCRAPE = {
     "date": "2026-06-26",
+    "expected_data_date": "2026-06-26",
     "total_etfs": 19,
     "moneydj_success": 19,
     "official_success": 0,
@@ -39,6 +43,7 @@ STALE_SCRAPE = {
 }
 PARTIAL_SCRAPE = {
     "date": "2026-06-26",
+    "expected_data_date": "2026-06-26",
     "total_etfs": 19,
     "moneydj_success": 13,
     "official_success": 0,
@@ -75,11 +80,12 @@ def test_script_exists():
 
 def _run_main(db_path, report_dir):
     import importlib.util
-    spec = importlib.util.spec_from_file_location("nightly_pipeline", str(SCRIPT))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    with patch("sys.argv", ["nightly_pipeline.py", "--db", db_path, "--report-dir", report_dir]):
-        mod.main()
+    with patch("changes.get_latest_valid_date", return_value="2026-06-26"):
+        spec = importlib.util.spec_from_file_location("nightly_pipeline", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        with patch("sys.argv", ["nightly_pipeline.py", "--db", db_path, "--report-dir", report_dir]):
+            mod.main()
 
 
 def test_script_calls_all_steps(tmp_path):
@@ -96,8 +102,8 @@ def test_script_calls_all_steps(tmp_path):
          patch("traction_analysis.generate_traction_report") as mock_traction:
 
         mock_scrape.return_value = COMPLETE_SCRAPE
-        mock_changes.return_value = {"date": "2026-06-23", "skipped_etfs": []}
-        mock_signals.return_value = {"date": "2026-06-23"}
+        mock_changes.return_value = NO_SKIP_CHANGES
+        mock_signals.return_value = {"date": "2026-06-26"}
         mock_report.return_value = "Test report"
         mock_traction.return_value = "Test traction"
 
@@ -107,10 +113,10 @@ def test_script_calls_all_steps(tmp_path):
         assert mock_init.call_count == 1
         mock_discovery.assert_called_once_with(db_path)
         mock_scrape.assert_called_once_with(db_path)
-        mock_changes.assert_called_once()
-        mock_intent.assert_called_once_with("2026-06-23")
-        mock_signals.assert_called_once()
-        mock_report.assert_called_once()
+        mock_changes.assert_called_once_with(current_date="2026-06-26")
+        mock_intent.assert_called_once_with("2026-06-26")
+        mock_signals.assert_called_once_with("2026-06-26")
+        mock_report.assert_called_once_with("2026-06-26", quality_run_date="2026-06-26")
         mock_traction.assert_called_once()
 
 
@@ -119,7 +125,8 @@ def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
     report_dir = str(tmp_path / "reports")
     events = []
 
-    def changes_side_effect():
+    def changes_side_effect(current_date=None):
+        assert current_date == "2026-06-26"
         events.append("changes")
         return NO_SKIP_CHANGES
 
@@ -127,9 +134,9 @@ def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
         events.append(("manager_intent", target_date))
         return MANAGER_INTENT_SUMMARY
 
-    def signals_side_effect():
-        events.append("signals")
-        return {"date": "2026-06-26"}
+    def signals_side_effect(target_date=None):
+        events.append(("signals", target_date))
+        return {"date": target_date}
 
     with patch("db.init_db"), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
@@ -141,7 +148,11 @@ def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
          patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
         _run_main(db_path, report_dir)
 
-    assert events == ["changes", ("manager_intent", "2026-06-26"), "signals"]
+    assert events == [
+        "changes",
+        ("manager_intent", "2026-06-26"),
+        ("signals", "2026-06-26"),
+    ]
 
 
 def test_manager_intent_summary_is_printed(capsys, tmp_path):
@@ -168,7 +179,7 @@ def test_script_writes_primary_and_archive_report_files(tmp_path):
     with patch("db.init_db"), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
-         patch("changes.detect_holding_changes", return_value={"date": "2026-06-26", "skipped_etfs": []}), \
+         patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
          patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value="Signal report text"), \
@@ -210,16 +221,17 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
     assert "00401A" in out, f"Expected failing ETF code in output:\n{out}"
 
 
-def test_warns_when_stale_etfs_make_report_provisional(capsys, tmp_path):
+def test_stale_etfs_are_reported_then_fail_the_single_date_contract(capsys, tmp_path):
     with patch("db.init_db"), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=STALE_SCRAPE), \
-         patch("changes.detect_holding_changes", return_value=WITH_SKIP_CHANGES), \
-         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
-         patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value=""), \
-         patch("traction_analysis.generate_traction_report", return_value=""):
-        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+         patch("changes.detect_holding_changes") as changes, \
+         patch("manager_intent.generate_manager_intent_rollups") as intent, \
+         patch("signals.generate_manager_signals") as signals, \
+         patch("report.generate_signal_report") as report, \
+         patch("traction_analysis.generate_traction_report") as traction:
+        with pytest.raises(RuntimeError, match="scrape data date range"):
+            _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
     assert "Data freshness" in out
@@ -227,6 +239,11 @@ def test_warns_when_stale_etfs_make_report_provisional(capsys, tmp_path):
     assert "PROVISIONAL REPORT" in out
     assert "5/19" in out
     assert "00401A" in out and "2026-06-25" in out
+    changes.assert_not_called()
+    intent.assert_not_called()
+    signals.assert_not_called()
+    report.assert_not_called()
+    traction.assert_not_called()
 
 
 def test_warns_when_skipped_etfs(capsys, tmp_path):
