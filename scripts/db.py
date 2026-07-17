@@ -293,10 +293,18 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
     with _connect() as conn:
         existing_entries = _existing_snapshot_entries(conn, *snapshot_key)
         existing_best = _best_snapshot_entry(existing_entries)
-        if existing_best and existing_best["source_type"] != source_type:
-            incoming_key = _snapshot_sort_key(incoming)
-            existing_key = _snapshot_sort_key(existing_best)
-            if incoming_key < existing_key:
+        if existing_best:
+            same_source = existing_best["source_type"] == source_type
+            existing_complete = _snapshot_is_complete(existing_best)
+            incoming_complete = _snapshot_is_complete(incoming)
+            if same_source and existing_complete and not incoming_complete:
+                return {
+                    "inserted": False,
+                    "reason": "existing_complete_snapshot_preserved",
+                    "preserved_source_type": existing_best["source_type"],
+                    "incoming_source_type": source_type,
+                }
+            if not same_source and _snapshot_sort_key(incoming) < _snapshot_sort_key(existing_best):
                 _delete_snapshot_sources_except(conn, *snapshot_key, existing_best["source_type"])
                 return {
                     "inserted": False,
@@ -518,15 +526,19 @@ def _best_snapshot_entry(entries):
     return max(entries, key=_snapshot_sort_key)
 
 
-def _snapshot_sort_key(entry):
+def _snapshot_is_complete(entry):
     total_weight = entry.get("total_weight") or 0.0
     stock_count = entry.get("stock_count") or 0
-    complete = (
+    return (
         stock_count > 0
         and abs(total_weight - 100.0) < _SNAPSHOT_WEIGHT_TOLERANCE
     )
+
+
+def _snapshot_sort_key(entry):
+    stock_count = entry.get("stock_count") or 0
     return (
-        1 if complete else 0,
+        1 if _snapshot_is_complete(entry) else 0,
         source_priority(entry.get("source_type")),
         stock_count,
         entry.get("shares_coverage") or 0.0,
