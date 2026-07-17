@@ -121,7 +121,7 @@ def test_init_db_migrates_legacy_seen_and_retired_dates_to_last_active_date(tmp_
     assert "last_active_date" in columns
     assert "last_seen_date" not in columns
     assert "retired_since" not in columns
-    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-04"}
+    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-03"}
 
 
 def test_seed_etf_universe_from_seed_file_populates_known_etfs():
@@ -141,7 +141,7 @@ def test_seed_is_idempotent_and_preserves_existing_db_metadata():
     db.init_db(":memory:")
     from etf_universe import get_etf_config, seed_etf_universe_from_file, upsert_etf
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     upsert_etf({"code": "00980A", "name": "手動名稱", "issuer": "ManualIssuer"})
     inserted_again = seed_etf_universe_from_file()
     config = get_etf_config("00980A")
@@ -180,7 +180,7 @@ def test_reconcile_discovery_inserts_new_and_marks_missing_pending_first():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     discovered = _discovered_without("00980A")
     discovered.append({"code": "01000A", "name": "主動測試新ETF", "market": "TWSE", "isin": "TW00001000A"})
 
@@ -203,7 +203,7 @@ def test_complete_second_consecutive_absence_retires_pending_etf():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
     summary = reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-02")
 
@@ -213,7 +213,7 @@ def test_complete_second_consecutive_absence_retires_pending_etf():
     assert summary["retired"] == ["00980A"]
     assert "00980A" not in active_codes
     assert retired_config["retired"] == 1
-    assert retired_config["last_active_date"] == "2026-07-02"
+    assert retired_config["last_active_date"] == "2026-06-30"
     assert retired_config["pending_retirement_since"] is None
 
 
@@ -221,7 +221,7 @@ def test_incomplete_discovery_does_not_mark_or_retire_missing_etfs():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     summary = reconcile_discovered_universe(
         _discovered_without("00980A"),
         seen_date="2026-07-01",
@@ -243,7 +243,7 @@ def test_reappearance_clears_pending_retirement():
     db.init_db(":memory:")
     from etf_universe import get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
     summary = reconcile_discovered_universe(_discovered_without(), seen_date="2026-07-02")
 

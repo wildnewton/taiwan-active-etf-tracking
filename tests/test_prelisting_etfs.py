@@ -50,24 +50,6 @@ def _failed_scrape_result():
     }
 
 
-def _insert_scrape_run(status, data_date=None):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO etf_scrape_runs (
-                date, data_date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                started_at, finished_at
-            ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
-                1, 1, 0, 80.0, 80.0, 'https://test', NULL,
-                '2026-07-14T20:00:00', '2026-07-14T20:01:00')
-            """,
-            ("2026-07-14", data_date, "00408A", status),
-        )
-
-
 def test_init_db_owns_listing_date_column():
     db.init_db(":memory:")
     columns = {
@@ -168,18 +150,16 @@ async def test_async_pipeline_uses_same_taipei_run_date_for_universe(tmp_path):
 def test_report_uses_historical_listing_boundary_for_denominator_and_runs():
     db.init_db(":memory:")
     _seed_with_future_etf()
-    _insert_scrape_run("failed")
 
     quality = report._get_data_quality("2026-07-14")
 
     assert quality["expected_count"] == 19
-    assert "00408A" not in quality["failed_etfs"]
+    assert "00408A" not in quality["missing_etfs"]
 
 
-def test_report_excludes_prelisting_freshness_and_change_diagnostics():
+def test_report_excludes_prelisting_holdings_gap_and_change_diagnostics():
     db.init_db(":memory:")
     _seed_with_future_etf()
-    _insert_scrape_run("success", data_date="2026-07-14")
     with db._connect() as conn:
         conn.execute(
             """
@@ -190,11 +170,8 @@ def test_report_excludes_prelisting_freshness_and_change_diagnostics():
             ("2026-07-14", "2026-07-13", "00408A", "2026-07-14T21:00:00"),
         )
 
-    assert report._get_scrape_data_freshness("2026-07-14") == {
-        "fresh": [],
-        "stale": [],
-        "unknown": [],
-    }
+    quality = report._get_data_quality("2026-07-14")
+    assert "00408A" not in quality["missing_etfs"]
     assert report._get_skipped_change_diagnostics("2026-07-14") == []
 
 

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import db
 import pipeline
-from models import HoldingRow, ScrapeRun
+from models import HoldingRow
 
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "nightly_pipeline.py"
@@ -41,35 +41,14 @@ def _seed_validated_snapshot(db_path: Path):
             stock_code="2330",
             stock_name="台積電",
             shares=1000,
-            weight_pct=10.0,
+            weight_pct=100.0,
             source_url="https://example.test",
             source_type="moneydj_primary",
             extraction_method="test",
             scraped_at=RUN_AT,
         )
     ])
-    db.insert_scrape_run(
-        ScrapeRun(
-            date=RUN_DATE,
-            data_date=RUN_DATE,
-            etf_code="00980A",
-            status="success",
-            primary_source="moneydj_primary",
-            primary_success=True,
-            moneydj_browser_used=False,
-            official_fallback_used=False,
-            official_success=False,
-            rows_extracted=1,
-            stock_rows_extracted=1,
-            non_stock_rows_extracted=0,
-            total_weight_all_rows=10.0,
-            total_weight_stock_rows=10.0,
-            source_url="https://example.test",
-            error=None,
-            started_at=RUN_AT,
-            finished_at=RUN_AT,
-        )
-    )
+
 
 
 def test_complete_try_run_avoids_playwright_and_preserves_production_db(tmp_path):
@@ -90,8 +69,18 @@ def test_complete_try_run_avoids_playwright_and_preserves_production_db(tmp_path
         side_effect=AssertionError("Playwright must not start"),
     ) as async_playwright, patch.object(
         module,
+        "get_latest_valid_date",
+        return_value=RUN_DATE.isoformat(),
+    ), patch.object(
+        module,
         "detect_holding_changes",
-        return_value={"date": RUN_DATE.isoformat(), "skipped_etfs": []},
+        return_value={
+            "ok": True,
+            "date": RUN_DATE.isoformat(),
+            "previous_date": "2026-07-13",
+            "rows": 1,
+            "skipped_etfs": [],
+        },
     ), patch.object(
         module, "generate_manager_intent_rollups", return_value={}
     ), patch.object(
