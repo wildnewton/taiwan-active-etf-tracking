@@ -1,5 +1,6 @@
 === APPLY ===
 Applied holdings-source-of-truth GREEN changes
+Applied holdings-source consumer cleanup
 === REMAINING REFERENCES ===
 scripts/_apply_holdings_source_green.py:45:    '''        conn.execute("CREATE TABLE IF NOT EXISTS etf_scrape_runs (date TEXT NOT NULL, data_date TEXT, etf_code TEXT NOT NULL, status TEXT NOT NULL, primary_source TEXT NOT NULL, primary_success INTEGER NOT NULL, moneydj_browser_used INTEGER NOT NULL, official_fallback_used INTEGER NOT NULL, official_success INTEGER NOT NULL, rows_extracted INTEGER NOT NULL, stock_rows_extracted INTEGER NOT NULL, non_stock_rows_extracted INTEGER NOT NULL, total_weight_all_rows REAL NOT NULL, total_weight_stock_rows REAL NOT NULL, source_url TEXT, error TEXT, started_at TEXT NOT NULL, finished_at TEXT, PRIMARY KEY (date, etf_code))")
 scripts/_apply_holdings_source_green.py:50:        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
@@ -12,8 +13,8 @@ scripts/_apply_holdings_source_green.py:189:    "from models import HoldingRow, 
 scripts/_apply_holdings_source_green.py:195:    '            if successful_snapshot_exists(expected_data_date, etf["code"])\n',
 scripts/_apply_holdings_source_green.py:841:text = read(path).replace("pipeline.successful_snapshot_exists", "pipeline.snapshot_exists")
 scripts/db.py:113:        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
+scripts/_apply_holdings_source_supplement.py:99:    'def insert_scrape_run(date, etf_code, status="success", data_date=None):\n',
 tests/test_row_count_validation.py:187:        patch("pipeline.insert_scrape_run"):
-tests/test_changes.py:191:            INSERT OR REPLACE INTO etf_scrape_runs (
 tests/test_expected_data_date_cutoff.py:90:        patch("pipeline.insert_scrape_run"):
 tests/test_expected_data_date_cutoff.py:114:        patch("pipeline.insert_scrape_run"):
 tests/test_try_run_preexisting_success.py:8:from models import HoldingRow, ScrapeRun
@@ -141,13 +142,6 @@ tests/test_prelisting_etfs.py:53:def _insert_scrape_run(status, data_date=None):
 tests/test_prelisting_etfs.py:57:            INSERT INTO etf_scrape_runs (
 tests/test_prelisting_etfs.py:171:    _insert_scrape_run("failed")
 tests/test_prelisting_etfs.py:182:    _insert_scrape_run("success", data_date="2026-07-14")
-tests/test_signal_report.py:52:def insert_scrape_run(date, etf_code, status="success", data_date=None):
-tests/test_signal_report.py:56:            INSERT OR REPLACE INTO etf_scrape_runs (
-tests/test_signal_report.py:255:    insert_scrape_run(
-tests/test_signal_report.py:258:    insert_scrape_run("2026-07-08", "00981A", status="failed", data_date=None)
-tests/test_signal_report.py:259:    insert_scrape_run("2026-07-08", "00982A", data_date="2026-07-08")
-tests/test_signal_report.py:280:    insert_scrape_run(
-tests/test_signal_report.py:283:    insert_scrape_run(
 === INSTALL ===
 Collecting requests>=2.31.0 (from -r requirements.txt (line 1))
   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
@@ -189,11 +183,11 @@ Downloading idna-3.18-py3-none-any.whl (65 kB)
 Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
 Downloading beautifulsoup4-4.15.0-py3-none-any.whl (109 kB)
 Downloading lxml-6.1.1-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 208.0 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 54.4 MB/s  0:00:00
 Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl (47.4 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 221.3 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 76.7 MB/s  0:00:00
 Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (617 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 111.5 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 93.8 MB/s  0:00:00
 Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
 Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
 Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
@@ -201,201 +195,15 @@ Downloading certifi-2026.6.17-py3-none-any.whl (133 kB)
 Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
 Downloading packaging-26.2-py3-none-any.whl (100 kB)
 Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 226.9 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 55.9 MB/s  0:00:00
 Downloading soupsieve-2.8.4-py3-none-any.whl (37 kB)
 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
 Installing collected packages: urllib3, typing-extensions, soupsieve, pygments, pluggy, packaging, lxml, iniconfig, idna, greenlet, charset_normalizer, certifi, requests, pytest, pyee, beautifulsoup4, playwright
 
 Successfully installed beautifulsoup4-4.15.0 certifi-2026.6.17 charset_normalizer-3.4.9 greenlet-3.5.3 idna-3.18 iniconfig-2.3.0 lxml-6.1.1 packaging-26.2 playwright-1.61.0 pluggy-1.6.0 pyee-13.0.1 pygments-2.20.0 pytest-9.1.1 requests-2.34.2 soupsieve-2.8.4 typing-extensions-4.16.0 urllib3-2.7.0
 === TARGETED ===
-.....F................FF.FFFFFFFF......F..                               [100%]
+..........................F...F...........                               [100%]
 =================================== FAILURES ===================================
-__________ test_report_quality_is_derived_from_holdings_and_universe ___________
-
-tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_report_quality_is_derived0')
-
-    def test_report_quality_is_derived_from_holdings_and_universe(tmp_path):
-        db.init_db(tmp_path / "holdings.sqlite")
-        _seed_universe("A")
-        _seed_universe("B")
-        _seed_universe("C")
-        _insert_holding("2026-07-15", "A")
-        _insert_holding("2026-07-14", "B")
-    
->       quality = report._get_data_quality("2026-07-15", quality_run_date="2026-07-15")
-                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/test_holdings_source_of_truth.py:130: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-data_date = '2026-07-15'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
-_______________ test_excludes_retired_etfs_from_change_detection _______________
-
-    def test_excludes_retired_etfs_from_change_detection():
-        """Retired (retired=1) ETFs must not appear in etf_holding_changes.
-    
-        The data pipeline should treat retired ETFs as out-of-scope for all
-        downstream analysis: diagnostics, change detection, and signals.
-        """
-        db.init_db(":memory:")
-    
-        _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-        _insert_etf_universe_entry("RETIRED", "Retired ETF", None, 1)
-    
-        # Both have holdings on both dates
-        insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
-        insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
-    
-        insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
-        insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
-    
-        # Active ETF needs scrape success to pass 80% threshold
->       _insert_scrape_success("2026-06-20", "ACTIVE")
-
-tests/test_changes.py:224: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-date_value = '2026-06-20', etf_code = 'ACTIVE'
-
-    def _insert_scrape_success(date_value, etf_code):
-        with db._connect() as conn:
->           conn.execute(
-                """
-                INSERT OR REPLACE INTO etf_scrape_runs (
-                    date, data_date, etf_code, status, primary_source, primary_success,
-                    moneydj_browser_used, official_fallback_used, official_success,
-                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                    total_weight_all_rows, total_weight_stock_rows, source_url,
-                    error, started_at, finished_at
-                ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
-                    10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
-                    '2026-06-23T00:00:00', '2026-06-23T00:01:00')
-                """,
-                (date_value, date_value, etf_code),
-            )
-E           sqlite3.OperationalError: no such table: etf_scrape_runs
-
-tests/test_changes.py:189: OperationalError
-_______________ test_retired_etf_with_null_issuer_does_not_crash _______________
-
-    def test_retired_etf_with_null_issuer_does_not_crash():
-        """A retired ETF with issuer=NULL must not cause IntegrityError.
-    
-        Regression test: the pipeline crashed with
-        'NOT NULL constraint failed: etf_holding_changes.issuer' because
-        retired ETFs with NULL issuer were still processed by
-        _source_pair_diagnostics → _build_change_row → _persist_changes.
-        """
-        db.init_db(":memory:")
-    
-        _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-        _insert_etf_universe_entry("RETIRED", "Retired NULL", None, 1)
-    
-        insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
-        insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
-        insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
-        insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
-    
->       _insert_scrape_success("2026-06-20", "ACTIVE")
-
-tests/test_changes.py:264: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-date_value = '2026-06-20', etf_code = 'ACTIVE'
-
-    def _insert_scrape_success(date_value, etf_code):
-        with db._connect() as conn:
->           conn.execute(
-                """
-                INSERT OR REPLACE INTO etf_scrape_runs (
-                    date, data_date, etf_code, status, primary_source, primary_success,
-                    moneydj_browser_used, official_fallback_used, official_success,
-                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                    total_weight_all_rows, total_weight_stock_rows, source_url,
-                    error, started_at, finished_at
-                ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
-                    10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
-                    '2026-06-23T00:00:00', '2026-06-23T00:01:00')
-                """,
-                (date_value, date_value, etf_code),
-            )
-E           sqlite3.OperationalError: no such table: etf_scrape_runs
-
-tests/test_changes.py:189: OperationalError
-____________ test_generate_signal_report_shows_summary_and_signals _____________
-
-    def test_generate_signal_report_shows_summary_and_signals():
-        """New report format: summary + changes + signals."""
-        db.init_db(":memory:")
-        ensure_signal_table()
-    
-        # Insert holdings so report has data_date
-        insert_holding("2026-06-23", "00980A", "2383", "台光電", 5.0)
-        insert_holding("2026-06-23", "00981A", "2383", "台光電", 3.0)
-        insert_holding("2026-06-23", "00405A", "2383", "台光電", 4.0)
-        insert_holding("2026-06-23", "00980A", "2454", "聯發科", 6.0)
-        insert_holding("2026-06-23", "00981A", "2454", "聯發科", 5.0)
-    
-        insert_signal(
-            signal_type="consensus_add_3d",
-            signal_strength="strong",
-            signal_score=6,
-            stock_code="2383",
-            stock_name="台光電",
-            etf_codes=["00980A", "00981A", "00405A"],
-            issuers=["Nomura", "Uni-President", "Fubon"],
-        )
-        insert_signal(
-            signal_type="consensus_reduce_3d",
-            signal_strength="medium",
-            signal_score=-6,
-            stock_code="2454",
-            stock_name="聯發科",
-            etf_codes=["00980A", "00981A"],
-            issuers=["Nomura", "Uni-President"],
-            action_label="Reduce Watch",
-        )
-    
->       report = generate_signal_report("2026-06-23")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/test_signal_report.py:168: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:74: in generate_signal_report
-    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-data_date = '2026-06-23'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
 ____________ test_generate_signal_report_uses_latest_holdings_date _____________
 
     def test_generate_signal_report_uses_latest_holdings_date():
@@ -409,278 +217,35 @@ ____________ test_generate_signal_report_uses_latest_holdings_date _____________
         insert_signal(date="2026-06-21", stock_code="2330", stock_name="台積電")
         insert_signal(date="2026-06-23", stock_code="2383", stock_name="台光電")
     
->       report = generate_signal_report()
-                 ^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/test_signal_report.py:190: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:74: in generate_signal_report
-    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-data_date = '2026-06-23'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
-________________ test_generate_signal_report_handles_no_signals ________________
-
-    def test_generate_signal_report_handles_no_signals():
-        """Report should still work when no signals exist (e.g., <3 days of data)."""
-        db.init_db(":memory:")
+        report = generate_signal_report()
     
->       report = generate_signal_report("2026-06-23")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        # Report should mention data date from holdings (2026-06-23)
+>       assert "2026-06-23" in report
+E       AssertionError: assert '2026-06-23' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: N/A\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ❌ No data\nActive ETF universe: 19 |...警告:\n  ⚠️ 無持倉資料\n\n═══ 摘要 ═══\nETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
 
-tests/test_signal_report.py:201: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:74: in generate_signal_report
-    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_signal_report.py:175: AssertionError
+__________ test_report_marks_provisional_for_missing_target_holdings ___________
 
-data_date = '2026-06-23'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
-_____________________ test_report_warns_when_etfs_missing ______________________
-
-    def test_report_warns_when_etfs_missing():
-        """⚠️ Report should warn when holdings have < 19 ETFs for latest date."""
-        db.init_db(":memory:")
-        ensure_signal_table()
-    
-        # Insert holdings for only 13 ETFs (simulating incomplete scrape)
-        for i in range(400, 413):
-            etf = f"00{i}A"
-            insert_holding("2026-06-26", etf, str(2300 + i), f"Stock{i}", 5.0)
-    
->       report = generate_signal_report("2026-06-26")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/test_signal_report.py:218: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:74: in generate_signal_report
-    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-data_date = '2026-06-26'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
-_________________ test_report_no_warning_when_all_etfs_present _________________
-
-    def test_report_no_warning_when_all_etfs_present():
-        """No missing-ETF warning when all 19 ETFs have holdings data."""
-        db.init_db(":memory:")
-        ensure_signal_table()
-    
-        # Insert holdings for all 19 ETFs with realistic weights
-        codes = ["00400A", "00401A", "00403A", "00404A", "00405A",
-                 "00406A", "00980A", "00981A", "00982A", "00984A",
-                 "00985A", "00987A", "00991A", "00992A", "00993A",
-                 "00994A", "00995A", "00996A", "00999A"]
-        for i, etf in enumerate(codes):
-            insert_holding("2026-06-26", etf, str(2300 + i), f"Stock{i}", 85.0)
-    
->       report = generate_signal_report("2026-06-26")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-tests/test_signal_report.py:239: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-scripts/report.py:74: in generate_signal_report
-    quality = _get_data_quality(data_date, quality_run_date=quality_run_date)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-scripts/report.py:457: in _get_data_quality
-    warnings = _get_data_warnings(data_date)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-data_date = '2026-06-26'
-
-    def _get_data_warnings(data_date):
-        if not data_date:
-            return ["⚠️ 無持倉資料"]
-        warnings = []
-        try:
->           actual_count = _get_actual_etf_count(data_date)
-                           ^^^^^^^^^^^^^^^^^^^^^
-E           NameError: name '_get_actual_etf_count' is not defined
-
-scripts/report.py:784: NameError
-__ test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown ___
-
-    def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
+    def test_report_marks_provisional_for_missing_target_holdings():
         db.init_db(":memory:")
         seed_universe([
             ("00980A", 0),
             ("00981A", 0),
             ("00982A", 0),
         ])
-        insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
-        insert_holding("2026-07-08", "00981A", "2454", "聯發科", 85.0)
+        insert_holding("2026-07-07", "00980A", "2330", "台積電", 85.0)
         insert_holding("2026-07-08", "00982A", "2383", "台光電", 85.0)
->       insert_scrape_run(
-            "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
-        )
-
-tests/test_signal_report.py:255: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-date = '2026-07-08', etf_code = '00980A', status = 'stale'
-data_date = '2026-07-07'
-
-    def insert_scrape_run(date, etf_code, status="success", data_date=None):
-        with db._connect() as conn:
->           conn.execute(
-                """
-                INSERT OR REPLACE INTO etf_scrape_runs (
-                    date, data_date, etf_code, status, primary_source, primary_success,
-                    moneydj_browser_used, official_fallback_used, official_success,
-                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                    total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                    started_at, finished_at
-                ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
-                    1, 1, 0, 85.0, 85.0, 'https://test', NULL,
-                    '2026-07-08T00:00:00', '2026-07-08T00:01:00')
-                """,
-                (date, data_date, etf_code, status),
-            )
-E           sqlite3.OperationalError: no such table: etf_scrape_runs
-
-tests/test_signal_report.py:54: OperationalError
-_________________ test_report_freshness_excludes_retired_etfs __________________
-
-    def test_report_freshness_excludes_retired_etfs():
-        db.init_db(":memory:")
-        seed_universe([
-            ("00980A", 0),
-            ("00983A", 1),
-        ])
-        insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
-        insert_holding("2026-07-08", "00983A", "2454", "聯發科", 85.0)
->       insert_scrape_run(
-            "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
-        )
-
-tests/test_signal_report.py:280: 
-_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
-
-date = '2026-07-08', etf_code = '00980A', status = 'stale'
-data_date = '2026-07-07'
-
-    def insert_scrape_run(date, etf_code, status="success", data_date=None):
-        with db._connect() as conn:
->           conn.execute(
-                """
-                INSERT OR REPLACE INTO etf_scrape_runs (
-                    date, data_date, etf_code, status, primary_source, primary_success,
-                    moneydj_browser_used, official_fallback_used, official_success,
-                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                    total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                    started_at, finished_at
-                ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
-                    1, 1, 0, 85.0, 85.0, 'https://test', NULL,
-                    '2026-07-08T00:00:00', '2026-07-08T00:01:00')
-                """,
-                (date, data_date, etf_code, status),
-            )
-E           sqlite3.OperationalError: no such table: etf_scrape_runs
-
-tests/test_signal_report.py:54: OperationalError
-_________________ test_readme_documents_watchdog_retry_prompt __________________
-
-    def test_readme_documents_watchdog_retry_prompt():
-        readme = README.read_text(encoding="utf-8")
     
-        assert "21:00" in readme
-        assert "scripts/retry_stale_scrapes.py" in readme
-        assert '--date "$(date +%F)"' in readme
->       assert "retry only stale ETFs" in readme
-E       AssertionError: assert 'retry only stale ETFs' in '# Taiwan Active ETF Tracking\n\nTaiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETF...on analysis output.\n\nUse maintenance scripts with care against a backed-up database when changing historical data.\n'
+        report = generate_signal_report("2026-07-08")
+    
+        assert "暫定" in report or "Provisional" in report
+        assert "缺少目標日持倉" in report
+>       assert "最近可用資料日期" in report
+E       AssertionError: assert '最近可用資料日期' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: 2026-07-08\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ⚠️ Degraded\nActive ETF unive... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
 
-tests/test_signal_report.py:299: AssertionError
-_______ test_stale_etfs_are_reported_then_fail_the_single_date_contract ________
-
-capsys = <_pytest.capture.CaptureFixture object at 0x7f71f99c6bd0>
-tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_stale_etfs_are_reported_t0')
-
-    def test_stale_etfs_are_reported_then_fail_the_single_date_contract(capsys, tmp_path):
-        with patch("db.init_db"), \
-             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
-             patch("pipeline.run_daily_scrape_with_browser", return_value=STALE_SCRAPE), \
-             patch("changes.detect_holding_changes") as changes, \
-             patch("manager_intent.generate_manager_intent_rollups") as intent, \
-             patch("signals.generate_manager_signals") as signals, \
-             patch("report.generate_signal_report") as report, \
-             patch("traction_analysis.generate_traction_report") as traction:
->           with pytest.raises(RuntimeError, match="scrape data date range"):
-E           AssertionError: Regex pattern did not match.
-E             Expected regex: 'scrape data date range'
-E             Actual message: "holding change detection failed for target date 2026-06-26: <MagicMock name='detect_holding_changes().get()' id='140127495569552'>"
-
-tests/test_nightly_pipeline.py:237: AssertionError
------------------------------ Captured stdout call -----------------------------
-Step 1/7: Discovering active ETF universe...
-  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
-Step 2/7: Running browser-enabled scrape...
-  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 5, 'stale': 14, 'unknown': 0}, 'stale_etfs': [{'etf_code': '00401A', 'data_date': '2026-06-25', 'source_type': 'moneydj_browser', 'reason': 'source_date_before_expected_data_date'}, {'etf_code': '00404A', 'data_date': '2026-06-25', 'source_type': 'moneydj_browser', 'reason': 'source_date_before_expected_data_date'}], 'unknown_date_etfs': [], 'data_date_min': '2026-06-25', 'data_date_max': '2026-06-26'}
-
-Data freshness: fresh 5 / stale 14 / unknown 0
-Data date range: 2026-06-25 ~ 2026-06-26
-STALE SCRAPE: 5/19 ETFs have 2026-06-26 data
-  stale: 00401A data_date=2026-06-25
-  stale: 00404A data_date=2026-06-25
-Step 3/7: Detecting holding changes...
-  Change summary: <MagicMock name='detect_holding_changes()' id='140127494250832'>
+tests/test_signal_report.py:241: AssertionError
 =========================== short test summary info ============================
-FAILED tests/test_holdings_source_of_truth.py::test_report_quality_is_derived_from_holdings_and_universe - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_changes.py::test_excludes_retired_etfs_from_change_detection - sqlite3.OperationalError: no such table: etf_scrape_runs
-FAILED tests/test_changes.py::test_retired_etf_with_null_issuer_does_not_crash - sqlite3.OperationalError: no such table: etf_scrape_runs
-FAILED tests/test_signal_report.py::test_generate_signal_report_shows_summary_and_signals - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_signal_report.py::test_generate_signal_report_uses_latest_holdings_date - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_signal_report.py::test_generate_signal_report_handles_no_signals - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_signal_report.py::test_report_warns_when_etfs_missing - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_signal_report.py::test_report_no_warning_when_all_etfs_present - NameError: name '_get_actual_etf_count' is not defined
-FAILED tests/test_signal_report.py::test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown - sqlite3.OperationalError: no such table: etf_scrape_runs
-FAILED tests/test_signal_report.py::test_report_freshness_excludes_retired_etfs - sqlite3.OperationalError: no such table: etf_scrape_runs
-FAILED tests/test_signal_report.py::test_readme_documents_watchdog_retry_prompt - AssertionError: assert 'retry only stale ETFs' in '# Taiwan Active ETF Tracking\n\nTaiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETF...on analysis output.\n\nUse maintenance scripts with care against a backed-up database when changing historical data.\n'
-FAILED tests/test_nightly_pipeline.py::test_stale_etfs_are_reported_then_fail_the_single_date_contract - AssertionError: Regex pattern did not match.
-  Expected regex: 'scrape data date range'
-  Actual message: "holding change detection failed for target date 2026-06-26: <MagicMock name='detect_holding_changes().get()' id='140127495569552'>"
-12 failed, 30 passed in 0.90s
+FAILED tests/test_signal_report.py::test_generate_signal_report_uses_latest_holdings_date - AssertionError: assert '2026-06-23' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: N/A\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ❌ No data\nActive ETF universe: 19 |...警告:\n  ⚠️ 無持倉資料\n\n═══ 摘要 ═══\nETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_signal_report.py::test_report_marks_provisional_for_missing_target_holdings - AssertionError: assert '最近可用資料日期' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: 2026-07-08\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ⚠️ Degraded\nActive ETF unive... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+2 failed, 40 passed in 2.87s
 STATUS=1
