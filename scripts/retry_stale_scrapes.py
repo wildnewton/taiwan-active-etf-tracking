@@ -46,7 +46,7 @@ def retry_missing_holdings(
     retry_summary = run_selected_scrape_with_browser(
         db_path,
         etf_codes,
-        run_date=target_date,
+        target_date=target_date,
     )
     remaining = get_retry_candidates(target_date)
     remaining_codes = {row["etf_code"] for row in remaining}

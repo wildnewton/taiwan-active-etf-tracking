@@ -36,8 +36,15 @@ def run_selected_scrape_with_browser(
     db_path: str,
     etf_codes: list[str],
     run_date=None,
+    target_date=None,
 ) -> dict:
-    return asyncio.run(run_selected_scrape_with_browser_async(db_path, etf_codes, run_date=_coerce_run_date(run_date)))
+    if target_date is None:
+        target_date = run_date
+    return asyncio.run(run_selected_scrape_with_browser_async(
+        db_path, etf_codes,
+        run_date=_coerce_run_date(run_date),
+        target_date=_coerce_run_date(target_date),
+    ))
 
 
 async def run_daily_scrape_with_browser_async(
@@ -84,15 +91,18 @@ async def run_selected_scrape_with_browser_async(
     etf_codes: list[str],
     page=None,
     run_date=None,
+    target_date=None,
 ) -> dict:
     selected_etfs = [{"code": code} for code in etf_codes]
     run_date = _coerce_run_date(run_date)
+    target_date = _coerce_run_date(target_date if target_date is not None else run_date)
     if page is not None:
         return await _run_scrape_async(
             db_path,
             selected_etfs,
             _browser_scrape_fn(page),
             run_date=run_date,
+            expected_data_date=target_date,
             use_trading_calendar=False,
             skip_existing_snapshot=False,
         )
@@ -110,6 +120,7 @@ async def run_selected_scrape_with_browser_async(
                     selected_etfs,
                     _browser_scrape_fn(browser_page),
                     run_date=run_date,
+                    expected_data_date=target_date,
                     use_trading_calendar=False,
                     skip_existing_snapshot=False,
                 )
@@ -179,6 +190,7 @@ async def _run_scrape_async(
     etfs: list[dict] | None,
     scrape_fn: AsyncScrapeFn,
     run_date=None,
+    expected_data_date=None,
     use_trading_calendar: bool = True,
     skip_existing_snapshot: bool = True,
 ) -> dict:
@@ -186,6 +198,7 @@ async def _run_scrape_async(
         db_path,
         etfs,
         run_date=run_date,
+        expected_data_date=expected_data_date,
         use_trading_calendar=use_trading_calendar,
         skip_existing_snapshot=skip_existing_snapshot,
     )
@@ -206,6 +219,7 @@ def _prepare_scrape_run(
     use_trading_calendar: bool = True,
     run_at: datetime | None = None,
     run_date=None,
+    expected_data_date=None,
     skip_existing_snapshot: bool = True,
 ) -> tuple[date, Optional[date], dict, list[dict]]:
     if not already_initialized:
@@ -228,7 +242,10 @@ def _prepare_scrape_run(
         etfs = _active_etfs_for_run(run_date)
     etfs = list(etfs)
 
-    expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
+    if expected_data_date is None:
+        expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
+    else:
+        expected_data_date = _coerce_run_date(expected_data_date)
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
