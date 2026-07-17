@@ -30,6 +30,7 @@ jobs:
           : > "$RESULT"
 
           sed -i 's/"def detect_holding_changes(\\n"/"def detect_holding_changes("/' scripts/_apply_holdings_source_green.py
+          sed -i 's/text\[end_index:\]/text[end_index + len(end):]/' scripts/_apply_holdings_source_green.py
 
           echo "=== APPLY ===" >> "$RESULT"
           python scripts/_apply_holdings_source_green.py >> "$RESULT" 2>&1
