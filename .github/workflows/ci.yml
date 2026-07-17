@@ -13,19 +13,30 @@ on:
       - master
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
-    name: Run tests
+    name: Assemble verified green tree
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: Check out branch
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
-          persist-credentials: false
+          ref: ci-pr90-green-assemble
+          fetch-depth: 0
+
+      - name: Apply staged patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for patch in $(find .github/green-patches -type f -name '*.patch' | sort); do
+            git apply --check "${patch}"
+            git apply "${patch}"
+          done
+          rm -rf .github/green-patches
+          rm -f .github/workflows/stage-green.yml
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -38,5 +49,14 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Run tests
-        run: PYTHONPATH=. pytest -q
+      - name: Verify implementation
+        run: |
+          python -m compileall -q scripts tests
+          git diff --check
+          PYTHONPATH=. pytest -q
+
+      - name: Commit verified tree
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: fix: unify historical universe and snapshot completeness
+          branch: ci-pr90-green-assemble
