@@ -1,0 +1,9 @@
+=== APPLY ===
+Traceback (most recent call last):
+  File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/_apply_holdings_source_green.py", line 468, in <module>
+    text = replace_between(
+           ^^^^^^^^^^^^^^^^
+  File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/_apply_holdings_source_green.py", line 26, in replace_between
+    raise RuntimeError(f"{label}: markers not found")
+RuntimeError: valid holdings date selector: markers not found
+STATUS=1
