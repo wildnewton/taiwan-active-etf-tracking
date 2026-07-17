@@ -1,0 +1,113 @@
+diff --git a/scripts/scrapers/official.py b/scripts/scrapers/official.py
+--- a/scripts/scrapers/official.py
++++ b/scripts/scrapers/official.py
+@@ -15,6 +15,7 @@ from urllib.parse import urlparse
+ 
+ import requests
+ from bs4 import BeautifulSoup
++from playwright.async_api import Error as PlaywrightError
+ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+ 
+ from config import get_etf_config
+@@ -127,8 +128,14 @@ def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> lis
+ 
+ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
+     data = json.loads(assets_json)
+-    fund_data = data.get("Entries", {}).get("Data", {})
++    entries = data.get("Entries", {}) if isinstance(data, dict) else {}
++    fund_id = entries.get("FundID") if isinstance(entries, dict) else None
++    if fund_id and str(fund_id).strip().upper() != etf_code.upper():
++        raise ValueError(
++            f"Nomura fund mismatch: expected {etf_code.upper()}, got {fund_id}"
++        )
++    fund_data = entries.get("Data", {}) if isinstance(entries, dict) else {}
+     nav_date = fund_data.get("FundAsset", {}).get("NavDate")
+     date = _normalize_date(nav_date)
+ 
+@@ -269,6 +276,10 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
+         if not navigation_completed:
+             raise
+         return _failed_result(source_url, "Capital buyback API not intercepted")
++    except PlaywrightError:
++        if not navigation_completed:
++            raise
++        return _failed_result(source_url, "Capital buyback API not intercepted")
+ 
+     try:
+         buyback_body = await response.text()
+@@ -301,6 +312,10 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
+         if not navigation_completed:
+             raise
+         return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
++    except PlaywrightError:
++        if not navigation_completed:
++            raise
++        return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
+ 
+     try:
+         assets_body = await response.text()
+@@ -332,6 +347,10 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
+         if not navigation_completed:
+             raise
+         return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
++    except PlaywrightError:
++        if not navigation_completed:
++            raise
++        return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
+ 
+     try:
+         holdings_body = await response.text()
+@@ -458,20 +477,43 @@ def _response_url(response) -> str:
+     return url if isinstance(url, str) else ""
+ 
+ 
+-def _is_capital_buyback_response(response) -> bool:
++def _is_successful_get_response(response) -> bool:
++    if getattr(response, "ok", True) is False:
++        return False
++    request = getattr(response, "request", None)
++    method = getattr(request, "method", "GET")
++    return not isinstance(method, str) or method.upper() == "GET"
++
++
++def _matches_api_endpoint(response, domain: str, path: str) -> bool:
+     parsed = urlparse(_response_url(response))
+     hostname = (parsed.hostname or "").lower()
+-    path = parsed.path.rstrip("/").lower()
+-    return hostname.endswith("capitalfund.com.tw") and path == "/cfweb/api/etf/buyback"
++    response_path = parsed.path.rstrip("/").lower()
++    expected_domain = domain.lower()
++    host_matches = hostname == expected_domain or hostname.endswith(
++        f".{expected_domain}"
++    )
++    return (
++        host_matches
++        and response_path == path.lower()
++        and _is_successful_get_response(response)
++    )
++
++
++def _is_capital_buyback_response(response) -> bool:
++    return _matches_api_endpoint(
++        response,
++        "capitalfund.com.tw",
++        "/cfweb/api/etf/buyback",
++    )
+ 
+ 
+ def _is_nomura_assets_response(response) -> bool:
+-    return "getfundassets" in _response_url(response).lower()
++    return _matches_api_endpoint(
++        response,
++        "nomurafunds.com.tw",
++        "/api/etfapi/api/fund/getfundassets",
++    )
+ 
+ 
+ def _is_ctbc_holdings_response(response) -> bool:
+-    return "etfholdingweight" in _response_url(response).lower()
++    return _matches_api_endpoint(
++        response,
++        "ctbcinvestments.com.tw",
++        "/api/etf/etfholdingweight",
++    )
