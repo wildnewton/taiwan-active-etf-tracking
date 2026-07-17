@@ -71,7 +71,7 @@ def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
                 f"{idx:04d}",
                 f"Stock {idx}",
                 100,
-                5.0,
+                100.0,
             )
 
     assert get_latest_valid_date() == "2026-06-22"
@@ -170,7 +170,13 @@ def test_detects_consecutive_reductions():
     assert row["consecutive_reduce_days"] == 2
 
 
-def _insert_etf_universe_entry(code, name, issuer, retired):
+def _insert_etf_universe_entry(
+    code,
+    name,
+    issuer,
+    retired,
+    last_active_date="2026-06-23",
+):
     with db._connect() as conn:
         conn.execute(
             """
@@ -178,14 +184,14 @@ def _insert_etf_universe_entry(code, name, issuer, retired):
                 (code, name, issuer, market, retired,
                  first_seen_date, last_active_date, created_at, updated_at)
             VALUES (?, ?, ?, 'TWSE', ?,
-                    '2026-06-20', '2026-06-23', datetime('now'), datetime('now'))
+                    '2026-06-20', ?, datetime('now'), datetime('now'))
             """,
-            (code, name, issuer, retired),
+            (code, name, issuer, retired, last_active_date),
         )
 
 
-def test_excludes_retired_etfs_from_change_detection():
-    """Retired (retired=1) ETFs must not appear in etf_holding_changes.
+def test_excludes_etfs_retired_before_the_analyzed_dates():
+    """ETFs outside the candidate-date universe must not produce changes.
 
     The data pipeline should treat retired ETFs as out-of-scope for all
     downstream analysis: diagnostics, change detection, and signals.
@@ -193,7 +199,13 @@ def test_excludes_retired_etfs_from_change_detection():
     db.init_db(":memory:")
 
     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-    _insert_etf_universe_entry("RETIRED", "Retired ETF", None, 1)
+    _insert_etf_universe_entry(
+        "RETIRED",
+        "Retired ETF",
+        None,
+        1,
+        last_active_date="2026-06-19",
+    )
 
     # Both have holdings on both dates
     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
@@ -232,7 +244,13 @@ def test_retired_etf_with_null_issuer_does_not_crash():
     db.init_db(":memory:")
 
     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-    _insert_etf_universe_entry("RETIRED", "Retired NULL", None, 1)
+    _insert_etf_universe_entry(
+        "RETIRED",
+        "Retired NULL",
+        None,
+        1,
+        last_active_date="2026-06-19",
+    )
 
     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
     insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
