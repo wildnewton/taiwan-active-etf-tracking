@@ -27,6 +27,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Upload review files
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-files
+          path: |
+            scripts/scrapers/official.py
+            tests/test_official.py
+            tests/conftest.py
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
