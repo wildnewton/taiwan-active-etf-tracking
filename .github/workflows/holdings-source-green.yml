@@ -1,0 +1,54 @@
+name: Holdings source GREEN
+
+on:
+  push:
+    branches:
+      - fix/73-stale-scrape-status
+    paths:
+      - .github/workflows/holdings-source-green.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/73-stale-scrape-status
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Apply direct refactor
+        run: python scripts/_apply_holdings_source_green.py
+      - name: Show remaining scrape-run references
+        run: |
+          grep -RIn "etf_scrape_runs\|insert_scrape_run\|ScrapeRun\|successful_snapshot_exists" scripts tests README.md || true
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run targeted tests
+        env:
+          PYTHONPATH: scripts
+        run: |
+          pytest -q \
+            tests/test_holdings_source_of_truth.py \
+            tests/test_retry_stale_scrapes.py \
+            tests/test_pipeline_date_contract.py \
+            tests/test_changes.py \
+            tests/test_signal_report.py \
+            tests/test_nightly_pipeline.py
+      - name: Run full suite
+        env:
+          PYTHONPATH: scripts
+        run: pytest -q
+      - name: Commit GREEN
+        run: |
+          rm scripts/_apply_holdings_source_green.py
+          rm .github/workflows/holdings-source-green.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: make holdings the freshness source of truth"
+          git push origin HEAD:fix/73-stale-scrape-status
