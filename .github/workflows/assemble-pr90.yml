@@ -1,0 +1,53 @@
+name: Assemble verified PR90 tree
+
+on:
+  pull_request:
+    branches:
+      - tmp/pr90-assembly-base
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out assembly head
+        uses: actions/checkout@v4
+        with:
+          ref: ci-pr90-green-assemble
+          fetch-depth: 0
+      - name: Apply verified patches and remove helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          for patch in $(find .github/green-patches -type f -name '*.patch' | sort); do
+            git apply --check "${patch}"
+            git apply "${patch}"
+          done
+          rm -rf .github/green-patches
+          rm -f .github/workflows/stage-green.yml
+          rm -f .github/assemble-trigger.txt
+          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - name: Verify final tree
+        run: |
+          python -m compileall -q scripts tests
+          git diff --check
+          PYTHONPATH=. pytest -q
+      - name: Commit verified tree
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m 'fix: unify historical universe and snapshot completeness'
+          git push origin HEAD:ci-pr90-green-assemble
