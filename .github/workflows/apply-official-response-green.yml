@@ -19,10 +19,132 @@ jobs:
           fetch-depth: 1
           persist-credentials: true
 
-      - name: Apply GREEN patch
+      - name: Apply GREEN changes
         run: |
-          git apply --check .github/official-response-green.patch
-          git apply .github/official-response-green.patch
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/scrapers/official.py")
+          text = path.read_text(encoding="utf-8")
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'from bs4 import BeautifulSoup\nfrom playwright.async_api import TimeoutError as PlaywrightTimeoutError\n',
+              'from bs4 import BeautifulSoup\nfrom playwright.async_api import Error as PlaywrightError\nfrom playwright.async_api import TimeoutError as PlaywrightTimeoutError\n',
+          )
+
+          replace_once(
+              '''def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
+              data = json.loads(assets_json)
+              fund_data = data.get("Entries", {}).get("Data", {})
+              nav_date = fund_data.get("FundAsset", {}).get("NavDate")
+              ''',
+              '''def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
+              data = json.loads(assets_json)
+              entries = data.get("Entries", {}) if isinstance(data, dict) else {}
+              fund_id = entries.get("FundID") if isinstance(entries, dict) else None
+              if fund_id and str(fund_id).strip().upper() != etf_code.upper():
+                  raise ValueError(
+                      f"Nomura fund mismatch: expected {etf_code.upper()}, got {fund_id}"
+                  )
+              fund_data = entries.get("Data", {}) if isinstance(entries, dict) else {}
+              nav_date = fund_data.get("FundAsset", {}).get("NavDate")
+              ''',
+          )
+
+          for reason in (
+              "Capital buyback API not intercepted",
+              "Nomura GetFundAssets API not intercepted",
+              "CTBC ETFHoldingWeight API not intercepted",
+          ):
+              replace_once(
+                  f'''    except PlaywrightTimeoutError:
+                  if not navigation_completed:
+                      raise
+                  return _failed_result(source_url, "{reason}")
+              ''',
+                  f'''    except PlaywrightTimeoutError:
+                  if not navigation_completed:
+                      raise
+                  return _failed_result(source_url, "{reason}")
+                  except PlaywrightError:
+                      if not navigation_completed:
+                          raise
+                      return _failed_result(source_url, "{reason}")
+              ''',
+              )
+
+          replace_once(
+              '''def _is_capital_buyback_response(response) -> bool:
+              parsed = urlparse(_response_url(response))
+              hostname = (parsed.hostname or "").lower()
+              path = parsed.path.rstrip("/").lower()
+              return hostname.endswith("capitalfund.com.tw") and path == "/cfweb/api/etf/buyback"
+
+
+              def _is_nomura_assets_response(response) -> bool:
+              return "getfundassets" in _response_url(response).lower()
+
+
+              def _is_ctbc_holdings_response(response) -> bool:
+              return "etfholdingweight" in _response_url(response).lower()
+              ''',
+              '''def _is_successful_get_response(response) -> bool:
+              if getattr(response, "ok", True) is False:
+                  return False
+              request = getattr(response, "request", None)
+              method = getattr(request, "method", "GET")
+              return not isinstance(method, str) or method.upper() == "GET"
+
+
+              def _matches_api_endpoint(response, domain: str, path: str) -> bool:
+              parsed = urlparse(_response_url(response))
+              hostname = (parsed.hostname or "").lower()
+              response_path = parsed.path.rstrip("/").lower()
+              expected_domain = domain.lower()
+              host_matches = hostname == expected_domain or hostname.endswith(
+                  f".{expected_domain}"
+              )
+              return (
+                  host_matches
+                  and response_path == path.lower()
+                  and _is_successful_get_response(response)
+              )
+
+
+              def _is_capital_buyback_response(response) -> bool:
+              return _matches_api_endpoint(
+                  response,
+                  "capitalfund.com.tw",
+                  "/cfweb/api/etf/buyback",
+              )
+
+
+              def _is_nomura_assets_response(response) -> bool:
+              return _matches_api_endpoint(
+                  response,
+                  "nomurafunds.com.tw",
+                  "/api/etfapi/api/fund/getfundassets",
+              )
+
+
+              def _is_ctbc_holdings_response(response) -> bool:
+              return _matches_api_endpoint(
+                  response,
+                  "ctbcinvestments.com.tw",
+                  "/api/etf/etfholdingweight",
+              )
+              ''',
+          )
+
+          path.write_text(text, encoding="utf-8")
+          PY
           rm .github/official-response-green.patch
           rm .github/workflows/apply-official-response-green.yml
           git config user.name "github-actions[bot]"
