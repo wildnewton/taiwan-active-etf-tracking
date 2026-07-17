@@ -1,5 +1,5 @@
 name: Holdings source GREEN
-# rerun after full-suite cleanup
+# rerun after remaining test fixes
 
 on:
   push:
@@ -73,6 +73,10 @@ jobs:
             python scripts/_apply_holdings_source_full_suite_cleanup.py >> "$RESULT" 2>&1
             STATUS=$?
           fi
+          if [ "$STATUS" -eq 0 ]; then
+            python scripts/_apply_holdings_source_last_failures.py >> "$RESULT" 2>&1
+            STATUS=$?
+          fi
 
           if [ "$STATUS" -eq 0 ]; then
             echo "=== REMAINING REFERENCES ===" >> "$RESULT"
@@ -117,6 +121,7 @@ jobs:
             rm scripts/_apply_holdings_source_targeted_fix.py
             rm scripts/_apply_holdings_source_collection_cleanup.py
             rm scripts/_apply_holdings_source_full_suite_cleanup.py
+            rm scripts/_apply_holdings_source_last_failures.py
             rm .github/workflows/holdings-source-green.yml
             git add -A
             git commit -m "refactor: make holdings the freshness source of truth"
