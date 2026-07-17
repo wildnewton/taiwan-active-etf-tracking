@@ -40,3 +40,100 @@ jobs:
 
       - name: Run tests
         run: PYTHONPATH=. pytest -q
+
+  allianz-live:
+    name: Allianz live verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and Chromium
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Direct Allianz official smoke
+        shell: bash
+        run: |
+          set -o pipefail
+          PYTHONPATH=scripts python - <<'PY' | tee /tmp/allianz-live.log
+          import asyncio
+          import json
+          from playwright.async_api import async_playwright
+          from scrapers.official import scrape_official_with_browser
+
+          async def main():
+              async with async_playwright() as playwright:
+                  browser = await playwright.chromium.launch(headless=True)
+                  context = await browser.new_context(locale="zh-TW")
+                  page = await context.new_page()
+                  try:
+                      for code in ("00984A", "00993A"):
+                          result = await scrape_official_with_browser(code, page)
+                          rows = result.get("stock_rows", [])
+                          dates = sorted({row.get("date") for row in rows})
+                          summary = {
+                              "etf_code": code,
+                              "ok": result.get("ok"),
+                              "reason": result.get("reason"),
+                              "stock_rows": len(rows),
+                              "dates": dates,
+                              "total_weight": result.get("total_weight_stock_rows"),
+                              "extraction_methods": sorted(
+                                  {row.get("extraction_method") for row in rows}
+                              ),
+                          }
+                          print(json.dumps(summary, ensure_ascii=False))
+                          assert result.get("ok") is True, summary
+                          assert len(rows) >= 5, summary
+                          assert len(dates) == 1 and dates[0], summary
+                          assert all(row.get("etf_code") == code for row in rows), summary
+                          assert all(
+                              row.get("extraction_method")
+                              == "playwright_api_intercept"
+                              for row in rows
+                          ), summary
+                          assert 20 <= result.get("total_weight_stock_rows", 0) <= 110, summary
+                  finally:
+                      await context.close()
+                      await browser.close()
+
+          asyncio.run(main())
+          PY
+
+      - name: Full nightly try-run on disposable state
+        shell: bash
+        run: |
+          set -o pipefail
+          rm -rf /tmp/issue72-production /tmp/issue72-reports
+          mkdir -p /tmp/issue72-production
+          PYTHONPATH=scripts timeout 1200s python scripts/nightly_pipeline.py \
+            --try-run \
+            --skip-discovery \
+            --db /tmp/issue72-production/active_etf_holdings.sqlite \
+            --report-dir /tmp/issue72-reports \
+            | tee /tmp/nightly-try-run.log
+          grep -q "TRY-RUN complete" /tmp/nightly-try-run.log
+          test ! -e /tmp/issue72-production/active_etf_holdings.sqlite
+          test ! -e /tmp/issue72-reports
+
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue72-interception-live
+          path: |
+            /tmp/allianz-live.log
+            /tmp/nightly-try-run.log
