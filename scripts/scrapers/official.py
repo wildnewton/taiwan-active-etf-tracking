@@ -26,6 +26,8 @@ EXTRACTION_METHOD_API = "playwright_api_intercept"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
 EXTRACTION_METHOD_STEALTH = "stealth_playwright_api"
 _API_RESPONSE_TIMEOUT_MS = 10_000
+_ALLIANZ_FUND_OPTIONS_PATH = "/webapi/api/Category/GetFundDropdownOptions"
+_ALLIANZ_TRADE_INFO_PATH = "/webapi/api/Fund/GetFundTradeInfo"
 
 TWSE_URL_TEMPLATE = (
     "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?{code}="
@@ -203,6 +205,111 @@ def parse_ctbc_api(api_json: str, etf_code: str, source_url: str) -> list[dict]:
     return dedupe_rows(rows)
 
 
+
+def parse_allianz_fund_options(options_json: str, etf_code: str) -> str:
+    """Return Allianz's internal FundNo for one exact exchange ETF code."""
+    data = json.loads(options_json)
+    entries = data.get("Entries", []) if isinstance(data, dict) else []
+    requested_code = etf_code.upper()
+    matches = [
+        item
+        for item in entries
+        if isinstance(item, dict)
+        and str(item.get("SecuritiesCode") or "").strip().upper() == requested_code
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Allianz fund option not found or ambiguous for {requested_code}"
+        )
+    fund_no = str(matches[0].get("FundNo") or "").strip()
+    if not fund_no:
+        raise ValueError(f"Allianz FundNo missing for {requested_code}")
+    return fund_no
+
+
+def parse_allianz_api(
+    trade_json: str,
+    etf_code: str,
+    source_url: str,
+    *,
+    expected_fund_no: str,
+) -> list[dict]:
+    """Parse one exact Allianz fund trade-info response."""
+    data = json.loads(trade_json)
+    entries = data.get("Entries", {}) if isinstance(data, dict) else {}
+    if not isinstance(entries, dict):
+        raise ValueError("Allianz trade response entries missing")
+
+    requested_code = etf_code.upper()
+    response_code = str(entries.get("CSecuritiesCode") or "").strip().upper()
+    if response_code != requested_code:
+        raise ValueError(
+            f"Allianz ETF mismatch: expected {requested_code}, "
+            f"got {response_code or 'missing'}"
+        )
+
+    response_fund_no = str(entries.get("CFundId") or "").strip()
+    if response_fund_no != expected_fund_no:
+        raise ValueError(
+            f"Allianz fund mismatch: expected {expected_fund_no}, "
+            f"got {response_fund_no or 'missing'}"
+        )
+
+    raw_date = entries.get("CPcfdate")
+    date = _normalize_date(str(raw_date).split("T", 1)[0]) if raw_date else None
+    if not date:
+        raise ValueError("Allianz holdings date missing")
+    try:
+        datetime.strptime(date, "%Y/%m/%d")
+    except ValueError as exc:
+        raise ValueError(f"Allianz holdings date invalid: {raw_date}") from exc
+
+    stock_table = None
+    for table in entries.get("DynamicTableData", []):
+        if not isinstance(table, dict):
+            continue
+        title = str(table.get("TableTitle") or "").strip()
+        if title.startswith("股票"):
+            stock_table = table
+            break
+    if stock_table is None:
+        raise ValueError("Allianz stock table not found")
+
+    columns = stock_table.get("Columns", [])
+    headers = [
+        _normalize_header(str(column.get("Name") or ""))
+        for column in columns
+        if isinstance(column, dict)
+    ]
+    header_map = _build_header_map(headers)
+    required_fields = {"code", "name", "shares", "weight"}
+    if not required_fields.issubset(header_map):
+        raise ValueError("Allianz stock table schema invalid")
+
+    rows = []
+    for raw in stock_table.get("Rows", []):
+        if not isinstance(raw, list):
+            continue
+        values = _extract_cells([str(value) for value in raw], header_map)
+        if not values:
+            continue
+        stock_code, stock_name, shares, weight_pct = values
+        rows.append(
+            _row(
+                requested_code,
+                stock_code,
+                stock_name,
+                shares,
+                weight_pct,
+                source_url,
+                date,
+                EXTRACTION_METHOD_API,
+            )
+        )
+    if not rows:
+        raise ValueError("Allianz stock rows not found")
+    return dedupe_rows(rows)
+
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
         match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
@@ -365,6 +472,56 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
+
+def _allianz_api_url(source_url: str, path: str) -> str:
+    parsed = urlparse(source_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid Allianz source URL: {source_url}")
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+async def _allianz_response_text(response, label: str) -> str:
+    if getattr(response, "ok", True) is False:
+        raise ValueError(
+            f"Allianz {label} API HTTP {getattr(response, 'status', 'error')}"
+        )
+    return await response.text()
+
+
+async def scrape_allianz_playwright(etf_code: str, page) -> dict:
+    etf_code = etf_code.upper()
+    config = get_official_config(etf_code)
+    source_url = config["url"]
+
+    await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+
+    try:
+        options_response = await page.request.post(
+            _allianz_api_url(source_url, _ALLIANZ_FUND_OPTIONS_PATH),
+            data={"TypeID": -1, "IsAddAllOption": False},
+        )
+        options_body = await _allianz_response_text(
+            options_response,
+            "fund options",
+        )
+        fund_no = parse_allianz_fund_options(options_body, etf_code)
+
+        trade_response = await page.request.post(
+            _allianz_api_url(source_url, _ALLIANZ_TRADE_INFO_PATH),
+            data={"Date": None, "FundNo": fund_no},
+        )
+        trade_body = await _allianz_response_text(trade_response, "trade info")
+        all_rows = parse_allianz_api(
+            trade_body,
+            etf_code,
+            source_url,
+            expected_fund_no=fund_no,
+        )
+    except Exception as exc:
+        return _failed_result(source_url, f"Allianz API error: {exc}")
+
+    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
+
 async def scrape_mega_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
@@ -459,6 +616,8 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
         return await scrape_nomura_stealth(etf_code, page)
     if method == "browser" and issuer == "CTBC":
         return await scrape_ctbc_playwright(etf_code, page)
+    if method == "playwright" and issuer == "Allianz":
+        return await scrape_allianz_playwright(etf_code, page)
     if method == "playwright" and issuer == "Mega":
         return await scrape_mega_playwright(etf_code, page)
     if method == "playwright" and issuer == "Uni-President":
