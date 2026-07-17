@@ -346,7 +346,7 @@ def reconcile_discovered_universe(
         current_rows = conn.execute(
             """
             SELECT code, retired, pending_retirement_since, official_logic,
-                   listing_date
+                   listing_date, last_active_date
             FROM etf_universe
             """
         ).fetchall()
@@ -356,6 +356,7 @@ def reconcile_discovered_universe(
                 "pending_retirement_since": row[2],
                 "official_logic": row[3],
                 "listing_date": row[4],
+                "last_active_date": row[5],
             }
             for row in current_rows
         }
@@ -421,7 +422,12 @@ def reconcile_discovered_universe(
                     UPDATE etf_universe
                     SET retired = 0,
                         pending_retirement_since = NULL,
-                        last_active_date = COALESCE(?, last_active_date),
+                        last_active_date = CASE
+                            WHEN ? IS NULL THEN last_active_date
+                            WHEN last_active_date IS NULL OR last_active_date < ?
+                                THEN ?
+                            ELSE last_active_date
+                        END,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
                         listing_date = COALESCE(?, listing_date),
@@ -429,6 +435,8 @@ def reconcile_discovered_universe(
                     WHERE code = ?
                     """,
                     (
+                        observed_active_date,
+                        observed_active_date,
                         observed_active_date,
                         raw.get("market"),
                         raw.get("isin"),
@@ -442,7 +450,12 @@ def reconcile_discovered_universe(
                 conn.execute(
                     """
                     UPDATE etf_universe
-                    SET last_active_date = COALESCE(?, last_active_date),
+                    SET last_active_date = CASE
+                            WHEN ? IS NULL THEN last_active_date
+                            WHEN last_active_date IS NULL OR last_active_date < ?
+                                THEN ?
+                            ELSE last_active_date
+                        END,
                         pending_retirement_since = NULL,
                         market = COALESCE(?, market),
                         isin = COALESCE(?, isin),
@@ -451,6 +464,8 @@ def reconcile_discovered_universe(
                     WHERE code = ?
                     """,
                     (
+                        observed_active_date,
+                        observed_active_date,
                         observed_active_date,
                         raw.get("market"),
                         raw.get("isin"),

@@ -397,11 +397,19 @@ def _canonical_rows(data_date: str) -> list[dict]:
     try:
         with _using_row_factory(_dict_factory) as conn:
             rows = conn.execute(
-                """SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
-                          shares, weight_pct, source_url, source_type, extraction_method, scraped_at
-                   FROM etf_daily_holdings
-                   WHERE date = ?""",
-                (data_date,),
+                """
+                SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                       shares, weight_pct, source_url, source_type, extraction_method, scraped_at
+                FROM etf_daily_holdings
+                WHERE date = ?
+                UNION ALL
+                SELECT date, etf_code, asset_name, asset_type,
+                       NULL AS stock_code, NULL AS stock_name, NULL AS shares,
+                       weight_pct, source_url, source_type, extraction_method, scraped_at
+                FROM etf_daily_non_stock_assets
+                WHERE date = ?
+                """,
+                (data_date, data_date),
             ).fetchall()
     except sqlite3.OperationalError:
         return []
