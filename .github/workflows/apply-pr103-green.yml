@@ -42,7 +42,13 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Confirm RED regressions fail before implementation
+      - name: Apply test fixture corrections
+        run: |
+          git -C repo apply --recount --verbose --check ../automation/.ci/pr103-test-fixtures.patch
+          git -C repo apply --recount --verbose ../automation/.ci/pr103-test-fixtures.patch
+          git -C repo diff --check
+
+      - name: Confirm RED regressions still fail
         working-directory: repo
         run: |
           set +e
@@ -54,6 +60,14 @@ jobs:
             exit 1
           fi
           echo "RED confirmed with pytest exit code $status"
+
+      - name: Create test-fixture RED commit locally
+        working-directory: repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_changes.py tests/test_manager_intent_rollups.py tests/test_report_canonical_sources.py
+          git commit -m "test: align fixtures with complete snapshots"
 
       - name: Apply minimal GREEN patch
         run: |
@@ -97,8 +111,6 @@ jobs:
       - name: Commit and push GREEN implementation
         working-directory: repo
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add scripts/db.py scripts/changes.py scripts/manager_intent.py scripts/report.py scripts/etf_universe.py
           git commit -m "fix: align canonical snapshots and historical windows"
           git push origin HEAD:fix/90-canonical-snapshot-followups
