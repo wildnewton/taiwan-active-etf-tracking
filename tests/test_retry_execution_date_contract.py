@@ -8,6 +8,7 @@ import pipeline
 import retry_stale_scrapes
 
 
+# A historical holdings target must not replace today's execution identity.
 EXECUTION_DATE = date(2026, 7, 17)
 TARGET_DATE = date(2026, 7, 10)
 
