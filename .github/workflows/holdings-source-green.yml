@@ -29,8 +29,44 @@ jobs:
           RESULT=holdings-green-result.txt
           : > "$RESULT"
 
-          sed -i 's/"def detect_holding_changes(\\n"/"def detect_holding_changes("/' scripts/_apply_holdings_source_green.py
-          sed -i 's/text\[end_index:\]/text[end_index + len(end):]/' scripts/_apply_holdings_source_green.py
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("scripts/_apply_holdings_source_green.py")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              'return text[:start_index] + replacement + text[end_index:]',
+              'return text[:start_index] + replacement + text[end_index + len(end):]',
+          )
+          text = text.replace(
+              '"def detect_holding_changes(\\n",',
+              '"def detect_holding_changes(",',
+          )
+          old = '''text = replace_between(
+              text,
+              '_USABLE_SCRAPE_STATUSES = {"success", "stale"}\\n',
+              "def get_last_scrape_date(etf_code):\\n",
+              "",
+              "remove scrape persistence helpers",
+          )
+          # get_last_scrape_date is the final function in the file.
+          last_marker = "def get_last_scrape_date(etf_code):\\n"
+          index = text.find(last_marker)
+          if index < 0:
+              raise RuntimeError("remove get_last_scrape_date: marker not found")
+          text = text[:index].rstrip() + "\\n"
+          write(path, text)
+          '''
+          new = '''scrape_tail = text.find('_USABLE_SCRAPE_STATUSES = {"success", "stale"}\\n')
+          if scrape_tail < 0:
+              raise RuntimeError("scrape persistence tail marker not found")
+          text = text[:scrape_tail].rstrip() + "\\n"
+          write(path, text)
+          '''
+          if text.count(old) != 1:
+              raise RuntimeError(f"scrape tail helper block matches: {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
 
           echo "=== APPLY ===" >> "$RESULT"
           python scripts/_apply_holdings_source_green.py >> "$RESULT" 2>&1
