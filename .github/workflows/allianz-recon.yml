@@ -1,0 +1,80 @@
+name: Allianz Recon
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+      - name: Inspect Allianz page
+        run: |
+          python - <<'PY'
+          import asyncio
+          import json
+          from playwright.async_api import async_playwright
+
+          URL = "https://etf.allianzgi.com.tw/list-trade"
+
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True)
+                  page = await browser.new_page(locale="zh-TW")
+                  responses = []
+
+                  async def capture(response):
+                      url = response.url
+                      ctype = (response.headers.get("content-type") or "").lower()
+                      if "allianzgi.com.tw" not in url:
+                          return
+                      item = {"url": url, "status": response.status, "content_type": ctype}
+                      if "json" in ctype or "/api/" in url.lower():
+                          try:
+                              text = await response.text()
+                              item["body"] = text[:12000]
+                          except Exception as exc:
+                              item["body_error"] = repr(exc)
+                      responses.append(item)
+
+                  page.on("response", capture)
+                  await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
+                  await page.wait_for_timeout(8000)
+
+                  print("=== TITLE ===")
+                  print(await page.title())
+                  print("=== URL ===")
+                  print(page.url)
+                  print("=== SELECTS ===")
+                  print(json.dumps(await page.locator("select").evaluate_all("els => els.map(e => ({name:e.name,id:e.id,value:e.value,html:e.outerHTML}))"), ensure_ascii=False, indent=2)[:30000])
+                  print("=== BUTTON/LINK/TAB TEXT ===")
+                  items = await page.locator("button, a, [role=tab], [role=option]").evaluate_all("els => els.map(e => ({tag:e.tagName,text:(e.innerText||e.textContent||'').trim(),aria:e.getAttribute('aria-label'),value:e.getAttribute('value'),href:e.getAttribute('href')})).filter(x => x.text || x.aria || x.value)")
+                  print(json.dumps(items, ensure_ascii=False, indent=2)[:30000])
+                  print("=== BODY TEXT ===")
+                  print((await page.locator("body").inner_text())[:30000])
+                  print("=== RESPONSES ===")
+                  print(json.dumps(responses, ensure_ascii=False, indent=2)[:100000])
+                  await page.screenshot(path="allianz-page.png", full_page=True)
+                  await browser.close()
+
+          asyncio.run(main())
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allianz-recon
+          path: allianz-page.png
