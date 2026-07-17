@@ -1,0 +1,161 @@
+name: Issue 99 review fix
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    if: github.head_ref == 'automation-issue99-review-fix'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out automation branch
+        uses: actions/checkout@v4
+
+      - name: Check out target branch
+        uses: actions/checkout@v4
+        with:
+          ref: issue-99-api-response-method
+          path: target
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r target/requirements.txt
+          pip install pytest pytest-asyncio
+
+      - name: Decode patch script
+        run: |
+          base64 -d .github/issue99_review_fix.py.gz.b64 | gzip -d > /tmp/issue99_review_fix.py
+          python -m py_compile /tmp/issue99_review_fix.py
+
+      - name: Configure Git
+        working-directory: target
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Create and verify RED commit
+        shell: bash
+        run: |
+          set -o pipefail
+          python /tmp/issue99_review_fix.py target red
+          python /tmp/issue99_review_fix.py target commit-red
+          cd target
+          set +e
+          PYTHONPATH=. pytest -q tests/test_official_response_safety.py 2>&1 | tee ../red.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo 'RED tests unexpectedly passed' >&2
+            exit 1
+          fi
+          git rev-parse HEAD > ../red-sha.txt
+
+      - name: Create GREEN commit
+        run: |
+          python /tmp/issue99_review_fix.py target green
+          python /tmp/issue99_review_fix.py target commit-green
+          git -C target rev-parse HEAD > green-sha.txt
+
+      - name: Run targeted tests
+        shell: bash
+        working-directory: target
+        run: |
+          set -o pipefail
+          PYTHONPATH=. pytest -q \
+            tests/test_official_response_safety.py \
+            tests/test_official_response_contracts.py \
+            tests/test_official_playwright_waits.py \
+            tests/test_ctbc_official_regressions.py \
+            tests/test_official.py \
+            tests/test_allianz_official.py \
+            2>&1 | tee ../targeted.log
+
+      - name: Run full suite
+        shell: bash
+        working-directory: target
+        run: |
+          set -o pipefail
+          PYTHONPATH=. pytest -q 2>&1 | tee ../full.log
+
+      - name: Install Chromium
+        working-directory: target
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run Capital and Nomura live smoke
+        shell: bash
+        working-directory: target
+        run: |
+          set -o pipefail
+          PYTHONPATH=scripts python - <<'PY' 2>&1 | tee ../live.log
+          import asyncio
+          import json
+
+          from playwright.async_api import async_playwright
+          from scrapers.official import scrape_capital_playwright, scrape_nomura_stealth
+
+          async def main():
+              async with async_playwright() as playwright:
+                  browser = await playwright.chromium.launch(headless=True)
+                  context = await browser.new_context(locale='zh-TW')
+                  try:
+                      checks = [
+                          ('00982A', scrape_capital_playwright),
+                          ('00980A', scrape_nomura_stealth),
+                      ]
+                      for code, scraper in checks:
+                          page = await context.new_page()
+                          try:
+                              result = await scraper(code, page)
+                          finally:
+                              await page.close()
+                          summary = {
+                              'code': code,
+                              'ok': result.get('ok'),
+                              'reason': result.get('reason'),
+                              'rows': len(result.get('stock_rows') or []),
+                              'method': (
+                                  (result.get('stock_rows') or [{}])[0].get('extraction_method')
+                                  if result.get('stock_rows')
+                                  else None
+                              ),
+                          }
+                          print(json.dumps(summary, ensure_ascii=False))
+                          assert result.get('ok') is True, summary
+                          assert summary['rows'] > 0, summary
+                  finally:
+                      await context.close()
+                      await browser.close()
+
+          asyncio.run(main())
+          PY
+
+      - name: Push RED and GREEN commits
+        working-directory: target
+        run: git push origin HEAD:issue-99-api-response-method
+
+      - name: Upload verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue99-review-fix
+          path: |
+            red.log
+            targeted.log
+            full.log
+            live.log
+            red-sha.txt
+            green-sha.txt
