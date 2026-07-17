@@ -1,4 +1,4 @@
-name: Verify PR90 green staging
+name: Assemble PR90 green staging
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - tmp/pr90-green-staging
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  verify:
+  assemble:
     runs-on: ubuntu-latest
     steps:
       - name: Check out staging branch
@@ -17,14 +17,12 @@ jobs:
         with:
           ref: tmp/pr90-green-staging
           fetch-depth: 0
-          persist-credentials: false
 
       - name: Apply staged patches
         shell: bash
         run: |
           set -euo pipefail
           for patch in $(find .github/green-patches -type f -name '*.patch' | sort); do
-            echo "Applying ${patch}"
             git apply --check "${patch}"
             git apply "${patch}"
           done
@@ -48,21 +46,8 @@ jobs:
           git diff --check
           PYTHONPATH=. pytest -q
 
-      - name: Record desired tree
-        run: |
-          git add -A
-          git write-tree > /tmp/desired-tree-sha.txt
-          git rev-parse 43289843e904eb50e9fc0ad98e0eda02ff93d735^{tree} > /tmp/red-tree-sha.txt
-
-      - name: Package verified working tree
-        run: tar -czf /tmp/verified-green-source.tar.gz .
-
-      - name: Upload verified working tree
-        uses: actions/upload-artifact@v4
+      - name: Commit verified tree
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          name: verified-green-source
-          path: |
-            /tmp/verified-green-source.tar.gz
-            /tmp/desired-tree-sha.txt
-            /tmp/red-tree-sha.txt
-          retention-days: 1
+          commit_message: fix: unify historical universe and snapshot completeness
+          branch: tmp/pr90-green-staging
