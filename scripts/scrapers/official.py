@@ -709,15 +709,23 @@ def _response_url(response) -> str:
     return url if isinstance(url, str) else ""
 
 
-def _is_successful_get_response(response) -> bool:
-    if getattr(response, "ok", True) is False:
+def _has_expected_response_method(response, expected_method: str) -> bool:
+    if getattr(response, "ok", False) is not True:
         return False
     request = getattr(response, "request", None)
-    method = getattr(request, "method", "GET")
-    return not isinstance(method, str) or method.upper() == "GET"
+    method = getattr(request, "method", None)
+    return (
+        isinstance(method, str)
+        and method.upper() == expected_method.upper()
+    )
 
 
-def _matches_api_endpoint(response, domain: str, path: str) -> bool:
+def _matches_api_endpoint(
+    response,
+    domain: str,
+    path: str,
+    expected_method: str,
+) -> bool:
     parsed = urlparse(_response_url(response))
     hostname = (parsed.hostname or "").lower()
     response_path = parsed.path.rstrip("/").lower()
@@ -728,7 +736,7 @@ def _matches_api_endpoint(response, domain: str, path: str) -> bool:
     return (
         host_matches
         and response_path == path.lower()
-        and _is_successful_get_response(response)
+        and _has_expected_response_method(response, expected_method)
     )
 
 
@@ -737,6 +745,7 @@ def _is_capital_buyback_response(response) -> bool:
         response,
         "capitalfund.com.tw",
         "/cfweb/api/etf/buyback",
+        "POST",
     )
 
 
@@ -745,6 +754,7 @@ def _is_nomura_assets_response(response) -> bool:
         response,
         "nomurafunds.com.tw",
         "/api/etfapi/api/fund/getfundassets",
+        "POST",
     )
 
 
@@ -753,6 +763,7 @@ def _is_ctbc_holdings_response(response) -> bool:
         response,
         "ctbcinvestments.com.tw",
         "/api/etf/etfholdingweight",
+        "GET",
     )
 
 

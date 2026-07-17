@@ -564,9 +564,11 @@ def test_scrape_official_static_falls_back_to_twse():
 
 
 def _make_mock_response(url: str, body: str):
-    """Create a mock Playwright Response with async .text()."""
+    """Create a mock Playwright POST response with async .text()."""
     resp = AsyncMock()
     resp.url = url
+    resp.ok = True
+    resp.request.method = "POST"
     resp.text.return_value = body
     return resp
 
