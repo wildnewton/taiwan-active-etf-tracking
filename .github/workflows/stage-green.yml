@@ -1,0 +1,68 @@
+name: Verify PR90 green staging
+
+on:
+  push:
+    branches:
+      - tmp/pr90-green-staging
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: tmp/pr90-green-staging
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Apply staged patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for patch in $(find .github/green-patches -type f -name '*.patch' | sort); do
+            echo "Applying ${patch}"
+            git apply --check "${patch}"
+            git apply "${patch}"
+          done
+          rm -rf .github/green-patches
+          rm -f .github/workflows/stage-green.yml
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
+      - name: Verify implementation
+        run: |
+          python -m compileall -q scripts tests
+          git diff --check
+          PYTHONPATH=. pytest -q
+
+      - name: Record desired tree
+        run: |
+          git add -A
+          git write-tree > /tmp/desired-tree-sha.txt
+          git rev-parse 43289843e904eb50e9fc0ad98e0eda02ff93d735^{tree} > /tmp/red-tree-sha.txt
+
+      - name: Package verified working tree
+        run: tar -czf /tmp/verified-green-source.tar.gz .
+
+      - name: Upload verified working tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-green-source
+          path: |
+            /tmp/verified-green-source.tar.gz
+            /tmp/desired-tree-sha.txt
+            /tmp/red-tree-sha.txt
+          retention-days: 1
