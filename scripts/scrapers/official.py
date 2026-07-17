@@ -343,12 +343,7 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     except Exception as exc:
         return _failed_result(source_url, f"CTBC API parse error: {exc}")
 
-    result = _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
-    if result["ok"] is not True:
-        return result
-    if _single_source_date(all_rows) is None:
-        return _failed_result(source_url, "CTBC holdings date missing or inconsistent")
-    return result
+    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
 async def scrape_mega_playwright(etf_code: str, page) -> dict:
@@ -461,8 +456,10 @@ def _response_url(response) -> str:
 
 
 def _is_capital_buyback_response(response) -> bool:
-    url = _response_url(response).lower()
-    return "capitalfund" in url and "buyback" in url
+    parsed = urlparse(_response_url(response))
+    hostname = (parsed.hostname or "").lower()
+    path = parsed.path.rstrip("/").lower()
+    return hostname.endswith("capitalfund.com.tw") and path == "/cfweb/api/etf/buyback"
 
 
 def _is_nomura_assets_response(response) -> bool:
@@ -678,6 +675,8 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
         stock_name = row.get("stock_name")
         if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
             return False, "invalid Taiwan stock row"
+    if _single_source_date(rows) is None:
+        return False, "missing or inconsistent source date"
     return True, "ok"
 
 
