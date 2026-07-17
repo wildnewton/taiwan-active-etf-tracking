@@ -27,47 +27,75 @@ jobs:
           python - <<'PY' | tee allianz-recon.txt
           import asyncio
           import json
+          import re
           from playwright.async_api import async_playwright
 
           URL = "https://etf.allianzgi.com.tw/list-trade"
+          TRADE_ENDPOINT = "/webapi/api/Fund/GetFundTradeInfo"
 
           async def main():
               async with async_playwright() as p:
                   browser = await p.chromium.launch(headless=True)
                   page = await browser.new_page(locale="zh-TW")
+                  requests = []
                   responses = []
 
-                  async def capture(response):
+                  def capture_request(request):
+                      if "allianzgi.com.tw/webapi/api" not in request.url:
+                          return
+                      requests.append({
+                          "url": request.url,
+                          "method": request.method,
+                          "post_data": request.post_data,
+                          "headers": {k: v for k, v in request.headers.items() if k.lower() in {"content-type", "requestverificationtoken", "x-requested-with"}},
+                      })
+
+                  async def capture_response(response):
                       url = response.url
                       ctype = (response.headers.get("content-type") or "").lower()
-                      if "allianzgi.com.tw" not in url:
+                      if "allianzgi.com.tw/webapi/api" not in url:
                           return
                       item = {"url": url, "status": response.status, "content_type": ctype}
                       if "json" in ctype or "/api/" in url.lower():
                           try:
                               text = await response.text()
-                              item["body"] = text[:12000]
+                              item["body"] = text[:50000]
                           except Exception as exc:
                               item["body_error"] = repr(exc)
                       responses.append(item)
 
-                  page.on("response", capture)
+                  page.on("request", capture_request)
+                  page.on("response", capture_response)
                   await page.goto(URL, wait_until="domcontentloaded", timeout=60000)
-                  await page.wait_for_timeout(8000)
+                  await page.wait_for_timeout(5000)
 
-                  print("=== TITLE ===")
-                  print(await page.title())
-                  print("=== URL ===")
-                  print(page.url)
-                  print("=== SELECTS ===")
-                  print(json.dumps(await page.locator("select").evaluate_all("els => els.map(e => ({name:e.name,id:e.id,value:e.value,html:e.outerHTML}))"), ensure_ascii=False, indent=2)[:30000])
-                  print("=== BUTTON/LINK/TAB TEXT ===")
-                  items = await page.locator("button, a, [role=tab], [role=option]").evaluate_all("els => els.map(e => ({tag:e.tagName,text:(e.innerText||e.textContent||'').trim(),aria:e.getAttribute('aria-label'),value:e.getAttribute('value'),href:e.getAttribute('href')})).filter(x => x.text || x.aria || x.value)")
-                  print(json.dumps(items, ensure_ascii=False, indent=2)[:30000])
-                  print("=== BODY TEXT ===")
-                  print((await page.locator("body").inner_text())[:30000])
+                  current = page.get_by_text(re.compile(r"^00984A\s+主動安聯台灣高息$"))
+                  print("=== CURRENT MATCHES ===", await current.count())
+                  if await current.count():
+                      print((await current.first.evaluate("e => e.parentElement ? e.parentElement.outerHTML : e.outerHTML"))[:20000])
+                      await current.first.click()
+                      await page.wait_for_timeout(500)
+
+                  option = page.get_by_text(re.compile(r"^00993A\s+主動安聯台灣$"))
+                  print("=== 00993A MATCHES ===", await option.count())
+                  for index in range(await option.count()):
+                      print((await option.nth(index).evaluate("e => e.parentElement ? e.parentElement.outerHTML : e.outerHTML"))[:10000])
+
+                  if await option.count():
+                      async with page.expect_response(lambda r: TRADE_ENDPOINT in r.url, timeout=15000) as response_info:
+                          await option.last.click()
+                      response = await response_info.value
+                      print("=== SWITCH RESPONSE URL ===", response.url)
+                      print("=== SWITCH RESPONSE BODY ===")
+                      print((await response.text())[:100000])
+                      await page.wait_for_timeout(1000)
+
+                  print("=== FINAL BODY HEAD ===")
+                  print((await page.locator("body").inner_text())[:5000])
+                  print("=== REQUESTS ===")
+                  print(json.dumps(requests, ensure_ascii=False, indent=2))
                   print("=== RESPONSES ===")
-                  print(json.dumps(responses, ensure_ascii=False, indent=2)[:100000])
+                  print(json.dumps(responses, ensure_ascii=False, indent=2)[:150000])
                   await page.screenshot(path="allianz-page.png", full_page=True)
                   await browser.close()
 
