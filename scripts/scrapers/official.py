@@ -8,10 +8,13 @@ validation.
 
 import json
 import re
+from datetime import datetime
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from config import get_etf_config
 from scrapers.moneydj import classify_asset, dedupe_rows, split_rows
@@ -124,7 +127,13 @@ def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list
 
 def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
     data = json.loads(assets_json)
-    fund_data = data.get("Entries", {}).get("Data", {})
+    entries = data.get("Entries", {}) if isinstance(data, dict) else {}
+    fund_id = entries.get("FundID") if isinstance(entries, dict) else None
+    if fund_id and str(fund_id).strip().upper() != etf_code.upper():
+        raise ValueError(
+            f"Nomura fund mismatch: expected {etf_code.upper()}, got {fund_id}"
+        )
+    fund_data = entries.get("Data", {}) if isinstance(entries, dict) else {}
     nav_date = fund_data.get("FundAsset", {}).get("NavDate")
     date = _normalize_date(nav_date)
 
@@ -153,6 +162,45 @@ def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[d
                 )
             )
     return rows
+
+
+def parse_ctbc_api(api_json: str, etf_code: str, source_url: str) -> list[dict]:
+    data = json.loads(api_json)
+    payload = data.get("Data", {}) if isinstance(data, dict) else {}
+    assets = payload.get("FundAssets", []) if isinstance(payload, dict) else []
+    date = None
+    if assets and isinstance(assets[0], dict):
+        date = assets[0].get("資料日期")
+    date = _normalize_date(date)
+
+    rows = []
+    details = payload.get("FundAssetsDetail", []) if isinstance(payload, dict) else []
+    for group in details:
+        if not isinstance(group, dict) or str(group.get("Code") or "").upper() != "STOCK":
+            continue
+        for item in group.get("Data", []):
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get("code_") or "").strip()
+            name = str(item.get("name_") or "").strip()
+            shares = _parse_float(str(item.get("qty_") or ""))
+            weight = _parse_float(str(item.get("weights_") or ""))
+            code_match = re.search(r"\b(\d{4})\b", code)
+            if not code_match or not name or weight is None:
+                continue
+            rows.append(
+                _row(
+                    etf_code,
+                    code_match.group(1),
+                    name,
+                    shares,
+                    weight,
+                    source_url,
+                    date,
+                    EXTRACTION_METHOD_API,
+                )
+            )
+    return dedupe_rows(rows)
 
 
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
@@ -214,33 +262,28 @@ async def scrape_capital_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
-    buyback_body = None
+    navigation_completed = False
 
-    async def on_response(response):
-        nonlocal buyback_body
-        if _is_capital_buyback_response(response):
-            try:
-                buyback_body = await response.text()
-            except Exception:
-                pass
-
-    page.on("response", on_response)
     try:
-        await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
-        if not buyback_body:
-            try:
-                response = await page.wait_for_response(
-                    _is_capital_buyback_response,
-                    timeout=_API_RESPONSE_TIMEOUT_MS,
-                )
-                if not buyback_body and _is_capital_buyback_response(response):
-                    buyback_body = await response.text()
-            except Exception:
-                pass
-    finally:
-        page.remove_listener("response", on_response)
+        async with page.expect_response(
+            _is_capital_buyback_response,
+            timeout=_API_RESPONSE_TIMEOUT_MS,
+        ) as response_info:
+            await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
+        response = await response_info.value
+    except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
+        return _failed_result(source_url, "Capital buyback API not intercepted")
+    except PlaywrightError:
+        if not navigation_completed:
+            raise
+        return _failed_result(source_url, "Capital buyback API not intercepted")
 
-    if not buyback_body:
+    try:
+        buyback_body = await response.text()
+    except Exception:
         return _failed_result(source_url, "Capital buyback API not intercepted")
 
     try:
@@ -255,37 +298,71 @@ async def scrape_nomura_stealth(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
-    assets_body = None
+    navigation_completed = False
 
-    async def on_response(response):
-        nonlocal assets_body
-        if _is_nomura_assets_response(response):
-            try:
-                assets_body = await response.text()
-            except Exception:
-                pass
-
-    page.on("response", on_response)
     try:
-        await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
-        if not assets_body:
-            try:
-                response = await page.wait_for_response(
-                    _is_nomura_assets_response,
-                    timeout=_API_RESPONSE_TIMEOUT_MS,
-                )
-                if not assets_body and _is_nomura_assets_response(response):
-                    assets_body = await response.text()
-            except Exception:
-                pass
-    finally:
-        page.remove_listener("response", on_response)
-
-    if not assets_body:
+        async with page.expect_response(
+            _is_nomura_assets_response,
+            timeout=_API_RESPONSE_TIMEOUT_MS,
+        ) as response_info:
+            await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
+        response = await response_info.value
+    except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
+        return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
+    except PlaywrightError:
+        if not navigation_completed:
+            raise
         return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
 
-    all_rows = dedupe_rows(parse_nomura_api(assets_body, etf_code, source_url))
+    try:
+        assets_body = await response.text()
+    except Exception:
+        return _failed_result(source_url, "Nomura GetFundAssets API not intercepted")
+
+    try:
+        all_rows = dedupe_rows(parse_nomura_api(assets_body, etf_code, source_url))
+    except Exception as exc:
+        return _failed_result(source_url, f"Nomura API parse error: {exc}")
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_STEALTH)
+
+
+async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
+    etf_code = etf_code.upper()
+    config = get_official_config(etf_code)
+    source_url = config["url"]
+    navigation_completed = False
+
+    try:
+        async with page.expect_response(
+            _is_ctbc_holdings_response,
+            timeout=_API_RESPONSE_TIMEOUT_MS,
+        ) as response_info:
+            await page.goto(source_url, wait_until="domcontentloaded", timeout=60000)
+            navigation_completed = True
+        response = await response_info.value
+    except PlaywrightTimeoutError:
+        if not navigation_completed:
+            raise
+        return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
+    except PlaywrightError:
+        if not navigation_completed:
+            raise
+        return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
+
+    try:
+        holdings_body = await response.text()
+    except Exception:
+        return _failed_result(source_url, "CTBC ETFHoldingWeight API not intercepted")
+
+    try:
+        all_rows = dedupe_rows(parse_ctbc_api(holdings_body, etf_code, source_url))
+    except Exception as exc:
+        return _failed_result(source_url, f"CTBC API parse error: {exc}")
+
+    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
 async def scrape_mega_playwright(etf_code: str, page) -> dict:
@@ -380,6 +457,8 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
         return await scrape_capital_playwright(etf_code, page)
     if method == "stealth_api" and issuer == "Nomura":
         return await scrape_nomura_stealth(etf_code, page)
+    if method == "browser" and issuer == "CTBC":
+        return await scrape_ctbc_playwright(etf_code, page)
     if method == "playwright" and issuer == "Mega":
         return await scrape_mega_playwright(etf_code, page)
     if method == "playwright" and issuer == "Uni-President":
@@ -395,13 +474,51 @@ def _response_url(response) -> str:
     return url if isinstance(url, str) else ""
 
 
+def _is_successful_get_response(response) -> bool:
+    if getattr(response, "ok", True) is False:
+        return False
+    request = getattr(response, "request", None)
+    method = getattr(request, "method", "GET")
+    return not isinstance(method, str) or method.upper() == "GET"
+
+
+def _matches_api_endpoint(response, domain: str, path: str) -> bool:
+    parsed = urlparse(_response_url(response))
+    hostname = (parsed.hostname or "").lower()
+    response_path = parsed.path.rstrip("/").lower()
+    expected_domain = domain.lower()
+    host_matches = hostname == expected_domain or hostname.endswith(
+        f".{expected_domain}"
+    )
+    return (
+        host_matches
+        and response_path == path.lower()
+        and _is_successful_get_response(response)
+    )
+
+
 def _is_capital_buyback_response(response) -> bool:
-    url = _response_url(response).lower()
-    return "capitalfund" in url and "buyback" in url
+    return _matches_api_endpoint(
+        response,
+        "capitalfund.com.tw",
+        "/cfweb/api/etf/buyback",
+    )
 
 
 def _is_nomura_assets_response(response) -> bool:
-    return "getfundassets" in _response_url(response).lower()
+    return _matches_api_endpoint(
+        response,
+        "nomurafunds.com.tw",
+        "/api/etfapi/api/fund/getfundassets",
+    )
+
+
+def _is_ctbc_holdings_response(response) -> bool:
+    return _matches_api_endpoint(
+        response,
+        "ctbcinvestments.com.tw",
+        "/api/etf/etfholdingweight",
+    )
 
 
 async def _uni_president_portfolio_pane_text(table) -> str:
@@ -609,7 +726,24 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
         stock_name = row.get("stock_name")
         if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
             return False, "invalid Taiwan stock row"
+    if _single_source_date(rows) is None:
+        return False, "missing or inconsistent source date"
     return True, "ok"
+
+
+def _single_source_date(rows: list):
+    parsed_dates = set()
+    for row in rows:
+        value = row.get("date")
+        if not value:
+            return None
+        try:
+            parsed_dates.add(datetime.strptime(str(value), "%Y/%m/%d").date())
+        except ValueError:
+            return None
+    if len(parsed_dates) != 1:
+        return None
+    return next(iter(parsed_dates))
 
 
 def _failed_result(source_url: str, reason: str) -> dict:
