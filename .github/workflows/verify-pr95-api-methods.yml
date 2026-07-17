@@ -1,0 +1,38 @@
+name: Verify PR95 API methods
+
+on:
+  pull_request:
+    branches:
+      - issue-72-allianz-official-fallback
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Playwright
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Capture API request methods
+        run: python tools/verify_pr95_api_methods.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr95-api-methods
+          path: /tmp/pr95-api-methods.json
