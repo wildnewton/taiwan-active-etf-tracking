@@ -1,4 +1,4 @@
-name: Assemble verified PR90 tree
+name: Apply PR90 fresh-review fix
 
 on:
   pull_request:
@@ -9,27 +9,90 @@ permissions:
   contents: write
 
 jobs:
-  assemble:
+  fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out assembly head
+      - name: Check out PR90 head
         uses: actions/checkout@v4
         with:
-          ref: ci-pr90-green-assemble
+          ref: fix/73-stale-scrape-status
           fetch-depth: 0
-      - name: Apply verified patches and remove helpers
-        shell: bash
+      - name: Apply minimal production fix
         run: |
-          set -euo pipefail
-          git fetch origin main
-          for patch in $(find .github/green-patches -type f -name '*.patch' | sort); do
-            git apply --check "${patch}"
-            git apply "${patch}"
-          done
-          rm -rf .github/green-patches
-          rm -f .github/workflows/stage-green.yml
-          rm -f .github/assemble-trigger.txt
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/db.py')
+          source = path.read_text(encoding='utf-8')
+          old = '''        existing_entries = _existing_snapshot_entries(conn, *snapshot_key)
+                  existing_best = _best_snapshot_entry(existing_entries)
+                  if existing_best and existing_best["source_type"] != source_type:
+                      incoming_key = _snapshot_sort_key(incoming)
+                      existing_key = _snapshot_sort_key(existing_best)
+                      if incoming_key < existing_key:
+                          _delete_snapshot_sources_except(conn, *snapshot_key, existing_best["source_type"])
+                          return {
+                              "inserted": False,
+                              "reason": "existing_higher_priority_source_preserved",
+                              "preserved_source_type": existing_best["source_type"],
+                              "incoming_source_type": source_type,
+                          }
+          '''
+          new = '''        existing_entries = _existing_snapshot_entries(conn, *snapshot_key)
+                  existing_best = _best_snapshot_entry(existing_entries)
+                  if existing_best:
+                      same_source = existing_best["source_type"] == source_type
+                      existing_complete = _snapshot_is_complete(existing_best)
+                      incoming_complete = _snapshot_is_complete(incoming)
+                      if same_source and existing_complete and not incoming_complete:
+                          return {
+                              "inserted": False,
+                              "reason": "existing_complete_snapshot_preserved",
+                              "preserved_source_type": existing_best["source_type"],
+                              "incoming_source_type": source_type,
+                          }
+                      if not same_source and _snapshot_sort_key(incoming) < _snapshot_sort_key(existing_best):
+                          _delete_snapshot_sources_except(conn, *snapshot_key, existing_best["source_type"])
+                          return {
+                              "inserted": False,
+                              "reason": "existing_higher_priority_source_preserved",
+                              "preserved_source_type": existing_best["source_type"],
+                              "incoming_source_type": source_type,
+                          }
+          '''
+          if old not in source:
+              raise SystemExit('snapshot replacement block not found')
+          source = source.replace(old, new)
+
+          old = '''def _snapshot_sort_key(entry):
+              total_weight = entry.get("total_weight") or 0.0
+              stock_count = entry.get("stock_count") or 0
+              complete = (
+                  stock_count > 0
+                  and abs(total_weight - 100.0) < _SNAPSHOT_WEIGHT_TOLERANCE
+              )
+              return (
+                  1 if complete else 0,
+          '''
+          new = '''def _snapshot_is_complete(entry):
+              total_weight = entry.get("total_weight") or 0.0
+              stock_count = entry.get("stock_count") or 0
+              return (
+                  stock_count > 0
+                  and abs(total_weight - 100.0) < _SNAPSHOT_WEIGHT_TOLERANCE
+              )
+
+
+          def _snapshot_sort_key(entry):
+              stock_count = entry.get("stock_count") or 0
+              return (
+                  1 if _snapshot_is_complete(entry) else 0,
+          '''
+          if old not in source:
+              raise SystemExit('snapshot sort block not found')
+          path.write_text(source.replace(old, new), encoding='utf-8')
+          PY
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -39,15 +102,22 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
-      - name: Verify final tree
+      - name: Run targeted tests
+        run: |
+          PYTHONPATH=. pytest -q \
+            tests/test_snapshot_same_source_integrity.py \
+            tests/test_daily_snapshot_replacement.py \
+            tests/test_historical_universe_and_snapshot_integrity.py \
+            tests/test_holdings_source_of_truth.py
+      - name: Run full suite
         run: |
           python -m compileall -q scripts tests
           git diff --check
           PYTHONPATH=. pytest -q
-      - name: Commit verified tree
+      - name: Commit GREEN
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m 'fix: unify historical universe and snapshot completeness'
-          git push origin HEAD:ci-pr90-green-assemble
+          git add scripts/db.py
+          git commit -m 'fix: preserve complete same-source snapshots'
+          git push origin HEAD:fix/73-stale-scrape-status
