@@ -64,6 +64,7 @@ jobs:
       - name: Run targeted tests
         working-directory: repo
         run: |
+          set +e
           PYTHONPATH=. pytest -q \
             tests/test_pr90_review_followups.py \
             tests/test_historical_universe_and_snapshot_integrity.py \
@@ -74,7 +75,20 @@ jobs:
             tests/test_manager_intent_rollups.py \
             tests/test_report_canonical_sources.py \
             tests/test_signal_report.py \
-            tests/test_etf_universe.py
+            tests/test_etf_universe.py 2>&1 | tee /tmp/pr103-targeted.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+
+      - name: Upload diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr103-test-logs-${{ github.run_id }}
+          path: |
+            /tmp/pr103-red.log
+            /tmp/pr103-targeted.log
+          if-no-files-found: warn
 
       - name: Run full test suite
         working-directory: repo
