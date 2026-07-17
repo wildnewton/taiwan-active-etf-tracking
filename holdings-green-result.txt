@@ -1,6 +1,7 @@
 === APPLY ===
 Applied holdings-source-of-truth GREEN changes
 Applied holdings-source consumer cleanup
+Applied final targeted holdings fixes
 === REMAINING REFERENCES ===
 scripts/_apply_holdings_source_green.py:45:    '''        conn.execute("CREATE TABLE IF NOT EXISTS etf_scrape_runs (date TEXT NOT NULL, data_date TEXT, etf_code TEXT NOT NULL, status TEXT NOT NULL, primary_source TEXT NOT NULL, primary_success INTEGER NOT NULL, moneydj_browser_used INTEGER NOT NULL, official_fallback_used INTEGER NOT NULL, official_success INTEGER NOT NULL, rows_extracted INTEGER NOT NULL, stock_rows_extracted INTEGER NOT NULL, non_stock_rows_extracted INTEGER NOT NULL, total_weight_all_rows REAL NOT NULL, total_weight_stock_rows REAL NOT NULL, source_url TEXT, error TEXT, started_at TEXT NOT NULL, finished_at TEXT, PRIMARY KEY (date, etf_code))")
 scripts/_apply_holdings_source_green.py:50:        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
@@ -183,11 +184,11 @@ Downloading idna-3.18-py3-none-any.whl (65 kB)
 Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
 Downloading beautifulsoup4-4.15.0-py3-none-any.whl (109 kB)
 Downloading lxml-6.1.1-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 54.4 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 132.1 MB/s  0:00:00
 Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl (47.4 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 76.7 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 217.9 MB/s  0:00:00
 Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (617 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 93.8 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 119.4 MB/s  0:00:00
 Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
 Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
 Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
@@ -195,57 +196,283 @@ Downloading certifi-2026.6.17-py3-none-any.whl (133 kB)
 Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
 Downloading packaging-26.2-py3-none-any.whl (100 kB)
 Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 55.9 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 240.5 MB/s  0:00:00
 Downloading soupsieve-2.8.4-py3-none-any.whl (37 kB)
 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
 Installing collected packages: urllib3, typing-extensions, soupsieve, pygments, pluggy, packaging, lxml, iniconfig, idna, greenlet, charset_normalizer, certifi, requests, pytest, pyee, beautifulsoup4, playwright
 
 Successfully installed beautifulsoup4-4.15.0 certifi-2026.6.17 charset_normalizer-3.4.9 greenlet-3.5.3 idna-3.18 iniconfig-2.3.0 lxml-6.1.1 packaging-26.2 playwright-1.61.0 pluggy-1.6.0 pyee-13.0.1 pygments-2.20.0 pytest-9.1.1 requests-2.34.2 soupsieve-2.8.4 typing-extensions-4.16.0 urllib3-2.7.0
 === TARGETED ===
-..........................F...F...........                               [100%]
-=================================== FAILURES ===================================
-____________ test_generate_signal_report_uses_latest_holdings_date _____________
+..........................................                               [100%]
+42 passed in 0.79s
+=== FULL ===
 
-    def test_generate_signal_report_uses_latest_holdings_date():
-        """Report should use latest holdings date."""
-        db.init_db(":memory:")
-        ensure_signal_table()
-    
-        # Insert holdings for two dates
-        insert_holding("2026-06-21", "00980A", "2330", "台積電", 10.0)
-        insert_holding("2026-06-23", "00980A", "2383", "台光電", 5.0)
-        insert_signal(date="2026-06-21", stock_code="2330", stock_name="台積電")
-        insert_signal(date="2026-06-23", stock_code="2383", stock_name="台光電")
-    
-        report = generate_signal_report()
-    
-        # Report should mention data date from holdings (2026-06-23)
->       assert "2026-06-23" in report
-E       AssertionError: assert '2026-06-23' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: N/A\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ❌ No data\nActive ETF universe: 19 |...警告:\n  ⚠️ 無持倉資料\n\n═══ 摘要 ═══\nETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+==================================== ERRORS ====================================
+_____________ ERROR collecting tests/test_date_semantics_audit.py ______________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_date_semantics_audit.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_date_semantics_audit.py:9: in <module>
+    from models import ScrapeRun
+E   ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+__________ ERROR collecting tests/test_date_semantics_final_review.py __________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_date_semantics_final_review.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_date_semantics_final_review.py:9: in <module>
+    from retry_stale_scrapes import get_stale_scrape_runs
+E   ImportError: cannot import name 'get_stale_scrape_runs' from 'retry_stale_scrapes' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/retry_stale_scrapes.py)
+____________________ ERROR collecting tests/test_models.py _____________________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_models.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_models.py:4: in <module>
+    from models import HoldingRow, NonStockAssetRow, ScrapeResult, ScrapeRun
+E   ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+_________ ERROR collecting tests/test_pipeline_isolation_regression.py _________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_pipeline_isolation_regression.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_pipeline_isolation_regression.py:6: in <module>
+    from models import HoldingRow, ScrapeRun
+E   ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+_______ ERROR collecting tests/test_preexisting_successful_snapshots.py ________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_preexisting_successful_snapshots.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_preexisting_successful_snapshots.py:8: in <module>
+    from models import HoldingRow, ScrapeRun
+E   ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+__________ ERROR collecting tests/test_try_run_preexisting_success.py __________
+ImportError while importing test module '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_try_run_preexisting_success.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_try_run_preexisting_success.py:8: in <module>
+    from models import HoldingRow, ScrapeRun
+E   ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+=============================== warnings summary ===============================
+tests/test_bounded_async_scraping.py:92
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:92: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
 
-tests/test_signal_report.py:175: AssertionError
-__________ test_report_marks_provisional_for_missing_target_holdings ___________
+tests/test_bounded_async_scraping.py:117
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:117: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
 
-    def test_report_marks_provisional_for_missing_target_holdings():
-        db.init_db(":memory:")
-        seed_universe([
-            ("00980A", 0),
-            ("00981A", 0),
-            ("00982A", 0),
-        ])
-        insert_holding("2026-07-07", "00980A", "2330", "台積電", 85.0)
-        insert_holding("2026-07-08", "00982A", "2383", "台光電", 85.0)
-    
-        report = generate_signal_report("2026-07-08")
-    
-        assert "暫定" in report or "Provisional" in report
-        assert "缺少目標日持倉" in report
->       assert "最近可用資料日期" in report
-E       AssertionError: assert '最近可用資料日期' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: 2026-07-08\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ⚠️ Degraded\nActive ETF unive... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+tests/test_bounded_async_scraping.py:143
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:143: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
 
-tests/test_signal_report.py:241: AssertionError
+tests/test_bounded_async_scraping.py:167
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:167: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:219
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:219: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:261
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:261: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:292
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:292: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:331
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:331: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:363
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:363: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:384
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:384: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:443
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_bounded_async_scraping.py:443: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_expected_data_date_cutoff.py:141
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_expected_data_date_cutoff.py:141: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_min_weight_gate.py:157
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_min_weight_gate.py:157: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:623
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:623: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:648
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:648: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:663
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:663: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:693
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:693: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:717
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:717: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:734
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:734: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:751
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:751: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:794
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:794: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:825
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:825: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:841
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:841: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:861
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:861: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:883
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:883: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:905
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:905: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:920
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:920: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:944
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official.py:944: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:129
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:129: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:150
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:150: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:168
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:168: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:187
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:187: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:208
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:208: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:232
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:232: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:255
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:255: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:278
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:278: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:294
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_official_playwright_waits.py:294: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_pipeline.py:150
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_pipeline.py:150: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_prelisting_etfs.py:145
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_prelisting_etfs.py:145: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:74
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_scraper_freshness_target.py:74: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:93
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_scraper_freshness_target.py:93: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:111
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_scraper_freshness_target.py:111: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_selected_pipeline_retry.py:46
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_selected_pipeline_retry.py:46: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_selected_pipeline_retry.py:76
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_selected_pipeline_retry.py:76: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_tw_stock_trading_calendar.py:140
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_tw_stock_trading_calendar.py:140: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:65
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_uni_president_date.py:65: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:82
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_uni_president_date.py:82: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:98
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_uni_president_date.py:98: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_weight_validation_warnings.py:147
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_weight_validation_warnings.py:147: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
-FAILED tests/test_signal_report.py::test_generate_signal_report_uses_latest_holdings_date - AssertionError: assert '2026-06-23' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: N/A\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ❌ No data\nActive ETF universe: 19 |...警告:\n  ⚠️ 無持倉資料\n\n═══ 摘要 ═══\nETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
-FAILED tests/test_signal_report.py::test_report_marks_provisional_for_missing_target_holdings - AssertionError: assert '最近可用資料日期' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-17 09:56 CST | 資料日期: 2026-07-08\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ⚠️ Degraded\nActive ETF unive... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
-2 failed, 40 passed in 2.87s
-STATUS=1
+ERROR tests/test_date_semantics_audit.py
+ERROR tests/test_date_semantics_final_review.py
+ERROR tests/test_models.py
+ERROR tests/test_pipeline_isolation_regression.py
+ERROR tests/test_preexisting_successful_snapshots.py
+ERROR tests/test_try_run_preexisting_success.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 6 errors during collection !!!!!!!!!!!!!!!!!!!!
+49 warnings, 6 errors in 0.95s
+STATUS=2
