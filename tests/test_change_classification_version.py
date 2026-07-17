@@ -42,6 +42,25 @@ def _insert_holding(date_value, stock_code, stock_name, shares, weight_pct):
                 weight_pct,
             ),
         )
+        stock_total = conn.execute(
+            """
+            SELECT COALESCE(SUM(weight_pct), 0.0)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = 'ACTIVE'
+              AND source_type = 'moneydj_primary'
+            """,
+            (date_value,),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, 'ACTIVE', 'Cash', 'cash', ?, 'https://example.test',
+                      'moneydj_primary', 'test', '2026-06-23T00:00:00')
+            """,
+            (date_value, 100.0 - stock_total),
+        )
 
 
 def test_init_db_creates_classification_version_column():

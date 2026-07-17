@@ -71,6 +71,21 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", we
             """,
             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, weight_pct, f"{date}T00:00:00"),
         )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://test',
+                      'moneydj_primary', 'test', ?)
+            """,
+            (
+                date,
+                etf_code,
+                100.0 - weight_pct,
+                f"{date}T00:00:00",
+            ),
+        )
 
 
 def insert_comparable_context(date, etf_code):

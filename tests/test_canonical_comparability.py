@@ -12,6 +12,7 @@ def insert_holding(
     shares,
     weight_pct,
     source_type="moneydj_primary",
+    complete=True,
 ):
     with db._connect() as conn:
         conn.execute(
@@ -34,6 +35,26 @@ def insert_holding(
                 source_type,
             ),
         )
+        if complete:
+            stock_total = conn.execute(
+                """
+                SELECT COALESCE(SUM(weight_pct), 0.0)
+                FROM etf_daily_holdings
+                WHERE date = ? AND etf_code = ? AND source_type = ?
+                """,
+                (date, etf_code, source_type),
+            ).fetchone()[0]
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                    date, etf_code, asset_name, asset_type, weight_pct,
+                    source_url, source_type, extraction_method, scraped_at
+                ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
+                          ?, 'test', '2026-06-24T00:00:00')
+                """,
+                (date, etf_code, 100.0 - stock_total, source_type),
+            )
+
 
 
 def fetch_changes(etf_code="00980A", date="2026-06-24"):
@@ -102,7 +123,16 @@ def test_partial_current_source_is_not_comparable_and_does_not_create_removed_po
 
     # Current day only has a partial fallback source. This should be skipped,
     # not treated as three removed core positions.
-    insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5, "official_static")
+    insert_holding(
+        "2026-06-24",
+        "00980A",
+        "2330",
+        "台積電",
+        100,
+        10.5,
+        "official_static",
+        complete=False,
+    )
 
     summary = detect_holding_changes("2026-06-24", "2026-06-23")
 

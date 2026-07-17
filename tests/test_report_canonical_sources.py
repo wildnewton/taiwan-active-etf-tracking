@@ -77,7 +77,7 @@ def test_report_summary_stats_ignore_noncanonical_holdings_rows():
 
     report = generate_signal_report("2026-06-26")
 
-    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 0" in report
+    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19" in report
 
 
 def test_report_consensus_ignores_noncanonical_duplicate_source_rows():
