@@ -23,7 +23,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          from textwrap import dedent
 
           path = Path("scripts/scrapers/official.py")
           text = path.read_text(encoding="utf-8")
@@ -32,33 +31,32 @@ jobs:
               global text
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"expected one match, found {count}: {old[:80]!r}")
+                  raise SystemExit(f"expected one match, found {count}: {old[:100]!r}")
               text = text.replace(old, new, 1)
 
           replace_once(
-              'from bs4 import BeautifulSoup\nfrom playwright.async_api import TimeoutError as PlaywrightTimeoutError\n',
-              'from bs4 import BeautifulSoup\nfrom playwright.async_api import Error as PlaywrightError\nfrom playwright.async_api import TimeoutError as PlaywrightTimeoutError\n',
+              "from bs4 import BeautifulSoup\n"
+              "from playwright.async_api import TimeoutError as PlaywrightTimeoutError\n",
+              "from bs4 import BeautifulSoup\n"
+              "from playwright.async_api import Error as PlaywrightError\n"
+              "from playwright.async_api import TimeoutError as PlaywrightTimeoutError\n",
           )
 
           replace_once(
-              dedent("""\
-              def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
-                  data = json.loads(assets_json)
-                  fund_data = data.get("Entries", {}).get("Data", {})
-                  nav_date = fund_data.get("FundAsset", {}).get("NavDate")
-              """),
-              dedent("""\
-              def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:
-                  data = json.loads(assets_json)
-                  entries = data.get("Entries", {}) if isinstance(data, dict) else {}
-                  fund_id = entries.get("FundID") if isinstance(entries, dict) else None
-                  if fund_id and str(fund_id).strip().upper() != etf_code.upper():
-                      raise ValueError(
-                          f"Nomura fund mismatch: expected {etf_code.upper()}, got {fund_id}"
-                      )
-                  fund_data = entries.get("Data", {}) if isinstance(entries, dict) else {}
-                  nav_date = fund_data.get("FundAsset", {}).get("NavDate")
-              """),
+              "def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:\n"
+              "    data = json.loads(assets_json)\n"
+              "    fund_data = data.get(\"Entries\", {}).get(\"Data\", {})\n"
+              "    nav_date = fund_data.get(\"FundAsset\", {}).get(\"NavDate\")\n",
+              "def parse_nomura_api(assets_json: str, etf_code: str, source_url: str) -> list[dict]:\n"
+              "    data = json.loads(assets_json)\n"
+              "    entries = data.get(\"Entries\", {}) if isinstance(data, dict) else {}\n"
+              "    fund_id = entries.get(\"FundID\") if isinstance(entries, dict) else None\n"
+              "    if fund_id and str(fund_id).strip().upper() != etf_code.upper():\n"
+              "        raise ValueError(\n"
+              "            f\"Nomura fund mismatch: expected {etf_code.upper()}, got {fund_id}\"\n"
+              "        )\n"
+              "    fund_data = entries.get(\"Data\", {}) if isinstance(entries, dict) else {}\n"
+              "    nav_date = fund_data.get(\"FundAsset\", {}).get(\"NavDate\")\n",
           )
 
           for reason in (
@@ -66,88 +64,73 @@ jobs:
               "Nomura GetFundAssets API not intercepted",
               "CTBC ETFHoldingWeight API not intercepted",
           ):
-              replace_once(
-                  dedent(f"""\
-                      except PlaywrightTimeoutError:
-                          if not navigation_completed:
-                              raise
-                          return _failed_result(source_url, "{reason}")
-                  """),
-                  dedent(f"""\
-                      except PlaywrightTimeoutError:
-                          if not navigation_completed:
-                              raise
-                          return _failed_result(source_url, "{reason}")
-                      except PlaywrightError:
-                          if not navigation_completed:
-                              raise
-                          return _failed_result(source_url, "{reason}")
-                  """),
+              old = (
+                  "    except PlaywrightTimeoutError:\n"
+                  "        if not navigation_completed:\n"
+                  "            raise\n"
+                  f"        return _failed_result(source_url, \"{reason}\")\n"
               )
+              new = old + (
+                  "    except PlaywrightError:\n"
+                  "        if not navigation_completed:\n"
+                  "            raise\n"
+                  f"        return _failed_result(source_url, \"{reason}\")\n"
+              )
+              replace_once(old, new)
 
           replace_once(
-              dedent("""\
-              def _is_capital_buyback_response(response) -> bool:
-                  parsed = urlparse(_response_url(response))
-                  hostname = (parsed.hostname or "").lower()
-                  path = parsed.path.rstrip("/").lower()
-                  return hostname.endswith("capitalfund.com.tw") and path == "/cfweb/api/etf/buyback"
-
-
-              def _is_nomura_assets_response(response) -> bool:
-                  return "getfundassets" in _response_url(response).lower()
-
-
-              def _is_ctbc_holdings_response(response) -> bool:
-                  return "etfholdingweight" in _response_url(response).lower()
-              """),
-              dedent("""\
-              def _is_successful_get_response(response) -> bool:
-                  if getattr(response, "ok", True) is False:
-                      return False
-                  request = getattr(response, "request", None)
-                  method = getattr(request, "method", "GET")
-                  return not isinstance(method, str) or method.upper() == "GET"
-
-
-              def _matches_api_endpoint(response, domain: str, path: str) -> bool:
-                  parsed = urlparse(_response_url(response))
-                  hostname = (parsed.hostname or "").lower()
-                  response_path = parsed.path.rstrip("/").lower()
-                  expected_domain = domain.lower()
-                  host_matches = hostname == expected_domain or hostname.endswith(
-                      f".{expected_domain}"
-                  )
-                  return (
-                      host_matches
-                      and response_path == path.lower()
-                      and _is_successful_get_response(response)
-                  )
-
-
-              def _is_capital_buyback_response(response) -> bool:
-                  return _matches_api_endpoint(
-                      response,
-                      "capitalfund.com.tw",
-                      "/cfweb/api/etf/buyback",
-                  )
-
-
-              def _is_nomura_assets_response(response) -> bool:
-                  return _matches_api_endpoint(
-                      response,
-                      "nomurafunds.com.tw",
-                      "/api/etfapi/api/fund/getfundassets",
-                  )
-
-
-              def _is_ctbc_holdings_response(response) -> bool:
-                  return _matches_api_endpoint(
-                      response,
-                      "ctbcinvestments.com.tw",
-                      "/api/etf/etfholdingweight",
-                  )
-              """),
+              "def _is_capital_buyback_response(response) -> bool:\n"
+              "    parsed = urlparse(_response_url(response))\n"
+              "    hostname = (parsed.hostname or \"\").lower()\n"
+              "    path = parsed.path.rstrip(\"/\").lower()\n"
+              "    return hostname.endswith(\"capitalfund.com.tw\") and path == \"/cfweb/api/etf/buyback\"\n"
+              "\n\n"
+              "def _is_nomura_assets_response(response) -> bool:\n"
+              "    return \"getfundassets\" in _response_url(response).lower()\n"
+              "\n\n"
+              "def _is_ctbc_holdings_response(response) -> bool:\n"
+              "    return \"etfholdingweight\" in _response_url(response).lower()\n",
+              "def _is_successful_get_response(response) -> bool:\n"
+              "    if getattr(response, \"ok\", True) is False:\n"
+              "        return False\n"
+              "    request = getattr(response, \"request\", None)\n"
+              "    method = getattr(request, \"method\", \"GET\")\n"
+              "    return not isinstance(method, str) or method.upper() == \"GET\"\n"
+              "\n\n"
+              "def _matches_api_endpoint(response, domain: str, path: str) -> bool:\n"
+              "    parsed = urlparse(_response_url(response))\n"
+              "    hostname = (parsed.hostname or \"\").lower()\n"
+              "    response_path = parsed.path.rstrip(\"/\").lower()\n"
+              "    expected_domain = domain.lower()\n"
+              "    host_matches = hostname == expected_domain or hostname.endswith(\n"
+              "        f\".{expected_domain}\"\n"
+              "    )\n"
+              "    return (\n"
+              "        host_matches\n"
+              "        and response_path == path.lower()\n"
+              "        and _is_successful_get_response(response)\n"
+              "    )\n"
+              "\n\n"
+              "def _is_capital_buyback_response(response) -> bool:\n"
+              "    return _matches_api_endpoint(\n"
+              "        response,\n"
+              "        \"capitalfund.com.tw\",\n"
+              "        \"/cfweb/api/etf/buyback\",\n"
+              "    )\n"
+              "\n\n"
+              "def _is_nomura_assets_response(response) -> bool:\n"
+              "    return _matches_api_endpoint(\n"
+              "        response,\n"
+              "        \"nomurafunds.com.tw\",\n"
+              "        \"/api/etfapi/api/fund/getfundassets\",\n"
+              "    )\n"
+              "\n\n"
+              "def _is_ctbc_holdings_response(response) -> bool:\n"
+              "    return _matches_api_endpoint(\n"
+              "        response,\n"
+              "        \"ctbcinvestments.com.tw\",\n"
+              "        \"/api/etf/etfholdingweight\",\n"
+              "    )\n",
           )
 
           path.write_text(text, encoding="utf-8")
