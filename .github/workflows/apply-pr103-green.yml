@@ -46,6 +46,8 @@ jobs:
         run: |
           git -C repo apply --recount --verbose --check ../automation/.ci/pr103-test-fixtures.patch
           git -C repo apply --recount --verbose ../automation/.ci/pr103-test-fixtures.patch
+          git -C repo apply --recount --verbose --check ../automation/.ci/pr103-full-fixtures.patch
+          git -C repo apply --recount --verbose ../automation/.ci/pr103-full-fixtures.patch
           git -C repo diff --check
 
       - name: Confirm RED regressions still fail
@@ -66,7 +68,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/test_changes.py tests/test_manager_intent_rollups.py tests/test_report_canonical_sources.py
+          git add \
+            tests/test_active_classification.py \
+            tests/test_canonical_comparability.py \
+            tests/test_change_classification_version.py \
+            tests/test_change_diagnostics.py \
+            tests/test_changes.py \
+            tests/test_flow_adjusted_materiality.py \
+            tests/test_fund_flow_adjustment.py \
+            tests/test_manager_intent_rollups.py \
+            tests/test_report_canonical_sources.py
           git commit -m "test: align fixtures with complete snapshots"
 
       - name: Apply minimal GREEN patch
