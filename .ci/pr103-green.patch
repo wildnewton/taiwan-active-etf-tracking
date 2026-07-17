@@ -1,0 +1,335 @@
+diff --git a/scripts/db.py b/scripts/db.py
+--- a/scripts/db.py
++++ b/scripts/db.py
+@@ -355,6 +355,35 @@ def _snapshot_exists(conn, date_value, etf_code):
+     return False
+ 
+ 
++def get_canonical_snapshot_entry(data_date, etf_code):
++    """Return the highest-ranked complete snapshot entry for one ETF/date."""
++    data_date = _serialize(data_date)
++    with _connect() as conn:
++        entry = _best_snapshot_entry(
++            _existing_snapshot_entries(conn, data_date, etf_code)
++        )
++        if not entry or not _snapshot_is_complete(entry):
++            return None
++        stock_codes = {
++            row[0]
++            for row in conn.execute(
++                """
++                SELECT stock_code
++                FROM etf_daily_holdings
++                WHERE date = ? AND etf_code = ? AND source_type = ?
++                """,
++                (data_date, etf_code, entry["source_type"]),
++            ).fetchall()
++        }
++        return {**entry, "stock_codes": stock_codes}
++
++
++def get_canonical_snapshot_source(data_date, etf_code):
++    """Return the canonical complete source type for one ETF/date."""
++    entry = get_canonical_snapshot_entry(data_date, etf_code)
++    return entry["source_type"] if entry else None
++
++
+ def snapshot_exists(date_value, etf_code):
+     """Return whether one complete snapshot exists for an ETF/data date."""
+     date_value = _serialize(date_value)
+@@ -383,8 +412,8 @@ def get_snapshot_etf_codes(data_date):
+         ]
+ 
+ 
+-def get_latest_snapshot_date(etf_code, before_date=None):
+-    """Return the latest complete snapshot date, optionally before a target."""
++def get_latest_snapshot_date(etf_code, before_date=None, eligible_only=False):
++    """Return the latest complete snapshot date, optionally historically eligible."""
+     if before_date is not None:
+         before_date = _serialize(before_date)
+         params = [etf_code, before_date, etf_code, before_date]
+@@ -407,6 +436,11 @@ def get_latest_snapshot_date(etf_code, before_date=None):
+             params,
+         ).fetchall()
+         for row in rows:
++            if eligible_only:
++                from etf_universe import get_eligible_etf_codes
++
++                if etf_code not in get_eligible_etf_codes(row[0]):
++                    continue
+             if _snapshot_exists(conn, row[0], etf_code):
+                 return row[0]
+     return None
+@@ -423,7 +457,11 @@ def get_target_snapshot_coverage(data_date):
+     missing = sorted(expected - actual)
+     latest_available = {
+-        etf_code: get_latest_snapshot_date(etf_code, before_date=data_date)
++        etf_code: get_latest_snapshot_date(
++            etf_code,
++            before_date=data_date,
++            eligible_only=True,
++        )
+         for etf_code in missing
+     }
+     return {
+diff --git a/scripts/changes.py b/scripts/changes.py
+--- a/scripts/changes.py
++++ b/scripts/changes.py
+@@ -88,10 +88,16 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Opt
+ 
+     scale_factors = _estimate_etf_scale_factors(current, previous)
+-    trading_dates = _holding_dates_through(current_date)
+-    source_cache = {date_value: _select_canonical_sources(date_value) for date_value in trading_dates}
+-    weight_cache = {date_value: _load_weight_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
+-    shares_cache = {date_value: _load_shares_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
++    trading_dates_by_etf = {
++        etf_code: _holding_dates_through(current_date, etf_code)
++        for etf_code in comparable_etfs
++    }
++    trading_dates = sorted(
++        {date_value for dates in trading_dates_by_etf.values() for date_value in dates}
++    )
++    source_cache = {date_value: _select_canonical_sources(date_value) for date_value in trading_dates}
++    weight_cache = {date_value: _load_weight_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
++    shares_cache = {date_value: _load_shares_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
+ 
+     changes = []
+     for key in sorted(set(current) | set(previous)):
+@@ -107,7 +113,7 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Opt
+                 today=current.get(key),
+                 previous=previous.get(key),
+                 etf_scale_factor=scale_factors.get(etf_code),
+-                trading_dates=trading_dates,
++                trading_dates=trading_dates_by_etf.get(etf_code, []),
+                 weight_cache=weight_cache,
+                 shares_cache=shares_cache,
+             )
+@@ -145,46 +151,21 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) -
+ 
+ 
+ def _select_canonical_sources(date_value: str) -> dict:
+-    eligible_codes = set(get_eligible_etf_codes(date_value))
+-    with db._connect() as conn:
+-        rows = conn.execute(
+-            "SELECT etf_code, source_type, stock_code, shares, weight_pct "
+-            "FROM etf_daily_holdings WHERE date = ?",
+-            (date_value,),
+-        ).fetchall()
+-
+-    grouped = {}
+-    for etf_code, source_type, stock_code, shares, weight_pct in rows:
+-        if etf_code not in eligible_codes:
++    selected = {}
++    for etf_code in get_eligible_etf_codes(date_value):
++        entry = db.get_canonical_snapshot_entry(date_value, etf_code)
++        if not entry:
+             continue
+-        key = (etf_code, source_type)
+-        entry = grouped.setdefault(
+-            key,
+-            {
+-                "etf_code": etf_code,
+-                "source_type": source_type,
+-                "source_family": _source_family(source_type),
+-                "stock_codes": set(),
+-                "stock_count": 0,
+-                "shares_count": 0,
+-                "total_weight": 0.0,
+-                "quality_score": 0.0,
+-            },
+-        )
+-        entry["stock_codes"].add(stock_code)
+-        entry["stock_count"] += 1
+-        if shares is not None:
+-            entry["shares_count"] += 1
+-        entry["total_weight"] += weight_pct or 0.0
+-
+-    selected = {}
+-    for entry in grouped.values():
+-        stock_count = entry["stock_count"]
+-        entry["shares_coverage"] = entry["shares_count"] / stock_count if stock_count else 0.0
++        entry = {
++            **entry,
++            "etf_code": etf_code,
++            "source_family": _source_family(entry["source_type"]),
++        }
+         entry["quality_score"] = _source_quality_score(entry)
+-        current_best = selected.get(entry["etf_code"])
+-        if current_best is None or _source_sort_key(entry) > _source_sort_key(current_best):
+-            selected[entry["etf_code"]] = entry
++        selected[etf_code] = entry
+     return selected
+@@ -206,10 +187,6 @@ def _source_quality_score(entry: dict) -> float:
+     return priority + stock_count_bonus + shares_bonus + weight_bonus
+ 
+ 
+-def _source_sort_key(entry: dict):
+-    return (entry["quality_score"], entry["stock_count"], source_priority(entry["source_type"]), entry["source_type"])
+-
+-
+ def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
+     diagnostics = _source_pair_diagnostics(None, None, current_sources, previous_sources)
+     comparable = {row["etf_code"] for row in diagnostics if row["status"] == "included"}
+@@ -325,10 +302,22 @@ def _load_ranked_holdings(date_value: str, canonical_sources: dict | None = None,
+     return ranked
+ 
+ 
+-def _holding_dates_through(current_date: str) -> list[str]:
++def _holding_dates_through(current_date: str, etf_code: str | None = None) -> list[str]:
+     with db._connect() as conn:
+-        rows = conn.execute("SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ? ORDER BY date", (current_date,)).fetchall()
+-    return [row[0] for row in rows]
++        if etf_code is None:
++            rows = conn.execute(
++                "SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ? ORDER BY date",
++                (current_date,),
++            ).fetchall()
++        else:
++            rows = conn.execute(
++                """
++                SELECT DISTINCT date FROM etf_daily_holdings
++                WHERE date <= ? AND etf_code = ? ORDER BY date
++                """,
++                (current_date, etf_code),
++            ).fetchall()
++    dates = [row[0] for row in rows]
++    if etf_code is None:
++        return dates
++    return [
++        date_value for date_value in dates
++        if etf_code in get_eligible_etf_codes(date_value)
++        and db.get_canonical_snapshot_source(date_value, etf_code)
++    ]
+ 
+ 
+ def _load_weight_index(date_value: str, canonical_sources: dict | None = None) -> dict:
+diff --git a/scripts/manager_intent.py b/scripts/manager_intent.py
+--- a/scripts/manager_intent.py
++++ b/scripts/manager_intent.py
+@@ -154,21 +154,28 @@ def _latest_change_date(conn) -> str | None:
+ 
+ 
+ def _window_dates(conn, target_date: str, window_days: int) -> list[str]:
+-    rows = conn.execute(
++    candidate_rows = conn.execute(
+         """
+         SELECT date FROM (
+             SELECT DISTINCT date FROM etf_change_diagnostics WHERE date <= ?
+             UNION
+             SELECT DISTINCT date FROM etf_holding_changes WHERE date <= ?
+             UNION
+             SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ?
+         )
+         ORDER BY date DESC
+-        LIMIT ?
+         """,
+-        (target_date, target_date, target_date, window_days),
++        (target_date, target_date, target_date),
+     ).fetchall()
+-    return sorted(row[0] for row in rows)
++    valid_dates = []
++    for row in candidate_rows:
++        date_value = row[0]
++        eligible_codes = set(get_eligible_etf_codes(date_value))
++        complete_codes = set(db.get_snapshot_etf_codes(date_value))
++        if eligible_codes & complete_codes:
++            valid_dates.append(date_value)
++        if len(valid_dates) == window_days:
++            break
++    return sorted(valid_dates)
+ 
+ 
+ def _change_events(
+diff --git a/scripts/report.py b/scripts/report.py
+--- a/scripts/report.py
++++ b/scripts/report.py
+@@ -397,12 +397,19 @@ def _canonical_rows(data_date: str) -> list[dict]:
+     try:
+         with _using_row_factory(_dict_factory) as conn:
+             rows = conn.execute(
+-                """SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
+-                          shares, weight_pct, source_url, source_type, extraction_method, scraped_at
+-                   FROM etf_daily_holdings
+-                   WHERE date = ?""",
+-                (data_date,),
++                """
++                SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
++                       shares, weight_pct, source_url, source_type, extraction_method, scraped_at
++                FROM etf_daily_holdings
++                WHERE date = ?
++                UNION ALL
++                SELECT date, etf_code, asset_name, asset_type,
++                       NULL AS stock_code, NULL AS stock_name, NULL AS shares,
++                       weight_pct, source_url, source_type, extraction_method, scraped_at
++                FROM etf_daily_non_stock_assets
++                WHERE date = ?
++                """,
++                (data_date, data_date),
+             ).fetchall()
+     except sqlite3.OperationalError:
+         return []
+diff --git a/scripts/etf_universe.py b/scripts/etf_universe.py
+--- a/scripts/etf_universe.py
++++ b/scripts/etf_universe.py
+@@ -348,7 +348,7 @@ def reconcile_discovered_universe(
+         current_rows = conn.execute(
+             """
+             SELECT code, retired, pending_retirement_since, official_logic,
+-                   listing_date
++                   listing_date, last_active_date
+             FROM etf_universe
+             """
+         ).fetchall()
+@@ -360,6 +360,7 @@ def reconcile_discovered_universe(
+                 "official_logic": row[3],
+                 "listing_date": row[4],
++                "last_active_date": row[5],
+             }
+             for row in current_rows
+         }
+@@ -424,7 +425,13 @@ def reconcile_discovered_universe(
+                     UPDATE etf_universe
+                     SET retired = 0,
+                         pending_retirement_since = NULL,
+-                        last_active_date = COALESCE(?, last_active_date),
++                        last_active_date = CASE
++                            WHEN ? IS NULL THEN last_active_date
++                            WHEN last_active_date IS NULL OR last_active_date < ?
++                                THEN ?
++                            ELSE last_active_date
++                        END,
+                         market = COALESCE(?, market),
+                         isin = COALESCE(?, isin),
+                         listing_date = COALESCE(?, listing_date),
+@@ -433,6 +440,8 @@ def reconcile_discovered_universe(
+                     """,
+                     (
+                         observed_active_date,
++                        observed_active_date,
++                        observed_active_date,
+                         raw.get("market"),
+                         raw.get("isin"),
+                         raw.get("listing_date"),
+@@ -446,7 +455,13 @@ def reconcile_discovered_universe(
+                 conn.execute(
+                     """
+                     UPDATE etf_universe
+-                    SET last_active_date = COALESCE(?, last_active_date),
++                    SET last_active_date = CASE
++                            WHEN ? IS NULL THEN last_active_date
++                            WHEN last_active_date IS NULL OR last_active_date < ?
++                                THEN ?
++                            ELSE last_active_date
++                        END,
+                         pending_retirement_since = NULL,
+                         market = COALESCE(?, market),
+                         isin = COALESCE(?, isin),
+@@ -456,6 +471,8 @@ def reconcile_discovered_universe(
+                     """,
+                     (
+                         observed_active_date,
++                        observed_active_date,
++                        observed_active_date,
+                         raw.get("market"),
+                         raw.get("isin"),
+                         raw.get("listing_date"),
