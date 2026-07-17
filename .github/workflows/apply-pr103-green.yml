@@ -57,8 +57,8 @@ jobs:
 
       - name: Apply minimal GREEN patch
         run: |
-          git -C repo apply --check ../automation/.ci/pr103-green.patch
-          git -C repo apply ../automation/.ci/pr103-green.patch
+          git -C repo apply --recount --verbose --check ../automation/.ci/pr103-green.patch
+          git -C repo apply --recount --verbose ../automation/.ci/pr103-green.patch
           git -C repo diff --check
 
       - name: Run targeted tests
