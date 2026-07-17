@@ -17,5 +17,5 @@ def isolate_pipeline_scrape_unit_tests_from_preexisting_snapshots(request):
         yield
         return
 
-    with patch("pipeline.successful_snapshot_exists", return_value=False):
+    with patch("pipeline.snapshot_exists", return_value=False):
         yield

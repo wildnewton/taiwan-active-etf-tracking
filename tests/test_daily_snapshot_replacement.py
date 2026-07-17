@@ -199,8 +199,7 @@ def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00981A"}]), \
         patch("pipeline.scrape_holdings", return_value=scrape_result()), \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot:
         run_daily_scrape(":memory:")
 
     replace_daily_snapshot.assert_called_once()

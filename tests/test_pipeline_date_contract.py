@@ -43,6 +43,7 @@ def _run_nightly(tmp_path, scrape_summary, *, latest_valid_date=TARGET_DATE, cha
     }
     with patch.object(nightly_pipeline.db, "init_db"), \
          patch.object(nightly_pipeline, "run_daily_scrape_with_browser", return_value=scrape_summary), \
+         patch.object(nightly_pipeline.db, "get_target_snapshot_coverage", return_value={"actual_count": 1, "expected_count": 1, "missing_etfs": []}), \
          patch.object(nightly_pipeline, "get_latest_valid_date", return_value=latest_valid_date) as latest, \
          patch.object(nightly_pipeline, "detect_holding_changes", return_value=change_summary) as changes, \
          patch.object(nightly_pipeline, "generate_manager_intent_rollups", return_value={}) as intent, \
@@ -88,12 +89,12 @@ def test_nightly_fails_before_change_detection_when_persisted_target_is_missing(
     assert not list(report_dir.glob("*.txt"))
 
 
-def test_nightly_rejects_mixed_scrape_dates_before_change_detection(tmp_path):
-    with pytest.raises(RuntimeError, match="scrape data date range"):
-        _run_nightly(
-            tmp_path,
-            _scrape_summary(data_date_min=OLD_DATE, data_date_max=TARGET_DATE),
-        )
+def test_nightly_uses_persisted_target_coverage_not_summary_date_range(tmp_path):
+    result, *_ = _run_nightly(
+        tmp_path,
+        _scrape_summary(data_date_min=OLD_DATE, data_date_max=TARGET_DATE),
+    )
+    assert result["change_summary"]["date"] == TARGET_DATE
 
 
 def test_nightly_stops_before_derived_layers_when_change_detection_fails(tmp_path):
@@ -115,24 +116,24 @@ def test_nightly_stops_before_derived_layers_when_change_detection_fails(tmp_pat
     assert not list(report_dir.glob("*.txt"))
 
 
-def _retry_with_improvement(run_date, change_summary):
+def _retry_with_improvement(target_date, change_summary):
     with patch.object(retry_stale_scrapes.db, "init_db"), \
          patch.object(
              retry_stale_scrapes,
-             "get_stale_scrape_runs",
+             "get_retry_candidates",
              side_effect=[
                  [{"etf_code": "00401A", "data_date": OLD_DATE}],
                  [],
              ],
          ), \
-         patch.object(retry_stale_scrapes, "run_selected_scrape_with_browser", return_value={}), \
+         patch.object(retry_stale_scrapes, "run_selected_scrape_with_browser", return_value={"date": target_date}), \
          patch.object(retry_stale_scrapes, "detect_holding_changes", return_value=change_summary) as changes, \
          patch.object(retry_stale_scrapes, "generate_manager_intent_rollups", return_value={}) as intent, \
          patch.object(retry_stale_scrapes, "generate_manager_signals", return_value={}) as signals, \
          patch.object(retry_stale_scrapes, "_overwrite_reports", return_value={}) as reports:
-        result = retry_stale_scrapes.retry_stale_etfs(
+        result = retry_stale_scrapes.retry_missing_holdings(
             db_path=":memory:",
-            run_date=run_date,
+            target_date=target_date,
             report_dir=Path("reports"),
         )
     return result, changes, intent, signals, reports
@@ -153,7 +154,12 @@ def test_historical_retry_rebuilds_every_layer_for_the_explicit_date():
     changes.assert_called_once_with(current_date=historical_date)
     intent.assert_called_once_with(historical_date)
     signals.assert_called_once_with(historical_date)
-    reports.assert_called_once_with(":memory:", historical_date, Path("reports"))
+    reports.assert_called_once_with(
+        ":memory:",
+        historical_date,
+        Path("reports"),
+        quality_run_date=historical_date,
+    )
     assert result["reports_overwritten"] is True
 
 
@@ -172,6 +178,7 @@ def test_historical_retry_traction_uses_the_explicit_retry_date(tmp_path):
             ":memory:",
             historical_date,
             tmp_path,
+            quality_run_date=historical_date,
         )
 
     traction.assert_called_once_with(

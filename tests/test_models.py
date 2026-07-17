@@ -1,7 +1,7 @@
 from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 
-from models import HoldingRow, NonStockAssetRow, ScrapeResult, ScrapeRun
+from models import HoldingRow, NonStockAssetRow, ScrapeResult
 
 
 def test_holding_row_is_dataclass_with_required_fields():
@@ -59,30 +59,3 @@ def test_non_stock_asset_row_can_be_created():
     assert row.etf_code == "00980A"
     assert row.asset_type == "cash"
     assert row.weight_pct == 5.0
-
-
-def test_scrape_run_is_dataclass_with_required_fields():
-    assert is_dataclass(ScrapeRun)
-    assert [field.name for field in fields(ScrapeRun)] == [
-        "date", "data_date", "etf_code", "status", "primary_source", "primary_success",
-        "moneydj_browser_used", "official_fallback_used", "official_success", "rows_extracted",
-        "stock_rows_extracted", "non_stock_rows_extracted", "total_weight_all_rows",
-        "total_weight_stock_rows", "source_url", "error", "started_at", "finished_at",
-    ]
-
-
-def test_scrape_run_can_be_created():
-    started = datetime(2026, 6, 22, 9, 0)
-    finished = datetime(2026, 6, 22, 9, 1)
-    run = ScrapeRun(
-        date=date(2026, 6, 23), data_date=date(2026, 6, 22), etf_code="00980A",
-        status="success", primary_source="moneydj", primary_success=True,
-        moneydj_browser_used=False, official_fallback_used=False, official_success=False,
-        rows_extracted=10, stock_rows_extracted=8, non_stock_rows_extracted=2,
-        total_weight_all_rows=100.0, total_weight_stock_rows=95.0,
-        source_url="https://example.test", error=None, started_at=started, finished_at=finished,
-    )
-    assert run.date == date(2026, 6, 23)
-    assert run.data_date == date(2026, 6, 22)
-    assert run.primary_success is True
-    assert run.finished_at == finished

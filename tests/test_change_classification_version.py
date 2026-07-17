@@ -44,24 +44,6 @@ def _insert_holding(date_value, stock_code, stock_name, shares, weight_pct):
         )
 
 
-def _insert_scrape_success(date_value):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url,
-                error, started_at, finished_at
-            ) VALUES (?, 'ACTIVE', 'success', 'moneydj_primary', 1, 0, 0, 0,
-                10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
-                '2026-06-23T00:00:00', '2026-06-23T00:01:00')
-            """,
-            (date_value,),
-        )
-
-
 def test_init_db_creates_classification_version_column():
     db.init_db(":memory:")
 
@@ -108,8 +90,6 @@ def test_detect_holding_changes_writes_classification_version_v1():
     _insert_etf_universe_entry()
     _insert_holding("2026-06-20", "2330", "TSMC", 100, 10.0)
     _insert_holding("2026-06-23", "2330", "TSMC", 110, 12.0)
-    _insert_scrape_success("2026-06-20")
-    _insert_scrape_success("2026-06-23")
 
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 

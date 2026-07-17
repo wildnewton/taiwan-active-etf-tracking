@@ -31,54 +31,29 @@ def _get_valid_holding_date(
     before_date: Optional[str],
     min_success_ratio: float,
 ) -> Optional[str]:
-    where_clause = "WHERE s.date < ?" if before_date else ""
+    where_clause = "WHERE date < ?" if before_date else ""
     params = (before_date,) if before_date else ()
     with db._connect() as conn:
         rows = conn.execute(
             f"""
-            WITH snapshots AS (
-                SELECT date, etf_code FROM etf_daily_holdings
+            SELECT date
+            FROM (
+                SELECT date FROM etf_daily_holdings
                 UNION
-                SELECT date, etf_code FROM etf_daily_non_stock_assets
+                SELECT date FROM etf_daily_non_stock_assets
             )
-            SELECT
-                s.date,
-                COUNT(DISTINCT s.etf_code) AS snapshot_count,
-                COUNT(DISTINCT CASE
-                    WHEN u.code IS NOT NULL
-                     AND u.retired = 0
-                     AND (u.listing_date IS NULL OR u.listing_date <= s.date)
-                    THEN s.etf_code
-                END) AS eligible_snapshot_count,
-                (
-                    SELECT COUNT(*)
-                    FROM etf_universe expected
-                    WHERE expected.retired = 0
-                      AND (
-                          expected.listing_date IS NULL
-                          OR expected.listing_date <= s.date
-                      )
-                ) AS expected_count
-            FROM snapshots s
-            LEFT JOIN etf_universe u ON u.code = s.etf_code
             {where_clause}
-            GROUP BY s.date
-            ORDER BY s.date DESC
+            GROUP BY date
             """,
             params,
         ).fetchall()
 
-    # ISO dates sort chronologically as strings. Sort in Python as a final guard
-    # against SQLite planner/version differences in compound CTE ordering.
-    rows = sorted(rows, key=lambda row: row[0], reverse=True)
-
-    for date_value, snapshot_count, eligible_count, expected_count in rows:
-        if expected_count:
-            actual_count = eligible_count
-            required_count = ceil(expected_count * min_success_ratio)
-        else:
-            actual_count = snapshot_count
-            required_count = 1
+    candidate_dates = sorted((row[0] for row in rows), reverse=True)
+    for date_value in candidate_dates:
+        coverage = db.get_target_snapshot_coverage(date_value)
+        expected_count = coverage["expected_count"]
+        actual_count = coverage["actual_count"]
+        required_count = ceil(expected_count * min_success_ratio) if expected_count else 1
         if actual_count >= required_count:
             return date_value
     return None

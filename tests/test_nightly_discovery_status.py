@@ -39,7 +39,14 @@ MANAGER_INTENT_SUMMARY = {"ok": True, "date": "2026-06-26", "windows": [5, 10], 
 
 def _run_main(db_path, report_dir, extra_args=None):
     import importlib.util
-    with patch("changes.get_latest_valid_date", return_value="2026-06-26"):
+    with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
+        "db.get_target_snapshot_coverage",
+        return_value={
+            "actual_count": 19,
+            "expected_count": 19,
+            "missing_etfs": [],
+        },
+    ):
         spec = importlib.util.spec_from_file_location("nightly_pipeline", str(SCRIPT))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)

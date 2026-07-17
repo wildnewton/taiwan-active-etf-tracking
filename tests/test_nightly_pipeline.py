@@ -80,7 +80,14 @@ def test_script_exists():
 
 def _run_main(db_path, report_dir):
     import importlib.util
-    with patch("changes.get_latest_valid_date", return_value="2026-06-26"):
+    with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
+        "db.get_target_snapshot_coverage",
+        return_value={
+            "actual_count": 19,
+            "expected_count": 19,
+            "missing_etfs": [],
+        },
+    ):
         spec = importlib.util.spec_from_file_location("nightly_pipeline", str(SCRIPT))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
@@ -225,29 +232,35 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
     assert "00401A" in out, f"Expected failing ETF code in output:\n{out}"
 
 
-def test_stale_etfs_are_reported_then_fail_the_single_date_contract(capsys, tmp_path):
+def test_stale_summary_is_diagnostic_when_persisted_target_is_complete(capsys, tmp_path):
     with patch("db.init_db"), \
+         patch(
+             "db.get_target_snapshot_coverage",
+             return_value={
+                 "actual_count": 19,
+                 "expected_count": 19,
+                 "missing_etfs": [],
+             },
+         ), \
          patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
          patch("pipeline.run_daily_scrape_with_browser", return_value=STALE_SCRAPE), \
-         patch("changes.detect_holding_changes") as changes, \
-         patch("manager_intent.generate_manager_intent_rollups") as intent, \
-         patch("signals.generate_manager_signals") as signals, \
-         patch("report.generate_signal_report") as report, \
-         patch("traction_analysis.generate_traction_report") as traction:
-        with pytest.raises(RuntimeError, match="scrape data date range"):
-            _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+         patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES) as changes, \
+         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as intent, \
+         patch("signals.generate_manager_signals", return_value={}) as signals, \
+         patch("report.generate_signal_report", return_value="") as report, \
+         patch("traction_analysis.generate_traction_report", return_value="") as traction:
+        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
     assert "Data freshness" in out
     assert "fresh 5" in out and "stale 14" in out
     assert "STALE SCRAPE" in out
-    assert "5/19" in out
     assert "00401A" in out and "2026-06-25" in out
-    changes.assert_not_called()
-    intent.assert_not_called()
-    signals.assert_not_called()
-    report.assert_not_called()
-    traction.assert_not_called()
+    changes.assert_called_once_with(current_date="2026-06-26")
+    intent.assert_called_once_with("2026-06-26")
+    signals.assert_called_once_with("2026-06-26")
+    report.assert_called_once_with("2026-06-26", quality_run_date="2026-06-26")
+    traction.assert_called_once()
 
 
 def test_warns_when_skipped_etfs(capsys, tmp_path):

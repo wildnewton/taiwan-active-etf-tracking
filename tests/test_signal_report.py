@@ -49,24 +49,6 @@ def seed_universe(codes_with_retired):
             )
 
 
-def insert_scrape_run(date, etf_code, status="success", data_date=None):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO etf_scrape_runs (
-                date, data_date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                started_at, finished_at
-            ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
-                1, 1, 0, 85.0, 85.0, 'https://test', NULL,
-                '2026-07-08T00:00:00', '2026-07-08T00:01:00')
-            """,
-            (date, data_date, etf_code, status),
-        )
-
-
 def insert_signal(
     date="2026-06-23",
     signal_type="new_core_position",
@@ -180,6 +162,7 @@ def test_generate_signal_report_uses_latest_holdings_date():
     """Report should use latest holdings date."""
     db.init_db(":memory:")
     ensure_signal_table()
+    seed_universe([("00980A", 0)])
 
     # Insert holdings for two dates
     insert_holding("2026-06-21", "00980A", "2330", "台積電", 10.0)
@@ -242,28 +225,23 @@ def test_report_no_warning_when_all_etfs_present():
     assert "預期" not in report, f"Unexpected missing-ETF warning:\n{report}"
 
 
-def test_report_marks_provisional_when_scrape_data_dates_are_stale_or_unknown():
+def test_report_marks_provisional_for_missing_target_holdings():
     db.init_db(":memory:")
     seed_universe([
         ("00980A", 0),
         ("00981A", 0),
         ("00982A", 0),
     ])
-    insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
-    insert_holding("2026-07-08", "00981A", "2454", "聯發科", 85.0)
+    insert_holding("2026-07-07", "00980A", "2330", "台積電", 85.0)
     insert_holding("2026-07-08", "00982A", "2383", "台光電", 85.0)
-    insert_scrape_run(
-        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
-    )
-    insert_scrape_run("2026-07-08", "00981A", status="failed", data_date=None)
-    insert_scrape_run("2026-07-08", "00982A", data_date="2026-07-08")
 
     report = generate_signal_report("2026-07-08")
 
     assert "暫定" in report or "Provisional" in report
-    assert "資料日期落後" in report
+    assert "缺少目標日持倉" in report
+    assert "最近可用資料日期" in report
     assert "00980A" in report and "2026-07-07" in report
-    assert "抓取失敗" in report
+    assert "無歷史持倉資料" in report
     assert "00981A" in report
     assert "fresh 1/3" in report
     assert "全部 ETF" not in report
@@ -275,14 +253,8 @@ def test_report_freshness_excludes_retired_etfs():
         ("00980A", 0),
         ("00983A", 1),
     ])
-    insert_holding("2026-07-08", "00980A", "2330", "台積電", 85.0)
-    insert_holding("2026-07-08", "00983A", "2454", "聯發科", 85.0)
-    insert_scrape_run(
-        "2026-07-08", "00980A", status="stale", data_date="2026-07-07"
-    )
-    insert_scrape_run(
-        "2026-07-08", "00983A", status="stale", data_date="2026-07-07"
-    )
+    insert_holding("2026-07-07", "00980A", "2330", "台積電", 85.0)
+    insert_holding("2026-07-07", "00983A", "2454", "聯發科", 85.0)
 
     report = generate_signal_report("2026-07-08")
 
@@ -296,5 +268,5 @@ def test_readme_documents_watchdog_retry_prompt():
     assert "21:00" in readme
     assert "scripts/retry_stale_scrapes.py" in readme
     assert '--date "$(date +%F)"' in readme
-    assert "retry only stale ETFs" in readme
-    assert "overwrite date-only primary reports only after improvement" in readme
+    assert "target-date holdings gaps" in readme
+    assert "overwrite date-only primary reports only after holdings coverage improves" in readme

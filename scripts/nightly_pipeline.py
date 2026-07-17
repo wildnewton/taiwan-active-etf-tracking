@@ -150,27 +150,20 @@ def run_try_run(
 
 
 def _resolve_target_data_date(scrape_summary, db_path):
-    """Validate the single holdings date produced and persisted by this run."""
+    """Validate persisted holdings coverage for the expected target date."""
     target_data_date = scrape_summary.get("expected_data_date")
     if not target_data_date:
         raise RuntimeError("nightly scrape did not provide expected_data_date")
 
-    data_date_min = scrape_summary.get("data_date_min")
-    data_date_max = scrape_summary.get("data_date_max")
-    if data_date_min != target_data_date or data_date_max != target_data_date:
-        raise RuntimeError(
-            "scrape data date range does not match target: "
-            f"expected={target_data_date}, range={data_date_min or 'unknown'}~"
-            f"{data_date_max or 'unknown'}"
-        )
-
+    coverage = db.get_target_snapshot_coverage(target_data_date)
     persisted_date = get_latest_valid_date()
     if persisted_date != target_data_date:
         resolved_db = ":memory:" if db_path == ":memory:" else str(Path(db_path).resolve())
         raise RuntimeError(
             "persisted holdings date mismatch: "
             f"expected={target_data_date}, latest_valid={persisted_date or 'none'}, "
-            f"db={resolved_db}"
+            f"coverage={coverage['actual_count']}/{coverage['expected_count'] or '?'}, "
+            f"missing={','.join(coverage['missing_etfs']) or 'none'}, db={resolved_db}"
         )
     return target_data_date
 

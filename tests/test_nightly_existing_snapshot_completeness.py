@@ -16,6 +16,14 @@ def _load_module():
 def _run_with_summary(module, tmp_path, scrape_summary):
     target_date = scrape_summary["expected_data_date"]
     with patch.object(module.db, "init_db"), patch.object(
+        module.db,
+        "get_target_snapshot_coverage",
+        return_value={
+            "actual_count": scrape_summary["data_freshness"]["fresh"],
+            "expected_count": scrape_summary["total_etfs"],
+            "missing_etfs": [],
+        },
+    ), patch.object(
         module, "run_daily_scrape_with_browser", return_value=scrape_summary
     ), patch.object(
         module, "get_latest_valid_date", return_value=target_date

@@ -184,24 +184,6 @@ def _insert_etf_universe_entry(code, name, issuer, retired):
         )
 
 
-def _insert_scrape_success(date_value, etf_code):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO etf_scrape_runs (
-                date, data_date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url,
-                error, started_at, finished_at
-            ) VALUES (?, ?, ?, 'success', 'moneydj_primary', 1, 0, 0, 0,
-                10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
-                '2026-06-23T00:00:00', '2026-06-23T00:01:00')
-            """,
-            (date_value, date_value, etf_code),
-        )
-
-
 def test_excludes_retired_etfs_from_change_detection():
     """Retired (retired=1) ETFs must not appear in etf_holding_changes.
 
@@ -219,10 +201,6 @@ def test_excludes_retired_etfs_from_change_detection():
 
     insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
     insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
-
-    # Active ETF needs scrape success to pass 80% threshold
-    _insert_scrape_success("2026-06-20", "ACTIVE")
-    _insert_scrape_success("2026-06-23", "ACTIVE")
 
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 
@@ -260,9 +238,6 @@ def test_retired_etf_with_null_issuer_does_not_crash():
     insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
     insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
     insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
-
-    _insert_scrape_success("2026-06-20", "ACTIVE")
-    _insert_scrape_success("2026-06-23", "ACTIVE")
 
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 

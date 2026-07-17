@@ -14,6 +14,15 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
     with db._connect() as conn:
         conn.execute(
             """
+            INSERT OR IGNORE INTO etf_universe (
+                code, name, issuer, listing_date, retired, created_at, updated_at
+            ) VALUES (?, ?, 'Nomura', '2026-01-01', 0,
+                      '2026-01-01T00:00:00', '2026-01-01T00:00:00')
+            """,
+            (etf_code, etf_code),
+        )
+        conn.execute(
+            """
             INSERT INTO etf_daily_holdings (
                 date, etf_code, asset_name, asset_type, stock_code, stock_name,
                 shares, weight_pct, source_url, source_type, extraction_method,

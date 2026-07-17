@@ -26,31 +26,6 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", we
         )
 
 
-def insert_scrape_run(date, etf_code, status="success"):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                started_at, finished_at
-            ) VALUES (?, ?, ?, 'moneydj_primary', ?, 0, 0, 0, 1, 1, 0, 90, 90,
-                'https://test', ?, ?, ?)
-            """,
-            (
-                date,
-                etf_code,
-                status,
-                1 if status == "success" else 0,
-                None if status == "success" else "test failure",
-                f"{date}T00:00:00",
-                f"{date}T00:01:00",
-            ),
-        )
-
-
 def ensure_signal_table():
     with db._connect() as conn:
         conn.execute(
@@ -222,12 +197,10 @@ def insert_report_change(
         )
 
 
-def test_report_puts_data_quality_before_summary_and_shows_failed_etfs():
+def test_report_puts_data_quality_before_summary_and_shows_missing_etfs():
     db.init_db(":memory:")
     for etf_code in ETF_CODES[1:]:
         insert_holding("2026-06-26", etf_code)
-        insert_scrape_run("2026-06-26", etf_code)
-    insert_scrape_run("2026-06-26", "00400A", status="failed")
 
     report = generate_signal_report("2026-06-26")
 

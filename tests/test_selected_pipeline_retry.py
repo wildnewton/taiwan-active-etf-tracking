@@ -59,8 +59,7 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
         )), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db") as init_db, \
-        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
-        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot:
         summary = await run_selected_scrape_with_browser_async(":memory:", requested_codes, page=page)
 
     init_db.assert_called_once_with(":memory:")
@@ -70,7 +69,6 @@ async def test_run_selected_scrape_with_browser_async_retries_only_requested_cod
     assert summary["total_etfs"] == 2
     assert summary["data_freshness"] == {"fresh": 2, "stale": 0, "unknown": 0}
     assert replace_daily_snapshot.call_count == 2
-    assert insert_scrape_run.call_count == 2
 
 
 @pytest.mark.asyncio
@@ -90,8 +88,7 @@ async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date(
         )), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
-        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok):
         summary = await run_selected_scrape_with_browser_async(
             ":memory:",
             requested_codes,
@@ -101,5 +98,4 @@ async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date(
 
     assert summary["date"] == "2026-07-06"
     assert summary["data_freshness"] == {"fresh": 1, "stale": 0, "unknown": 0}
-    assert insert_scrape_run.call_args.args[0].date == date(2026, 7, 6)
-    assert insert_scrape_run.call_args.args[0].data_date == date(2026, 7, 6)
+    assert scraper.await_args.kwargs["target_date"] == date(2026, 7, 6)

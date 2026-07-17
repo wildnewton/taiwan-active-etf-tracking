@@ -3,15 +3,9 @@ from datetime import date, datetime, time, timedelta
 from typing import Awaitable, Callable, Optional
 from zoneinfo import ZoneInfo
 
-from db import (
-    init_db,
-    insert_scrape_run,
-    replace_daily_snapshot,
-    snapshot_exists,
-    successful_snapshot_exists,
-)
+from db import init_db, replace_daily_snapshot, snapshot_exists
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
-from models import HoldingRow, NonStockAssetRow, ScrapeRun
+from models import HoldingRow, NonStockAssetRow
 from scraper import (
     FAILED_RESULT,
     scrape_holdings,
@@ -265,7 +259,7 @@ def _partition_preexisting_successes(
     for etf in etfs:
         target = (
             preexisting
-            if successful_snapshot_exists(expected_data_date, etf["code"])
+            if snapshot_exists(expected_data_date, etf["code"])
             else missing
         )
         target.append(etf)
@@ -294,18 +288,8 @@ def _execute_scrape_sync(
     freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
-        started_at = datetime.now()
         result = scrape_fn(etf_code, freshness_target_date)
-        finished_at = datetime.now()
-        _record_result(
-            summary,
-            etf_code,
-            run_date,
-            expected_data_date,
-            started_at,
-            finished_at,
-            result,
-        )
+        _record_result(summary, etf_code, run_date, expected_data_date, result)
 
     _finalize_data_date_range(summary)
     return summary
@@ -321,18 +305,8 @@ async def _execute_scrape_async(
     freshness_target_date = expected_data_date or run_date
     for etf in etfs:
         etf_code = etf["code"]
-        started_at = datetime.now()
         result = await scrape_fn(etf_code, freshness_target_date)
-        finished_at = datetime.now()
-        _record_result(
-            summary,
-            etf_code,
-            run_date,
-            expected_data_date,
-            started_at,
-            finished_at,
-            result,
-        )
+        _record_result(summary, etf_code, run_date, expected_data_date, result)
 
     _finalize_data_date_range(summary)
     return summary
@@ -352,7 +326,6 @@ async def _execute_scrape_async_with_pages(
     async def scrape_one(etf: dict):
         etf_code = etf["code"]
         async with semaphore:
-            started_at = datetime.now()
             page = None
             try:
                 page = await context.new_page()
@@ -382,20 +355,11 @@ async def _execute_scrape_async_with_pages(
                                 **FAILED_RESULT,
                                 "reason": close_reason,
                             }
-            finished_at = datetime.now()
-            return etf_code, started_at, finished_at, result
+            return etf_code, result
 
     outcomes = await asyncio.gather(*(scrape_one(etf) for etf in etfs))
-    for etf_code, started_at, finished_at, result in outcomes:
-        _record_result(
-            summary,
-            etf_code,
-            run_date,
-            expected_data_date,
-            started_at,
-            finished_at,
-            result,
-        )
+    for etf_code, result in outcomes:
+        _record_result(summary, etf_code, run_date, expected_data_date, result)
 
     _finalize_data_date_range(summary)
     return summary
@@ -517,7 +481,7 @@ def _classify_scrape_status(
     data_date: Optional[date],
     expected_data_date: date,
 ) -> str:
-    """Return the final persisted status for one scrape result."""
+    """Classify one result for the current in-memory scrape summary."""
     if result["ok"] is not True or data_date is None:
         return "failed"
     if data_date < expected_data_date:
@@ -532,141 +496,91 @@ def _record_result(
     etf_code: str,
     run_date: date,
     expected_data_date: Optional[date],
-    started_at: datetime,
-    finished_at: datetime,
     result: dict,
 ) -> None:
-    should_record_scrape_run = True
     freshness_target_date = expected_data_date or run_date
-    data_date = None
-    final_result = result
-    final_status = "failed"
 
-    if result["ok"] is True:
-        data_date, date_error = _validate_snapshot_dates(result)
-        if date_error is not None:
-            final_result = {**result, "ok": False, "reason": date_error}
-            _record_freshness(
-                summary,
-                etf_code,
-                "failed",
-                None,
-                result,
-                unknown_reason=date_error,
-            )
-            _record_failure(
-                summary,
-                etf_code,
-                date_error,
-                run_moneydj_diagnostic=result.get("source_type")
-                not in {"moneydj_primary", "moneydj_browser"},
-            )
-            insert_scrape_run(
-                _build_scrape_run(
-                    etf_code,
-                    run_date,
-                    None,
-                    started_at,
-                    finished_at,
-                    final_result,
-                    status="failed",
-                )
-            )
-            return
-
-        final_status = _classify_scrape_status(
+    if result["ok"] is not True:
+        reason = result.get("reason") or "scrape_failed"
+        _record_freshness(
+            summary,
+            etf_code,
+            "failed",
+            None,
             result,
-            data_date,
-            freshness_target_date,
+            unknown_reason=reason,
         )
-        _record_weight_warning(summary, etf_code, result)
+        _record_failure(summary, etf_code, reason)
+        return
 
-        if final_status == "failed":
-            reason = "source_date_after_expected_data_date"
-            final_result = {**result, "ok": False, "reason": reason}
-            _record_freshness(
-                summary,
-                etf_code,
-                final_status,
-                data_date,
-                result,
-                unknown_reason=reason,
-            )
-            _record_failure(
-                summary,
-                etf_code,
-                reason,
-                run_moneydj_diagnostic=result.get("source_type")
-                not in {"moneydj_primary", "moneydj_browser"},
-            )
-            insert_scrape_run(
-                _build_scrape_run(
-                    etf_code,
-                    run_date,
-                    data_date,
-                    started_at,
-                    finished_at,
-                    final_result,
-                    status=final_status,
-                )
-            )
-            return
+    data_date, date_error = _validate_snapshot_dates(result)
+    if date_error is not None:
+        _record_freshness(
+            summary,
+            etf_code,
+            "failed",
+            None,
+            result,
+            unknown_reason=date_error,
+        )
+        _record_failure(
+            summary,
+            etf_code,
+            date_error,
+            run_moneydj_diagnostic=result.get("source_type")
+            not in {"moneydj_primary", "moneydj_browser"},
+        )
+        return
 
-        summary["total_stock_rows"] += len(result["stock_rows"])
-        summary["total_non_stock_rows"] += len(result["non_stock_rows"])
-        if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
-            summary["moneydj_success"] += 1
-        elif result["source_type"] == "official_fallback":
-            summary["official_success"] += 1
-            _check_moneydj_warning(summary, etf_code)
+    final_status = _classify_scrape_status(
+        result,
+        data_date,
+        freshness_target_date,
+    )
+    _record_weight_warning(summary, etf_code, result)
+
+    if final_status == "failed":
+        reason = "source_date_after_expected_data_date"
         _record_freshness(
             summary,
             etf_code,
             final_status,
             data_date,
             result,
+            unknown_reason=reason,
         )
-        _record_row_count_warning(summary, etf_code, result)
-
-        if final_status == "stale" and _should_skip_stale_existing_snapshot(
-            data_date,
+        _record_failure(
+            summary,
             etf_code,
-        ):
-            _record_stale_existing(summary, etf_code, data_date, result)
-            insert_scrape_run(
-                _build_scrape_run(
-                    etf_code,
-                    run_date,
-                    data_date,
-                    started_at,
-                    finished_at,
-                    result,
-                    status=final_status,
-                )
-            )
-            return
-
-        stock_rows = [_to_holding_row(row) for row in result["stock_rows"]]
-        non_stock_rows = [
-            _to_non_stock_asset_row(row) for row in result["non_stock_rows"]
-        ]
-        write_result = replace_daily_snapshot(stock_rows, non_stock_rows)
-        should_record_scrape_run = write_result.get("inserted", False)
-    else:
-        _record_failure(summary, etf_code, result["reason"])
-
-    if should_record_scrape_run:
-        insert_scrape_run(
-            _build_scrape_run(
-                etf_code,
-                run_date,
-                data_date,
-                started_at,
-                finished_at,
-                final_result,
-                status=final_status,
-            )
+            reason,
+            run_moneydj_diagnostic=result.get("source_type")
+            not in {"moneydj_primary", "moneydj_browser"},
         )
+        return
+
+    summary["total_stock_rows"] += len(result["stock_rows"])
+    summary["total_non_stock_rows"] += len(result["non_stock_rows"])
+    if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
+        summary["moneydj_success"] += 1
+    elif result["source_type"] == "official_fallback":
+        summary["official_success"] += 1
+        _check_moneydj_warning(summary, etf_code)
+    _record_freshness(summary, etf_code, final_status, data_date, result)
+    _record_row_count_warning(summary, etf_code, result)
+
+    if final_status == "stale" and _should_skip_stale_existing_snapshot(
+        data_date,
+        etf_code,
+    ):
+        _record_stale_existing(summary, etf_code, data_date, result)
+        return
+
+    stock_rows = [_to_holding_row(row) for row in result["stock_rows"]]
+    non_stock_rows = [
+        _to_non_stock_asset_row(row) for row in result["non_stock_rows"]
+    ]
+    replace_daily_snapshot(stock_rows, non_stock_rows)
+
 
 def _record_failure(
     summary: dict,
@@ -808,42 +722,6 @@ def _to_non_stock_asset_row(row: dict) -> NonStockAssetRow:
         scraped_at=datetime.now(),
     )
 
-
-def _build_scrape_run(
-    etf_code: str,
-    scrape_date: date,
-    data_date: Optional[date],
-    started_at: datetime,
-    finished_at: datetime,
-    result: dict,
-    status: str | None = None,
-) -> ScrapeRun:
-    source_type = result.get("source_type", "")
-    final_status = status or ("success" if result["ok"] else "failed")
-    usable_result = result["ok"] is True and final_status in {"success", "stale"}
-
-    error = result.get("reason") if final_status == "failed" else None
-
-    return ScrapeRun(
-        date=scrape_date,
-        data_date=data_date,
-        etf_code=etf_code,
-        status=final_status,
-        primary_source=source_type or "none",
-        primary_success=usable_result and source_type == "moneydj_primary",
-        moneydj_browser_used=usable_result and source_type == "moneydj_browser",
-        official_fallback_used=usable_result and source_type == "official_fallback",
-        official_success=usable_result and source_type == "official_fallback",
-        rows_extracted=len(result.get("all_rows", [])),
-        stock_rows_extracted=len(result.get("stock_rows", [])),
-        non_stock_rows_extracted=len(result.get("non_stock_rows", [])),
-        total_weight_all_rows=result.get("total_weight_all_rows", 0.0),
-        total_weight_stock_rows=result.get("total_weight_stock_rows", 0.0),
-        source_url=result.get("source_url") or None,
-        error=error,
-        started_at=started_at,
-        finished_at=finished_at,
-    )
 
 def _parse_row_date(value) -> Optional[date]:
     if isinstance(value, date):

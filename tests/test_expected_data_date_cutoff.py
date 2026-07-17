@@ -86,8 +86,7 @@ def test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous
         patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
         patch("pipeline.scrape_holdings", return_value=make_success(PREVIOUS_TRADING_DATE)) as scrape_holdings, \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}):
         summary = pipeline.run_daily_scrape(":memory:")
 
     current_run_at.assert_called_once_with()
@@ -110,8 +109,7 @@ def test_daily_run_date_and_cutoff_use_the_same_taipei_clock():
         patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
         patch("pipeline.scrape_holdings", return_value=make_success(RUN_DATE)) as scrape_holdings, \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}):
         summary = pipeline.run_daily_scrape(":memory:")
 
     assert summary["date"] == taipei_date.isoformat()

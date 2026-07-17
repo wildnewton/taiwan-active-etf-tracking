@@ -174,8 +174,6 @@ def test_pipeline_summary_surfaces_weight_warning_without_diagnostic_rescrape():
     diagnostic_scrape = Mock()
 
     with patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), patch(
-        "pipeline.insert_scrape_run"
-    ), patch(
         "scrapers.moneydj.scrape_moneydj", diagnostic_scrape
     ):
         summary = pipeline._run_scrape_sync(

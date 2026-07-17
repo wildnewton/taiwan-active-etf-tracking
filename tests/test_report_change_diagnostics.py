@@ -30,23 +30,6 @@ def insert_full_holdings_day(date):
         insert_holding(date, etf_code)
 
 
-def insert_failed_scrape_run(date, etf_code, error="test failure"):
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url,
-                error, started_at, finished_at
-            ) VALUES (?, ?, 'failed', 'moneydj_primary', 0, 0, 0, 0,
-                0, 0, 0, 0.0, 0.0, '', ?, ?, ?)
-            """,
-            (date, etf_code, error, f"{date}T00:00:00", f"{date}T00:01:00"),
-        )
-
-
 def insert_change_diagnostic(
     date,
     prev_date,
@@ -170,28 +153,6 @@ def test_report_uses_latest_diagnostics_run_when_previous_holding_date_differs()
     report = generate_signal_report("2026-06-26")
 
     assert "00980A incompatible_source_pair" in report
-
-
-def test_retired_etf_with_failed_scrape_run_does_not_appear_in_report_failed_section():
-    db.init_db(":memory:")
-    insert_full_holdings_day("2026-06-26")
-    retire_test_etf("00980A")
-    insert_failed_scrape_run("2026-06-26", "00980A", error="retired failure")
-
-    report = generate_signal_report("2026-06-26")
-
-    assert "抓取失敗:" not in report
-    assert "00980A" not in report
-
-
-def test_active_etf_with_failed_scrape_run_still_appears_in_report_failed_section():
-    db.init_db(":memory:")
-    insert_full_holdings_day("2026-06-26")
-    insert_failed_scrape_run("2026-06-26", "00981A", error="active failure")
-
-    report = generate_signal_report("2026-06-26")
-
-    assert "抓取失敗: 00981A" in report
 
 
 def test_retired_etf_with_skipped_change_diagnostic_does_not_appear_in_report():
