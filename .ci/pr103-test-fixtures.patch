@@ -1,0 +1,69 @@
+diff --git a/tests/test_changes.py b/tests/test_changes.py
+--- a/tests/test_changes.py
++++ b/tests/test_changes.py
+@@ -27,6 +27,29 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
+                 weight_pct,
+             ),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = ? AND source_type = 'moneydj_primary'
++            """,
++            (date, etf_code),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                      'moneydj_primary', 'test', '2026-06-23T00:00:00')
++            """,
++            (
++                date,
++                etf_code,
++                100.0 - stock_total,
++            ),
++        )
+ 
+ 
+ def fetch_change(stock_code, etf_code="00980A", date="2026-06-23"):
+diff --git a/tests/test_manager_intent_rollups.py b/tests/test_manager_intent_rollups.py
+--- a/tests/test_manager_intent_rollups.py
++++ b/tests/test_manager_intent_rollups.py
+@@ -73,6 +73,20 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", weight
+             """,
+             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, weight_pct, f"{date}T00:00:00"),
+         )
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://test',
++                      'moneydj_primary', 'test', ?)
++            """,
++            (
++                date,
++                etf_code,
++                100.0 - weight_pct,
++                f"{date}T00:00:00",
++            ),
++        )
+ 
+ 
+ def insert_comparable_context(date, etf_code):
+diff --git a/tests/test_report_canonical_sources.py b/tests/test_report_canonical_sources.py
+--- a/tests/test_report_canonical_sources.py
++++ b/tests/test_report_canonical_sources.py
+@@ -79,7 +79,7 @@ def test_report_summary_stats_ignore_noncanonical_holdings_rows():
+ 
+     report = generate_signal_report("2026-06-26")
+ 
+-    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 0" in report
++    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19" in report
+ 
+ 
+ def test_report_consensus_ignores_noncanonical_duplicate_source_rows():
