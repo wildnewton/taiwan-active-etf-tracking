@@ -29,6 +29,8 @@ jobs:
           RESULT=holdings-green-result.txt
           : > "$RESULT"
 
+          sed -i 's/"def detect_holding_changes(\\n"/"def detect_holding_changes("/' scripts/_apply_holdings_source_green.py
+
           echo "=== APPLY ===" >> "$RESULT"
           python scripts/_apply_holdings_source_green.py >> "$RESULT" 2>&1
           STATUS=$?
