@@ -1,0 +1,193 @@
+diff --git a/tests/test_active_classification.py b/tests/test_active_classification.py
+--- a/tests/test_active_classification.py
++++ b/tests/test_active_classification.py
+@@ -27,6 +27,29 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
+                 weight_pct,
+             ),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = ? AND source_type = 'moneydj_primary'
++            """,
++            (date, etf_code),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                      'moneydj_primary', 'test', '2026-06-24T00:00:00')
++            """,
++            (date, etf_code, 100.0 - stock_total),
++        )
+ 
+ 
+ def fetch_change(stock_code, etf_code="00980A", date="2026-06-24"):
+diff --git a/tests/test_change_classification_version.py b/tests/test_change_classification_version.py
+--- a/tests/test_change_classification_version.py
++++ b/tests/test_change_classification_version.py
+@@ -43,6 +43,29 @@ def _insert_holding(date_value, stock_code, stock_name, shares, weight_pct):
+                 weight_pct,
+             ),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = 'ACTIVE'
++              AND source_type = 'moneydj_primary'
++            """,
++            (date_value,),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, 'ACTIVE', 'Cash', 'cash', ?, 'https://example.test',
++                      'moneydj_primary', 'test', '2026-06-23T00:00:00')
++            """,
++            (date_value, 100.0 - stock_total),
++        )
+ 
+ 
+ def test_init_db_creates_classification_version_column():
+diff --git a/tests/test_flow_adjusted_materiality.py b/tests/test_flow_adjusted_materiality.py
+--- a/tests/test_flow_adjusted_materiality.py
++++ b/tests/test_flow_adjusted_materiality.py
+@@ -35,6 +35,29 @@ def insert_holding(date, stock_code, stock_name, shares, weight_pct, etf_code="0
+                 weight_pct,
+             ),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = ? AND source_type = 'moneydj_primary'
++            """,
++            (date, etf_code),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                      'moneydj_primary', 'test', '2026-06-25T00:00:00')
++            """,
++            (date, etf_code, 100.0 - stock_total),
++        )
+ 
+ 
+ def seed_day(date, base_shares, tsmc_shares=None, tsmc_weight=10.0):
+diff --git a/tests/test_fund_flow_adjustment.py b/tests/test_fund_flow_adjustment.py
+--- a/tests/test_fund_flow_adjustment.py
++++ b/tests/test_fund_flow_adjustment.py
+@@ -27,6 +27,29 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
+                 weight_pct,
+             ),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = ? AND source_type = 'moneydj_primary'
++            """,
++            (date, etf_code),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                      'moneydj_primary', 'test', '2026-06-25T00:00:00')
++            """,
++            (date, etf_code, 100.0 - stock_total),
++        )
+ 
+ 
+ def fetch_change(stock_code, etf_code="00980A", date="2026-06-24"):
+diff --git a/tests/test_canonical_comparability.py b/tests/test_canonical_comparability.py
+--- a/tests/test_canonical_comparability.py
++++ b/tests/test_canonical_comparability.py
+@@ -14,6 +14,7 @@ def insert_holding(
+     shares,
+     weight_pct,
+     source_type="moneydj_primary",
++    complete=True,
+ ):
+     with db._connect() as conn:
+         conn.execute(
+@@ -35,6 +36,32 @@ def insert_holding(
+                 source_type,
+             ),
+         )
++        if complete:
++            stock_total = conn.execute(
++                """
++                SELECT COALESCE(SUM(weight_pct), 0.0)
++                FROM etf_daily_holdings
++                WHERE date = ? AND etf_code = ? AND source_type = ?
++                """,
++                (date, etf_code, source_type),
++            ).fetchone()[0]
++            conn.execute(
++                """
++                INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                    date, etf_code, asset_name, asset_type, weight_pct,
++                    source_url, source_type, extraction_method, scraped_at
++                ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                          ?, 'test', '2026-06-24T00:00:00')
++                """,
++                (date, etf_code, 100.0 - stock_total, source_type),
++            )
+@@ -104,7 +131,15 @@ def test_partial_current_source_is_not_comparable_and_does_not_create_removed_po
+ 
+     # Current day only has a partial fallback source. This should be skipped,
+     # not treated as three removed core positions.
+-    insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5, "official_static")
++    insert_holding(
++        "2026-06-24",
++        "00980A",
++        "2330",
++        "台積電",
++        100,
++        10.5,
++        "official_static",
++        complete=False,
++    )
+ 
+     summary = detect_holding_changes("2026-06-24", "2026-06-23")
+diff --git a/tests/test_change_diagnostics.py b/tests/test_change_diagnostics.py
+--- a/tests/test_change_diagnostics.py
++++ b/tests/test_change_diagnostics.py
+@@ -18,6 +18,29 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct, s
+                 ?, 'test', '2026-06-24T00:00:00')
+             """,
+             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, shares, weight_pct, source_type),
+         )
++        stock_total = conn.execute(
++            """
++            SELECT COALESCE(SUM(weight_pct), 0.0)
++            FROM etf_daily_holdings
++            WHERE date = ? AND etf_code = ? AND source_type = ?
++            """,
++            (date, etf_code, source_type),
++        ).fetchone()[0]
++        conn.execute(
++            """
++            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
++                      ?, 'test', '2026-06-24T00:00:00')
++            """,
++            (date, etf_code, 100.0 - stock_total, source_type),
++        )
+ 
+ 
+ def fetch_diagnostics(date="2026-06-24", prev_date="2026-06-23"):
