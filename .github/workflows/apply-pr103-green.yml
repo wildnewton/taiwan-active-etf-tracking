@@ -48,8 +48,10 @@ jobs:
           {
             git -C repo apply --recount --verbose --check ../automation/.ci/pr103-test-fixtures.patch &&
             git -C repo apply --recount --verbose ../automation/.ci/pr103-test-fixtures.patch &&
-            git -C repo apply --recount --verbose --check ../automation/.ci/pr103-full-fixtures.patch &&
-            git -C repo apply --recount --verbose ../automation/.ci/pr103-full-fixtures.patch &&
+            git -C repo apply --exclude=tests/test_canonical_comparability.py --recount --verbose --check ../automation/.ci/pr103-full-fixtures.patch &&
+            git -C repo apply --exclude=tests/test_canonical_comparability.py --recount --verbose ../automation/.ci/pr103-full-fixtures.patch &&
+            git -C repo apply --recount --verbose --check ../automation/.ci/pr103-canonical-fixture.patch &&
+            git -C repo apply --recount --verbose ../automation/.ci/pr103-canonical-fixture.patch &&
             git -C repo diff --check
           } 2>&1 | tee /tmp/pr103-apply.log
           status=${PIPESTATUS[0]}
