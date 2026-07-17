@@ -6,6 +6,7 @@ from playwright.async_api import Error as PlaywrightError
 
 import scraper
 from scrapers.official import (
+    _is_capital_buyback_response,
     _is_ctbc_holdings_response,
     _is_nomura_assets_response,
     parse_ctbc_api,
@@ -167,13 +168,13 @@ class _ResponsePage:
             scrape_capital_playwright,
             "00982A",
             {"url": CAPITAL_PAGE_URL, "method": "api", "issuer": "Capital"},
-            _Response(CAPITAL_API_URL, _capital_payload()),
+            _Response(CAPITAL_API_URL, _capital_payload(), method="POST"),
         ),
         (
             scrape_nomura_stealth,
             "00980A",
             {"url": NOMURA_PAGE_URL, "method": "stealth_api", "issuer": "Nomura"},
-            _Response(NOMURA_API_URL, _nomura_payload()),
+            _Response(NOMURA_API_URL, _nomura_payload(), method="POST"),
         ),
         (
             scrape_ctbc_playwright,
@@ -266,30 +267,51 @@ def test_ctbc_parser_preserves_exact_holding_values():
 
 
 @pytest.mark.parametrize(
-    ("predicate", "valid_url", "wrong_url"),
+    ("predicate", "valid_url", "wrong_url", "expected_method"),
     [
+        (
+            _is_capital_buyback_response,
+            CAPITAL_API_URL,
+            "https://evilcapitalfund.com.tw/CFWeb/api/etf/buyback",
+            "POST",
+        ),
         (
             _is_nomura_assets_response,
             NOMURA_API_URL,
             "https://evilnomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
+            "POST",
         ),
         (
             _is_ctbc_holdings_response,
             CTBC_API_URL,
             "https://evilctbcinvestments.com.tw/API/etf/ETFHoldingWeight",
+            "GET",
         ),
     ],
 )
-def test_api_response_predicates_require_expected_endpoint(predicate, valid_url, wrong_url):
-    assert predicate(_Response(valid_url)) is True
-    assert predicate(_Response(wrong_url)) is False
-    assert predicate(_Response(valid_url, ok=False)) is False
-    assert predicate(_Response(valid_url, method="POST")) is False
+def test_api_response_predicates_require_expected_endpoint_and_method(
+    predicate,
+    valid_url,
+    wrong_url,
+    expected_method,
+):
+    wrong_method = "GET" if expected_method == "POST" else "POST"
+
+    assert predicate(_Response(valid_url, method=expected_method)) is True
+    assert predicate(_Response(wrong_url, method=expected_method)) is False
+    assert predicate(_Response(valid_url, ok=False, method=expected_method)) is False
+    assert predicate(_Response(valid_url, method=wrong_method)) is False
 
 
 @pytest.mark.asyncio
 async def test_nomura_rejects_payload_for_different_fund():
-    page = _ResponsePage(_Response(NOMURA_API_URL, _nomura_payload(fund_id="00985A")))
+    page = _ResponsePage(
+        _Response(
+            NOMURA_API_URL,
+            _nomura_payload(fund_id="00985A"),
+            method="POST",
+        )
+    )
     config = {"url": NOMURA_PAGE_URL, "method": "stealth_api", "issuer": "Nomura"}
 
     with patch("scrapers.official.get_official_config", return_value=config):
