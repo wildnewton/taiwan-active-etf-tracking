@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ci-pr90-review-followups
+  pull_request:
+    branches:
+      - ci-pr90-review-followups
 
 permissions:
   contents: write
