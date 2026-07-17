@@ -21,34 +21,59 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Apply direct refactor
-        run: python scripts/_apply_holdings_source_green.py
-      - name: Show remaining scrape-run references
-        run: |
-          grep -RIn "etf_scrape_runs\|insert_scrape_run\|ScrapeRun\|successful_snapshot_exists" scripts tests README.md || true
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run targeted tests
+      - name: Apply and verify
         env:
           PYTHONPATH: scripts
         run: |
-          pytest -q \
-            tests/test_holdings_source_of_truth.py \
-            tests/test_retry_stale_scrapes.py \
-            tests/test_pipeline_date_contract.py \
-            tests/test_changes.py \
-            tests/test_signal_report.py \
-            tests/test_nightly_pipeline.py
-      - name: Run full suite
-        env:
-          PYTHONPATH: scripts
-        run: pytest -q
-      - name: Commit GREEN
+          set +e
+          RESULT=holdings-green-result.txt
+          : > "$RESULT"
+
+          echo "=== APPLY ===" >> "$RESULT"
+          python scripts/_apply_holdings_source_green.py >> "$RESULT" 2>&1
+          STATUS=$?
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "=== REMAINING REFERENCES ===" >> "$RESULT"
+            grep -RIn "etf_scrape_runs\|insert_scrape_run\|ScrapeRun\|successful_snapshot_exists" scripts tests README.md >> "$RESULT" 2>&1 || true
+
+            echo "=== INSTALL ===" >> "$RESULT"
+            pip install -r requirements.txt >> "$RESULT" 2>&1
+            STATUS=$?
+          fi
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "=== TARGETED ===" >> "$RESULT"
+            pytest -q \
+              tests/test_holdings_source_of_truth.py \
+              tests/test_retry_stale_scrapes.py \
+              tests/test_pipeline_date_contract.py \
+              tests/test_changes.py \
+              tests/test_signal_report.py \
+              tests/test_nightly_pipeline.py >> "$RESULT" 2>&1
+            STATUS=$?
+          fi
+
+          if [ "$STATUS" -eq 0 ]; then
+            echo "=== FULL ===" >> "$RESULT"
+            pytest -q >> "$RESULT" 2>&1
+            STATUS=$?
+          fi
+
+          echo "STATUS=$STATUS" >> "$RESULT"
+          exit 0
+      - name: Commit outcome
         run: |
-          rm scripts/_apply_holdings_source_green.py
-          rm .github/workflows/holdings-source-green.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "refactor: make holdings the freshness source of truth"
+          if grep -q '^STATUS=0$' holdings-green-result.txt; then
+            rm holdings-green-result.txt
+            rm scripts/_apply_holdings_source_green.py
+            rm .github/workflows/holdings-source-green.yml
+            git add -A
+            git commit -m "refactor: make holdings the freshness source of truth"
+          else
+            git add holdings-green-result.txt
+            git commit -m "chore: capture holdings-source GREEN failure"
+          fi
           git push origin HEAD:fix/73-stale-scrape-status
