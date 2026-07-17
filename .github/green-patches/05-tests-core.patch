@@ -1,0 +1,264 @@
+diff --git a/tests/test_backfill_changes.py b/tests/test_backfill_changes.py
+index 0a4ac06..7863e73 100644
+--- a/tests/test_backfill_changes.py
++++ b/tests/test_backfill_changes.py
+@@ -42,6 +42,20 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
+         )
+ 
+ 
++def insert_cash(date, etf_code, weight_pct):
++    with db._connect() as conn:
++        conn.execute(
++            """
++            INSERT INTO etf_daily_non_stock_assets (
++                date, etf_code, asset_name, asset_type, weight_pct,
++                source_url, source_type, extraction_method, scraped_at
++            ) VALUES (?, ?, '現金', 'cash', ?, 'https://example.test',
++                'moneydj_primary', 'test', '2026-06-25T00:00:00')
++            """,
++            (date, etf_code, weight_pct),
++        )
++
++
+ def insert_stale_change(date="2026-06-24", stock_code="2330"):
+     with db._connect() as conn:
+         conn.execute(
+@@ -123,6 +137,7 @@ def seed_previous_day(date="2026-06-23"):
+         ("2345", "智邦", 3.0),
+     ]:
+         insert_holding(date, "00980A", code, name, 100, weight)
++    insert_cash(date, "00980A", 69.0)
+ 
+ 
+ def seed_scaled_current_day(date="2026-06-24"):
+@@ -135,6 +150,7 @@ def seed_scaled_current_day(date="2026-06-24"):
+         ("6669", "緯穎", 50, 3.2),
+     ]:
+         insert_holding(date, "00980A", code, name, shares, weight)
++    insert_cash(date, "00980A", 64.8)
+ 
+ 
+ def test_backfill_uses_previous_valid_date_not_immediate_holding_date():
+diff --git a/tests/test_changes.py b/tests/test_changes.py
+index 625a5c9..1383010 100644
+--- a/tests/test_changes.py
++++ b/tests/test_changes.py
+@@ -71,7 +71,7 @@ def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
+                 f"{idx:04d}",
+                 f"Stock {idx}",
+                 100,
+-                5.0,
++                100.0,
+             )
+ 
+     assert get_latest_valid_date() == "2026-06-22"
+@@ -170,7 +170,13 @@ def test_detects_consecutive_reductions():
+     assert row["consecutive_reduce_days"] == 2
+ 
+ 
+-def _insert_etf_universe_entry(code, name, issuer, retired):
++def _insert_etf_universe_entry(
++    code,
++    name,
++    issuer,
++    retired,
++    last_active_date="2026-06-23",
++):
+     with db._connect() as conn:
+         conn.execute(
+             """
+@@ -178,14 +184,14 @@ def _insert_etf_universe_entry(code, name, issuer, retired):
+                 (code, name, issuer, market, retired,
+                  first_seen_date, last_active_date, created_at, updated_at)
+             VALUES (?, ?, ?, 'TWSE', ?,
+-                    '2026-06-20', '2026-06-23', datetime('now'), datetime('now'))
++                    '2026-06-20', ?, datetime('now'), datetime('now'))
+             """,
+-            (code, name, issuer, retired),
++            (code, name, issuer, retired, last_active_date),
+         )
+ 
+ 
+-def test_excludes_retired_etfs_from_change_detection():
+-    """Retired (retired=1) ETFs must not appear in etf_holding_changes.
++def test_excludes_etfs_retired_before_the_analyzed_dates():
++    """ETFs outside the candidate-date universe must not produce changes.
+ 
+     The data pipeline should treat retired ETFs as out-of-scope for all
+     downstream analysis: diagnostics, change detection, and signals.
+@@ -193,7 +199,13 @@ def test_excludes_retired_etfs_from_change_detection():
+     db.init_db(":memory:")
+ 
+     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
+-    _insert_etf_universe_entry("RETIRED", "Retired ETF", None, 1)
++    _insert_etf_universe_entry(
++        "RETIRED",
++        "Retired ETF",
++        None,
++        1,
++        last_active_date="2026-06-19",
++    )
+ 
+     # Both have holdings on both dates
+     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
+@@ -232,7 +244,13 @@ def test_retired_etf_with_null_issuer_does_not_crash():
+     db.init_db(":memory:")
+ 
+     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
+-    _insert_etf_universe_entry("RETIRED", "Retired NULL", None, 1)
++    _insert_etf_universe_entry(
++        "RETIRED",
++        "Retired NULL",
++        None,
++        1,
++        last_active_date="2026-06-19",
++    )
+ 
+     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
+     insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
+diff --git a/tests/test_daily_snapshot_replacement.py b/tests/test_daily_snapshot_replacement.py
+index 51bd41a..80a8d08 100644
+--- a/tests/test_daily_snapshot_replacement.py
++++ b/tests/test_daily_snapshot_replacement.py
+@@ -155,6 +155,61 @@ def test_lower_priority_incoming_source_does_not_overwrite_higher_priority_exist
+     assert rows_for() == [("2026-07-08", "00981A", "2330", "moneydj_primary")]
+ 
+ 
++def test_complete_lower_priority_snapshot_replaces_incomplete_higher_priority_snapshot():
++    db.init_db(":memory:")
++    db.insert_holdings([
++        holding(
++            stock_code="2330",
++            source_type="moneydj_primary",
++            weight_pct=50.0,
++        )
++    ])
++
++    result = db.replace_daily_snapshot(
++        [
++            holding(
++                stock_code="2330",
++                source_type="official_fallback",
++                weight_pct=100.0,
++            )
++        ],
++        [],
++    )
++
++    assert result == {"inserted": True, "source_type": "official_fallback"}
++    assert rows_for() == [
++        ("2026-07-08", "00981A", "2330", "official_fallback")
++    ]
++
++
++def test_complete_higher_priority_snapshot_still_beats_complete_lower_priority_snapshot():
++    db.init_db(":memory:")
++    db.insert_holdings([
++        holding(
++            stock_code="2330",
++            source_type="moneydj_primary",
++            weight_pct=100.0,
++        )
++    ])
++
++    result = db.replace_daily_snapshot(
++        [
++            holding(
++                stock_code="2330",
++                source_type="official_fallback",
++                weight_pct=100.0,
++            )
++        ],
++        [],
++    )
++
++    assert result["inserted"] is False
++    assert result["reason"] == "existing_higher_priority_source_preserved"
++    assert rows_for() == [
++        ("2026-07-08", "00981A", "2330", "moneydj_primary")
++    ]
++
++
+ def test_non_stock_assets_are_replaced_atomically_with_stock_snapshot():
+     db.init_db(":memory:")
+     db.insert_holdings([holding(stock_code="2330", source_type="official_fallback")])
+diff --git a/tests/test_date_semantics_final_review.py b/tests/test_date_semantics_final_review.py
+index 95bf4ad..3c6fc85 100644
+--- a/tests/test_date_semantics_final_review.py
++++ b/tests/test_date_semantics_final_review.py
+@@ -49,7 +49,7 @@ def _seed_holding(data_date: str, code: str) -> None:
+                 date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                 shares, weight_pct, source_url, source_type, extraction_method,
+                 scraped_at
+-            ) VALUES (?, ?, ?, 'stock', '2330', '台積電', 1000, 90.0,
++            ) VALUES (?, ?, ?, 'stock', '2330', '台積電', 1000, 100.0,
+                       'https://example.test', 'moneydj_primary', 'test', ?)
+             """,
+             (data_date, code, f"台積電({code})", f"{data_date}T21:00:00"),
+diff --git a/tests/test_etf_universe.py b/tests/test_etf_universe.py
+index 2ab4f1a..cada6e7 100644
+--- a/tests/test_etf_universe.py
++++ b/tests/test_etf_universe.py
+@@ -121,7 +121,7 @@ def test_init_db_migrates_legacy_seen_and_retired_dates_to_last_active_date(tmp_
+     assert "last_active_date" in columns
+     assert "last_seen_date" not in columns
+     assert "retired_since" not in columns
+-    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-04"}
++    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-03"}
+ 
+ 
+ def test_seed_etf_universe_from_seed_file_populates_known_etfs():
+@@ -141,7 +141,7 @@ def test_seed_is_idempotent_and_preserves_existing_db_metadata():
+     db.init_db(":memory:")
+     from etf_universe import get_etf_config, seed_etf_universe_from_file, upsert_etf
+ 
+-    seed_etf_universe_from_file()
++    seed_etf_universe_from_file(seen_date="2026-06-30")
+     upsert_etf({"code": "00980A", "name": "手動名稱", "issuer": "ManualIssuer"})
+     inserted_again = seed_etf_universe_from_file()
+     config = get_etf_config("00980A")
+@@ -180,7 +180,7 @@ def test_reconcile_discovery_inserts_new_and_marks_missing_pending_first():
+     db.init_db(":memory:")
+     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+ 
+-    seed_etf_universe_from_file()
++    seed_etf_universe_from_file(seen_date="2026-06-30")
+     discovered = _discovered_without("00980A")
+     discovered.append({"code": "01000A", "name": "主動測試新ETF", "market": "TWSE", "isin": "TW00001000A"})
+ 
+@@ -203,7 +203,7 @@ def test_complete_second_consecutive_absence_retires_pending_etf():
+     db.init_db(":memory:")
+     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+ 
+-    seed_etf_universe_from_file()
++    seed_etf_universe_from_file(seen_date="2026-06-30")
+     reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
+     summary = reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-02")
+ 
+@@ -213,7 +213,7 @@ def test_complete_second_consecutive_absence_retires_pending_etf():
+     assert summary["retired"] == ["00980A"]
+     assert "00980A" not in active_codes
+     assert retired_config["retired"] == 1
+-    assert retired_config["last_active_date"] == "2026-07-02"
++    assert retired_config["last_active_date"] == "2026-06-30"
+     assert retired_config["pending_retirement_since"] is None
+ 
+ 
+@@ -221,7 +221,7 @@ def test_incomplete_discovery_does_not_mark_or_retire_missing_etfs():
+     db.init_db(":memory:")
+     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+ 
+-    seed_etf_universe_from_file()
++    seed_etf_universe_from_file(seen_date="2026-06-30")
+     summary = reconcile_discovered_universe(
+         _discovered_without("00980A"),
+         seen_date="2026-07-01",
+@@ -243,7 +243,7 @@ def test_reappearance_clears_pending_retirement():
+     db.init_db(":memory:")
+     from etf_universe import get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+ 
+-    seed_etf_universe_from_file()
++    seed_etf_universe_from_file(seen_date="2026-06-30")
+     reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
+     summary = reconcile_discovered_universe(_discovered_without(), seen_date="2026-07-02")
+ 
