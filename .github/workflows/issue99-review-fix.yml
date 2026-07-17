@@ -38,7 +38,9 @@ jobs:
 
       - name: Decode patch script
         run: |
-          base64 -d .github/issue99_review_fix.py.gz.b64 | gzip -d > /tmp/issue99_review_fix.py
+          cat .github/issue99_patch.part{1,2,3,4,5} > /tmp/issue99_review_fix.py.gz.b64
+          test "$(wc -c < /tmp/issue99_review_fix.py.gz.b64)" -eq 3380
+          base64 -d /tmp/issue99_review_fix.py.gz.b64 | gzip -d > /tmp/issue99_review_fix.py
           python -m py_compile /tmp/issue99_review_fix.py
 
       - name: Configure Git
