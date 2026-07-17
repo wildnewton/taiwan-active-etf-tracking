@@ -73,7 +73,7 @@ jobs:
             echo "=== REMAINING REFERENCES ===" >> "$RESULT"
             grep -RIn "etf_scrape_runs\|insert_scrape_run\|ScrapeRun\|successful_snapshot_exists" scripts tests README.md >> "$RESULT" 2>&1 || true
             echo "=== INSTALL ===" >> "$RESULT"
-            pip install -r requirements.txt >> "$RESULT" 2>&1
+            pip install -r requirements.txt pytest-asyncio >> "$RESULT" 2>&1
             STATUS=$?
           fi
 
