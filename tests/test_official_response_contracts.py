@@ -103,9 +103,16 @@ def _static_html(*, include_date=True):
     """
 
 
+class _Request:
+    def __init__(self, method):
+        self.method = method
+
+
 class _Response:
-    def __init__(self, url, body):
+    def __init__(self, url, body, *, method="GET"):
         self.url = url
+        self.ok = True
+        self.request = _Request(method)
         self._body = body
 
     async def text(self):
@@ -203,7 +210,7 @@ def test_capital_response_predicate_is_endpoint_specific():
         _Response(CAPITAL_PAGE_URL, "<html></html>")
     ) is False
     assert _is_capital_buyback_response(
-        _Response(CAPITAL_API_URL, "{}")
+        _Response(CAPITAL_API_URL, "{}", method="POST")
     ) is True
 
 
@@ -218,7 +225,7 @@ async def test_capital_ignores_document_response_before_api(mock_config):
     page = _Page(
         [
             _Response(CAPITAL_PAGE_URL, "<html>product page</html>"),
-            _Response(CAPITAL_API_URL, _capital_payload()),
+            _Response(CAPITAL_API_URL, _capital_payload(), method="POST"),
         ]
     )
 
@@ -237,7 +244,7 @@ async def test_capital_rejects_structurally_valid_undated_rows(mock_config):
         "method": "api",
         "issuer": "Capital",
     }
-    page = _Page([_Response(CAPITAL_API_URL, _capital_payload(include_date=False))])
+    page = _Page([_Response(CAPITAL_API_URL, _capital_payload(include_date=False), method="POST")])
 
     result = await scrape_capital_playwright("00982A", page)
 
@@ -253,7 +260,7 @@ async def test_nomura_rejects_structurally_valid_undated_rows(mock_config):
         "method": "stealth_api",
         "issuer": "Nomura",
     }
-    page = _Page([_Response(NOMURA_API_URL, _nomura_payload(include_date=False))])
+    page = _Page([_Response(NOMURA_API_URL, _nomura_payload(include_date=False), method="POST")])
 
     result = await scrape_nomura_stealth("00980A", page)
 
@@ -295,7 +302,7 @@ def test_static_official_rejects_structurally_valid_undated_rows():
 
 @pytest.mark.asyncio
 async def test_undated_capital_result_continues_to_static_fallback():
-    page = _Page([_Response(CAPITAL_API_URL, _capital_payload(include_date=False))])
+    page = _Page([_Response(CAPITAL_API_URL, _capital_payload(include_date=False), method="POST")])
     static_result = _successful_result()
     config = {
         "url": CAPITAL_PAGE_URL,

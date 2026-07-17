@@ -83,9 +83,16 @@ NOMURA_API_JSON = json.dumps(
 )
 
 
+class _Request:
+    def __init__(self, method):
+        self.method = method
+
+
 class _Response:
-    def __init__(self, url, body):
+    def __init__(self, url, body, *, method="GET"):
         self.url = url
+        self.ok = True
+        self.request = _Request(method)
         self._body = body
 
     async def text(self):
@@ -129,6 +136,7 @@ def _mock_page(
     response_body=None,
     body_text="",
     response_wait_error=None,
+    response_method="GET",
 ):
     page = AsyncMock()
     order = []
@@ -147,7 +155,7 @@ def _mock_page(
     page.query_selector_all = AsyncMock(return_value=[])
     page._order = order
 
-    response = _Response(response_url or "", response_body or "{}")
+    response = _Response(response_url or "", response_body or "{}", method=response_method)
 
     def expect_response(predicate, timeout):
         assert timeout <= 10000
@@ -170,6 +178,7 @@ async def test_capital_registers_bounded_response_wait_before_navigation(mock_co
     }
     page = _mock_page(
         response_url="https://www.capitalfund.com.tw/CFWeb/api/etf/buyback",
+        response_method="POST",
         response_body=CAPITAL_API_JSON,
     )
 
@@ -194,6 +203,7 @@ async def test_capital_navigation_error_still_propagates(mock_config):
     }
     page = _mock_page(
         response_url="https://www.capitalfund.com.tw/CFWeb/api/etf/buyback",
+        response_method="POST",
         response_body=CAPITAL_API_JSON,
     )
     page.goto.side_effect = RuntimeError("navigation failed")
@@ -216,6 +226,7 @@ async def test_capital_navigation_timeout_still_propagates(mock_config):
     }
     page = _mock_page(
         response_url="https://www.capitalfund.com.tw/CFWeb/api/etf/buyback",
+        response_method="POST",
         response_body=CAPITAL_API_JSON,
     )
     page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
@@ -254,6 +265,7 @@ async def test_nomura_registers_bounded_response_wait_before_navigation(mock_con
     }
     page = _mock_page(
         response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
+        response_method="POST",
         response_body=NOMURA_API_JSON,
     )
 
@@ -278,6 +290,7 @@ async def test_nomura_navigation_error_still_propagates(mock_config):
     }
     page = _mock_page(
         response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
+        response_method="POST",
         response_body=NOMURA_API_JSON,
     )
     page.goto.side_effect = RuntimeError("navigation failed")
@@ -300,6 +313,7 @@ async def test_nomura_navigation_timeout_still_propagates(mock_config):
     }
     page = _mock_page(
         response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
+        response_method="POST",
         response_body=NOMURA_API_JSON,
     )
     page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
@@ -309,7 +323,7 @@ async def test_nomura_navigation_timeout_still_propagates(mock_config):
 
 
 def test_nomura_assets_response_predicate_is_case_insensitive():
-    response = _Response("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", "{}")
+    response = _Response("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", "{}", method="POST")
 
     assert _is_nomura_assets_response(response) is True
 

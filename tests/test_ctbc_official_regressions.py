@@ -61,9 +61,16 @@ def _payload(*, include_date=True, include_non_stock=False, stock_items=None):
     return json.dumps({"Data": data})
 
 
+class _Request:
+    def __init__(self, method):
+        self.method = method
+
+
 class _Response:
     def __init__(self, body):
         self.url = API_URL
+        self.ok = True
+        self.request = _Request("GET")
         self._body = body
 
     async def text(self):
