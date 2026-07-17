@@ -4,7 +4,12 @@ from unittest.mock import patch
 import db
 import report
 from changes import detect_holding_changes, get_latest_valid_date
-from etf_universe import get_etf_config, reconcile_discovered_universe, retire_etf
+from etf_universe import (
+    get_eligible_etf_codes,
+    get_etf_config,
+    reconcile_discovered_universe,
+    retire_etf,
+)
 from retry_stale_scrapes import retry_missing_holdings
 
 
@@ -53,6 +58,7 @@ def _insert_snapshot(
     stock_weight: float = 100.0,
     non_stock_weight: float = 0.0,
     shares: float = 100.0,
+    source_type: str = "moneydj_primary",
 ) -> None:
     now = datetime.now().isoformat()
     with db._connect() as conn:
@@ -64,9 +70,9 @@ def _insert_snapshot(
                     shares, weight_pct, source_url, source_type,
                     extraction_method, scraped_at
                 ) VALUES (?, ?, '台積電', 'stock', '2330', '台積電', ?, ?,
-                          'https://example.test', 'moneydj_primary', 'test', ?)
+                          'https://example.test', ?, 'test', ?)
                 """,
-                (data_date, etf_code, shares, stock_weight, now),
+                (data_date, etf_code, shares, stock_weight, source_type, now),
             )
         if non_stock_weight:
             conn.execute(
@@ -75,9 +81,9 @@ def _insert_snapshot(
                     date, etf_code, asset_name, asset_type, weight_pct,
                     source_url, source_type, extraction_method, scraped_at
                 ) VALUES (?, ?, '現金', 'cash', ?, 'https://example.test',
-                          'moneydj_primary', 'test', ?)
+                          ?, 'test', ?)
                 """,
-                (data_date, etf_code, non_stock_weight, now),
+                (data_date, etf_code, non_stock_weight, source_type, now),
             )
 
 
@@ -119,6 +125,14 @@ def test_snapshot_integrity_counts_stock_and_non_stock_rows_together():
     assert db.snapshot_exists(TARGET_DATE, "A") is True
 
 
+def test_non_stock_only_rows_do_not_form_a_holdings_snapshot():
+    db.init_db(":memory:")
+    _seed_etf("A")
+    _insert_snapshot(TARGET_DATE, "A", stock_weight=0.0, non_stock_weight=100.0)
+
+    assert db.snapshot_exists(TARGET_DATE, "A") is False
+
+
 def test_candidate_date_eligibility_includes_last_active_date_and_excludes_scope():
     db.init_db(":memory:")
     _seed_etf("ACTIVE")
@@ -132,8 +146,8 @@ def test_candidate_date_eligibility_includes_last_active_date_and_excludes_scope
         official_logic="excluded_from_taiwan_stock_universe",
     )
 
-    assert db.get_eligible_etf_codes(TARGET_DATE) == ["ACTIVE", "RETIRED_AFTER"]
-    assert db.get_eligible_etf_codes("2026-07-16") == ["ACTIVE"]
+    assert get_eligible_etf_codes(TARGET_DATE) == ["ACTIVE", "RETIRED_AFTER"]
+    assert get_eligible_etf_codes("2026-07-16") == ["ACTIVE"]
 
 
 def test_retired_etf_is_analyzed_through_its_last_active_date():
@@ -238,6 +252,20 @@ def test_manual_retirement_does_not_invent_a_new_last_active_date():
     config = get_etf_config("A")
     assert config["retired"] == 1
     assert config["last_active_date"] == "2026-06-30"
+
+
+def test_init_db_clears_impossible_prelisting_last_active_date(tmp_path):
+    db_path = tmp_path / "holdings.sqlite"
+    db.init_db(db_path)
+    _seed_etf(
+        "FUTURE",
+        listing_date="2026-07-20",
+        last_active_date=TARGET_DATE,
+    )
+
+    db.init_db(db_path)
+
+    assert get_etf_config("FUTURE")["last_active_date"] is None
 
 
 def test_prelisting_discovery_does_not_set_last_active_date():
