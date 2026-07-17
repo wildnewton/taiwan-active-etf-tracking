@@ -1,0 +1,279 @@
+diff --git a/scripts/scrapers/official.py b/scripts/scrapers/official.py
+index f21bb37..cdfbb33 100644
+--- a/scripts/scrapers/official.py
++++ b/scripts/scrapers/official.py
+@@ -343,12 +343,7 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
+     except Exception as exc:
+         return _failed_result(source_url, f"CTBC API parse error: {exc}")
+ 
+-    result = _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
+-    if result["ok"] is not True:
+-        return result
+-    if _single_source_date(all_rows) is None:
+-        return _failed_result(source_url, "CTBC holdings date missing or inconsistent")
+-    return result
++    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
+ 
+ 
+ async def scrape_mega_playwright(etf_code: str, page) -> dict:
+@@ -461,8 +456,10 @@ def _response_url(response) -> str:
+ 
+ 
+ def _is_capital_buyback_response(response) -> bool:
+-    url = _response_url(response).lower()
+-    return "capitalfund" in url and "buyback" in url
++    parsed = urlparse(_response_url(response))
++    hostname = (parsed.hostname or "").lower()
++    path = parsed.path.rstrip("/").lower()
++    return hostname.endswith("capitalfund.com.tw") and path == "/cfweb/api/etf/buyback"
+ 
+ 
+ def _is_nomura_assets_response(response) -> bool:
+@@ -678,6 +675,8 @@ def _validate_official_rows(rows: list) -> tuple[bool, str]:
+         stock_name = row.get("stock_name")
+         if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
+             return False, "invalid Taiwan stock row"
++    if _single_source_date(rows) is None:
++        return False, "missing or inconsistent source date"
+     return True, "ok"
+ 
+ 
+ diff --git a/tests/conftest.py b/tests/conftest.py
+index 01dfca3..4dcffc9 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -1,7 +1,6 @@
+-from unittest.mock import Mock, patch
++from unittest.mock import patch
+ 
+ import pytest
+-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+ 
+ 
+ _PIPELINE_SCRAPE_UNIT_MODULES = {
+@@ -20,58 +19,3 @@ def isolate_pipeline_scrape_unit_tests_from_preexisting_snapshots(request):
+ 
+     with patch("pipeline.successful_snapshot_exists", return_value=False):
+         yield
+-
+-
+-class _ResponseInfo:
+-    def __init__(self, response):
+-        self._response = response
+-
+-    @property
+-    def value(self):
+-        async def resolve():
+-            return self._response
+-
+-        return resolve()
+-
+-
+-class _ExpectResponseContext:
+-    def __init__(self, response):
+-        self._response = response
+-
+-    async def __aenter__(self):
+-        return _ResponseInfo(self._response)
+-
+-    async def __aexit__(self, exc_type, exc, traceback):
+-        if exc_type is None and self._response is None:
+-            raise PlaywrightTimeoutError("timed out")
+-        return False
+-
+-
+-@pytest.fixture(autouse=True)
+-def adapt_legacy_official_playwright_mocks(monkeypatch, request):
+-    """Keep consolidated official tests aligned with Playwright's response API."""
+-    module = request.module
+-    if module.__name__ != "test_official" or not hasattr(module, "_make_mock_page"):
+-        yield
+-        return
+-
+-    original_make_mock_page = module._make_mock_page
+-
+-    def make_mock_page(*args, **kwargs):
+-        page = original_make_mock_page(*args, **kwargs)
+-
+-        def expect_response(predicate, timeout):
+-            assert timeout <= 10000
+-            matching_response = None
+-            for url, body in page._responses_to_fire:
+-                response = module._make_mock_response(url, body)
+-                if predicate(response):
+-                    matching_response = response
+-                    break
+-            return _ExpectResponseContext(matching_response)
+-
+-        page.expect_response = Mock(side_effect=expect_response)
+-        return page
+-
+-    monkeypatch.setattr(module, "_make_mock_page", make_mock_page)
+-    yield
+diff --git a/tests/test_official.py b/tests/test_official.py
+index 18e46af..4633803 100644
+--- a/tests/test_official.py
++++ b/tests/test_official.py
+@@ -2,6 +2,8 @@ import json
+ import pytest
+ from unittest.mock import AsyncMock, Mock, patch
+ 
++from playwright.async_api import TimeoutError as PlaywrightTimeoutError
++
+ from scrapers.official import (
+     fetch_static,
+     get_official_config,
+@@ -557,9 +559,8 @@ def test_scrape_official_static_falls_back_to_twse():
+ 
+ 
+ # ── Async browser scraper tests ──
+-# These test the Playwright-based scrapers using mock page objects.
+-# Each mock simulates: page.goto(), page.on('response'), page.wait_for_timeout(),
+-# page.remove_listener(), page.locator(), page.query_selector_all().
++# These test the Playwright-based scrapers using mock page objects that
++# implement the same expect_response context-manager contract as Playwright.
+ 
+ 
+ def _make_mock_response(url: str, body: str):
+@@ -570,32 +571,50 @@ def _make_mock_response(url: str, body: str):
+     return resp
+ 
+ 
+-def _make_mock_page(responses=None, body_text=None, tables=None):
+-    """Create a mock Playwright Page.
++class _MockResponseInfo:
++    def __init__(self, response):
++        self._response = response
++
++    @property
++    def value(self):
++        async def resolve():
++            return self._response
++
++        return resolve()
+ 
+-    Args:
+-        responses: list of (url, body) tuples to fire as 'response' events.
+-        body_text: inner_text for <body> (Mega text parser).
+-        tables: list of table mock objects (Uni-President).
+-    """
+-    page = AsyncMock()
+-    page.goto = AsyncMock()
+-    page.wait_for_timeout = AsyncMock()
+-    page.remove_listener = AsyncMock()
+ 
+-    # Capture the 'response' callback so we can fire it
+-    _callbacks = {}
++class _MockExpectResponseContext:
++    def __init__(self, responses, predicate):
++        self._responses = responses
++        self._predicate = predicate
++        self._response = None
+ 
+-    def _on(event, callback):
+-        _callbacks[event] = callback
++    async def __aenter__(self):
++        for url, body in self._responses:
++            response = _make_mock_response(url, body)
++            if self._predicate(response):
++                self._response = response
++                break
++        return _MockResponseInfo(self._response)
+ 
+-    page.on = _on
++    async def __aexit__(self, exc_type, exc, traceback):
++        if exc_type is None and self._response is None:
++            raise PlaywrightTimeoutError("timed out")
++        return False
+ 
+-    # After page is returned, caller can fire events via _fire_responses
+-    page._callbacks = _callbacks
+-    page._responses_to_fire = responses or []
+-    page._body_text = body_text
+-    page._tables = tables or []
++
++def _make_mock_page(responses=None, body_text=None, tables=None):
++    """Create a mock Playwright Page with direct response-wait support."""
++    page = AsyncMock()
++    page.goto = AsyncMock()
++    page.wait_for_timeout = AsyncMock()
++    response_items = responses or []
++    page.expect_response = Mock(
++        side_effect=lambda predicate, timeout: _MockExpectResponseContext(
++            response_items,
++            predicate,
++        )
++    )
+ 
+     # Mock locator('body').inner_text() — locator() is SYNC in Playwright
+     body_locator = AsyncMock()
+@@ -608,16 +627,6 @@ def _make_mock_page(responses=None, body_text=None, tables=None):
+     return page
+ 
+ 
+-async def _fire_response_events(page):
+-    """Fire queued response events through the page's callback."""
+-    callback = page._callbacks.get("response")
+-    if not callback:
+-        return
+-    for url, body in page._responses_to_fire:
+-        mock_resp = _make_mock_response(url, body)
+-        await callback(mock_resp)
+-
+-
+ # -- scrape_capital_playwright --
+ 
+ @pytest.mark.asyncio
+@@ -631,11 +640,6 @@ async def test_scrape_capital_playwright_intercepts_api(mock_config):
+         responses=[("https://www.capitalfund.com.tw/CFWeb/api/etf/buyback", CAPITAL_API_JSON_RICH)]
+     )
+ 
+-    # Fire response events after goto is called
+-    async def goto_side_effect(*a, **kw):
+-        await _fire_response_events(page)
+-
+-    page.goto.side_effect = goto_side_effect
+ 
+     result = await scrape_capital_playwright("00982A", page)
+ 
+@@ -677,7 +681,6 @@ async def test_scrape_capital_playwright_uses_domcontentloaded_not_networkidle(m
+     async def goto_side_effect(*a, **kw):
+         nonlocal goto_kwargs
+         goto_kwargs = kw
+-        await _fire_response_events(page)
+ 
+     page.goto.side_effect = goto_side_effect
+ 
+@@ -701,10 +704,6 @@ async def test_scrape_nomura_stealth_intercepts_api(mock_config):
+         responses=[("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", NOMURA_API_JSON_RICH)]
+     )
+ 
+-    async def goto_side_effect(*a, **kw):
+-        await _fire_response_events(page)
+-
+-    page.goto.side_effect = goto_side_effect
+ 
+     result = await scrape_nomura_stealth("00980A", page)
+ 
+@@ -869,10 +868,6 @@ async def test_scrape_official_with_browser_dispatches_capital(mock_config):
+         responses=[("https://www.capitalfund.com.tw/CFWeb/api/etf/buyback", CAPITAL_API_JSON_RICH)]
+     )
+ 
+-    async def goto_side_effect(*a, **kw):
+-        await _fire_response_events(page)
+-
+-    page.goto.side_effect = goto_side_effect
+ 
+     result = await scrape_official_with_browser("00982A", page)
+ 
+@@ -891,10 +886,6 @@ async def test_scrape_official_with_browser_dispatches_nomura(mock_config):
+         responses=[("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", NOMURA_API_JSON_RICH)]
+     )
+ 
+-    async def goto_side_effect(*a, **kw):
+-        await _fire_response_events(page)
+-
+-    page.goto.side_effect = goto_side_effect
+ 
+     result = await scrape_official_with_browser("00980A", page)
+ 
