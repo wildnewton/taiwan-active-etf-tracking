@@ -1,9 +1,10 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from playwright.async_api import Error as PlaywrightError
 
+import scraper
 from scrapers.official import (
     _is_ctbc_holdings_response,
     _is_nomura_assets_response,
@@ -197,6 +198,34 @@ async def test_response_wait_playwright_error_after_navigation_returns_failure(
     assert "not intercepted" in result["reason"]
     page.goto.assert_awaited_once()
     page.wait_for_response.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_response_wait_playwright_error_continues_to_static_fallback():
+    page = _ResponsePage(
+        _Response(CTBC_API_URL, _ctbc_payload()),
+        PlaywrightError("page closed"),
+    )
+    static_result = {"ok": True, "reason": "static sentinel"}
+    static_fallback = Mock(return_value=static_result)
+    config = {
+        "url": CTBC_PAGE_URL,
+        "method": "browser",
+        "issuer": "CTBC",
+        "official_method": "browser",
+    }
+
+    with patch("scraper.get_etf_config", return_value=config), patch(
+        "scrapers.official.get_official_config",
+        return_value=config,
+    ), patch(
+        "scraper._official_fallback_static",
+        new=static_fallback,
+    ):
+        result = await scraper._official_fallback_with_browser("00406A", page)
+
+    static_fallback.assert_called_once_with("00406A")
+    assert result is static_result
 
 
 @pytest.mark.asyncio
