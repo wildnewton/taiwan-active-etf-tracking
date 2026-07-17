@@ -152,7 +152,7 @@ def _latest_change_date(conn) -> str | None:
 
 
 def _window_dates(conn, target_date: str, window_days: int) -> list[str]:
-    rows = conn.execute(
+    candidate_rows = conn.execute(
         """
         SELECT date FROM (
             SELECT DISTINCT date FROM etf_change_diagnostics WHERE date <= ?
@@ -162,11 +162,19 @@ def _window_dates(conn, target_date: str, window_days: int) -> list[str]:
             SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ?
         )
         ORDER BY date DESC
-        LIMIT ?
         """,
-        (target_date, target_date, target_date, window_days),
+        (target_date, target_date, target_date),
     ).fetchall()
-    return sorted(row[0] for row in rows)
+    valid_dates = []
+    for row in candidate_rows:
+        date_value = row[0]
+        eligible_codes = set(get_eligible_etf_codes(date_value))
+        complete_codes = set(db.get_snapshot_etf_codes(date_value))
+        if eligible_codes & complete_codes:
+            valid_dates.append(date_value)
+        if len(valid_dates) == window_days:
+            break
+    return sorted(valid_dates)
 
 
 def _change_events(

@@ -364,6 +364,35 @@ def _snapshot_exists(conn, date_value, etf_code):
     return False
 
 
+def get_canonical_snapshot_entry(data_date, etf_code):
+    """Return the highest-ranked complete snapshot entry for one ETF/date."""
+    data_date = _serialize(data_date)
+    with _connect() as conn:
+        entry = _best_snapshot_entry(
+            _existing_snapshot_entries(conn, data_date, etf_code)
+        )
+        if not entry or not _snapshot_is_complete(entry):
+            return None
+        stock_codes = {
+            row[0]
+            for row in conn.execute(
+                """
+                SELECT stock_code
+                FROM etf_daily_holdings
+                WHERE date = ? AND etf_code = ? AND source_type = ?
+                """,
+                (data_date, etf_code, entry["source_type"]),
+            ).fetchall()
+        }
+        return {**entry, "stock_codes": stock_codes}
+
+
+def get_canonical_snapshot_source(data_date, etf_code):
+    """Return the canonical complete source type for one ETF/date."""
+    entry = get_canonical_snapshot_entry(data_date, etf_code)
+    return entry["source_type"] if entry else None
+
+
 def snapshot_exists(date_value, etf_code):
     """Return whether one complete snapshot exists for an ETF/data date."""
     date_value = _serialize(date_value)
@@ -391,8 +420,8 @@ def get_snapshot_etf_codes(data_date):
         ]
 
 
-def get_latest_snapshot_date(etf_code, before_date=None):
-    """Return the latest complete snapshot date, optionally before a target."""
+def get_latest_snapshot_date(etf_code, before_date=None, eligible_only=False):
+    """Return the latest complete snapshot date, optionally historically eligible."""
     if before_date is not None:
         before_date = _serialize(before_date)
         params = [etf_code, before_date, etf_code, before_date]
@@ -414,6 +443,11 @@ def get_latest_snapshot_date(etf_code, before_date=None):
             params,
         ).fetchall()
         for row in rows:
+            if eligible_only:
+                from etf_universe import get_eligible_etf_codes
+
+                if etf_code not in get_eligible_etf_codes(row[0]):
+                    continue
             if _snapshot_exists(conn, row[0], etf_code):
                 return row[0]
     return None
@@ -429,7 +463,11 @@ def get_target_snapshot_coverage(data_date):
     actual = persisted & expected
     missing = sorted(expected - actual)
     latest_available = {
-        etf_code: get_latest_snapshot_date(etf_code, before_date=data_date)
+        etf_code: get_latest_snapshot_date(
+            etf_code,
+            before_date=data_date,
+            eligible_only=True,
+        )
         for etf_code in missing
     }
     return {

@@ -86,7 +86,13 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
         return _empty_summary(current_date, previous_date, "no holdings rows")
 
     scale_factors = _estimate_etf_scale_factors(current, previous)
-    trading_dates = _holding_dates_through(current_date)
+    trading_dates_by_etf = {
+        etf_code: _holding_dates_through(current_date, etf_code)
+        for etf_code in comparable_etfs
+    }
+    trading_dates = sorted(
+        {date_value for dates in trading_dates_by_etf.values() for date_value in dates}
+    )
     source_cache = {date_value: _select_canonical_sources(date_value) for date_value in trading_dates}
     weight_cache = {date_value: _load_weight_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
     shares_cache = {date_value: _load_shares_index(date_value, source_cache.get(date_value, {})) for date_value in trading_dates}
@@ -105,7 +111,7 @@ def detect_holding_changes(current_date: Optional[str] = None, previous_date: Op
                 today=current.get(key),
                 previous=previous.get(key),
                 etf_scale_factor=scale_factors.get(etf_code),
-                trading_dates=trading_dates,
+                trading_dates=trading_dates_by_etf.get(etf_code, []),
                 weight_cache=weight_cache,
                 shares_cache=shares_cache,
             )
@@ -143,46 +149,18 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) 
 
 
 def _select_canonical_sources(date_value: str) -> dict:
-    eligible_codes = set(get_eligible_etf_codes(date_value))
-    with db._connect() as conn:
-        rows = conn.execute(
-            "SELECT etf_code, source_type, stock_code, shares, weight_pct "
-            "FROM etf_daily_holdings WHERE date = ?",
-            (date_value,),
-        ).fetchall()
-
-    grouped = {}
-    for etf_code, source_type, stock_code, shares, weight_pct in rows:
-        if etf_code not in eligible_codes:
-            continue
-        key = (etf_code, source_type)
-        entry = grouped.setdefault(
-            key,
-            {
-                "etf_code": etf_code,
-                "source_type": source_type,
-                "source_family": _source_family(source_type),
-                "stock_codes": set(),
-                "stock_count": 0,
-                "shares_count": 0,
-                "total_weight": 0.0,
-                "quality_score": 0.0,
-            },
-        )
-        entry["stock_codes"].add(stock_code)
-        entry["stock_count"] += 1
-        if shares is not None:
-            entry["shares_count"] += 1
-        entry["total_weight"] += weight_pct or 0.0
-
     selected = {}
-    for entry in grouped.values():
-        stock_count = entry["stock_count"]
-        entry["shares_coverage"] = entry["shares_count"] / stock_count if stock_count else 0.0
+    for etf_code in get_eligible_etf_codes(date_value):
+        entry = db.get_canonical_snapshot_entry(date_value, etf_code)
+        if not entry:
+            continue
+        entry = {
+            **entry,
+            "etf_code": etf_code,
+            "source_family": _source_family(entry["source_type"]),
+        }
         entry["quality_score"] = _source_quality_score(entry)
-        current_best = selected.get(entry["etf_code"])
-        if current_best is None or _source_sort_key(entry) > _source_sort_key(current_best):
-            selected[entry["etf_code"]] = entry
+        selected[etf_code] = entry
     return selected
 
 
@@ -202,10 +180,6 @@ def _source_quality_score(entry: dict) -> float:
     total_weight = entry["total_weight"]
     weight_bonus = 5.0 if 80.0 <= total_weight <= 105.0 else 0.0
     return priority + stock_count_bonus + shares_bonus + weight_bonus
-
-
-def _source_sort_key(entry: dict):
-    return (entry["quality_score"], entry["stock_count"], source_priority(entry["source_type"]), entry["source_type"])
 
 
 def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
@@ -322,10 +296,29 @@ def _load_ranked_holdings(date_value: str, canonical_sources: dict | None = None
     return ranked
 
 
-def _holding_dates_through(current_date: str) -> list[str]:
+def _holding_dates_through(current_date: str, etf_code: str | None = None) -> list[str]:
     with db._connect() as conn:
-        rows = conn.execute("SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ? ORDER BY date", (current_date,)).fetchall()
-    return [row[0] for row in rows]
+        if etf_code is None:
+            rows = conn.execute(
+                "SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ? ORDER BY date",
+                (current_date,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT date FROM etf_daily_holdings
+                WHERE date <= ? AND etf_code = ? ORDER BY date
+                """,
+                (current_date, etf_code),
+            ).fetchall()
+    dates = [row[0] for row in rows]
+    if etf_code is None:
+        return dates
+    return [
+        date_value for date_value in dates
+        if etf_code in get_eligible_etf_codes(date_value)
+        and db.get_canonical_snapshot_source(date_value, etf_code)
+    ]
 
 
 def _load_weight_index(date_value: str, canonical_sources: dict | None = None) -> dict:
