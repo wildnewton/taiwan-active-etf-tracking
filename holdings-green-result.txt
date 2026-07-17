@@ -109,6 +109,8 @@ tests/test_prelisting_etfs.py:57:            INSERT INTO etf_scrape_runs (
 tests/test_prelisting_etfs.py:171:    _insert_scrape_run("failed")
 tests/test_prelisting_etfs.py:182:    _insert_scrape_run("success", data_date="2026-07-14")
 === INSTALL ===
+Collecting pytest-asyncio
+  Downloading pytest_asyncio-1.4.0-py3-none-any.whl.metadata (4.1 kB)
 Collecting requests>=2.31.0 (from -r requirements.txt (line 1))
   Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
 Collecting beautifulsoup4>=4.12.0 (from -r requirements.txt (line 2))
@@ -119,6 +121,16 @@ Collecting playwright>=1.40.0 (from -r requirements.txt (line 4))
   Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl.metadata (3.3 kB)
 Collecting pytest>=8.0.0 (from -r requirements.txt (line 5))
   Downloading pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting typing-extensions>=4.12 (from pytest-asyncio)
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting iniconfig>=1.0.1 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting packaging>=22 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+Collecting pluggy<2,>=1.5 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting pygments>=2.7.2 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
 Collecting charset_normalizer<4,>=2 (from requests>=2.31.0->-r requirements.txt (line 1))
   Downloading charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (41 kB)
 Collecting idna<4,>=2.5 (from requests>=2.31.0->-r requirements.txt (line 1))
@@ -129,106 +141,3157 @@ Collecting certifi>=2023.5.7 (from requests>=2.31.0->-r requirements.txt (line 1
   Downloading certifi-2026.6.17-py3-none-any.whl.metadata (2.5 kB)
 Collecting soupsieve>=1.6.1 (from beautifulsoup4>=4.12.0->-r requirements.txt (line 2))
   Downloading soupsieve-2.8.4-py3-none-any.whl.metadata (4.6 kB)
-Collecting typing-extensions>=4.0.0 (from beautifulsoup4>=4.12.0->-r requirements.txt (line 2))
-  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
 Collecting pyee<14,>=13 (from playwright>=1.40.0->-r requirements.txt (line 4))
   Downloading pyee-13.0.1-py3-none-any.whl.metadata (3.0 kB)
 Collecting greenlet<4.0.0,>=3.1.1 (from playwright>=1.40.0->-r requirements.txt (line 4))
   Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
-Collecting iniconfig>=1.0.1 (from pytest>=8.0.0->-r requirements.txt (line 5))
-  Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
-Collecting packaging>=22 (from pytest>=8.0.0->-r requirements.txt (line 5))
-  Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
-Collecting pluggy<2,>=1.5 (from pytest>=8.0.0->-r requirements.txt (line 5))
-  Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
-Collecting pygments>=2.7.2 (from pytest>=8.0.0->-r requirements.txt (line 5))
-  Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Downloading pytest_asyncio-1.4.0-py3-none-any.whl (16 kB)
+Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
 Downloading requests-2.34.2-py3-none-any.whl (73 kB)
 Downloading charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (221 kB)
 Downloading idna-3.18-py3-none-any.whl (65 kB)
 Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
 Downloading beautifulsoup4-4.15.0-py3-none-any.whl (109 kB)
 Downloading lxml-6.1.1-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 90.4 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 137.4 MB/s  0:00:00
 Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl (47.4 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 198.4 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 153.8 MB/s  0:00:00
 Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (617 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 110.1 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 76.0 MB/s  0:00:00
 Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
-Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
-Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
 Downloading certifi-2026.6.17-py3-none-any.whl (133 kB)
 Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
 Downloading packaging-26.2-py3-none-any.whl (100 kB)
 Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 228.8 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 135.0 MB/s  0:00:00
 Downloading soupsieve-2.8.4-py3-none-any.whl (37 kB)
 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
-Installing collected packages: urllib3, typing-extensions, soupsieve, pygments, pluggy, packaging, lxml, iniconfig, idna, greenlet, charset_normalizer, certifi, requests, pytest, pyee, beautifulsoup4, playwright
+Installing collected packages: urllib3, typing-extensions, soupsieve, pygments, pluggy, packaging, lxml, iniconfig, idna, greenlet, charset_normalizer, certifi, requests, pytest, pyee, beautifulsoup4, pytest-asyncio, playwright
 
-Successfully installed beautifulsoup4-4.15.0 certifi-2026.6.17 charset_normalizer-3.4.9 greenlet-3.5.3 idna-3.18 iniconfig-2.3.0 lxml-6.1.1 packaging-26.2 playwright-1.61.0 pluggy-1.6.0 pyee-13.0.1 pygments-2.20.0 pytest-9.1.1 requests-2.34.2 soupsieve-2.8.4 typing-extensions-4.16.0 urllib3-2.7.0
+Successfully installed beautifulsoup4-4.15.0 certifi-2026.6.17 charset_normalizer-3.4.9 greenlet-3.5.3 idna-3.18 iniconfig-2.3.0 lxml-6.1.1 packaging-26.2 playwright-1.61.0 pluggy-1.6.0 pyee-13.0.1 pygments-2.20.0 pytest-9.1.1 pytest-asyncio-1.4.0 requests-2.34.2 soupsieve-2.8.4 typing-extensions-4.16.0 urllib3-2.7.0
 === TARGETED ===
-...............................................FFF                       [100%]
+..................................................                       [100%]
+50 passed in 0.80s
+=== FULL ===
+........F.FF....FF...FFFF..FF.....F.........................F........... [ 18%]
+........................FF.............................................. [ 37%]
+................................F.FF.FFFFF.FF........................... [ 55%]
+...................FFF.FFFF.FF.......F..........FF....................FF [ 74%]
+.......F..............F..............FF...FF.........F......FFF.FFFFFFFF [ 93%]
+F....FFF............F......                                              [100%]
 =================================== FAILURES ===================================
-________ test_all_complete_daily_browser_run_returns_before_playwright _________
-async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
-____________ test_mixed_daily_browser_run_scrapes_only_missing_etfs ____________
-async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
-______________ test_selected_internal_browser_still_forces_scrape ______________
-async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
+_____ test_backfill_recomputes_old_changes_and_populates_fund_flow_fields ______
+
+    def test_backfill_recomputes_old_changes_and_populates_fund_flow_fields():
+        db.init_db(":memory:")
+        seed_previous_day()
+        seed_scaled_current_day()
+        insert_stale_change()
+    
+        summary = backfill_changes(
+            from_date="2026-06-24",
+            to_date="2026-06-24",
+            regenerate_signals=False,
+        )
+    
+        assert summary["ok"] is True
+>       assert summary["processed_dates"] == ["2026-06-24"]
+E       AssertionError: assert [] == ['2026-06-24']
+E         
+E         Right contains one more item: '2026-06-24'
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     '2026-06-24',
+E         - ]
+
+tests/test_backfill_changes.py:178: AssertionError
+_______ test_backfill_can_regenerate_manager_intent_and_signals_in_order _______
+
+    def test_backfill_can_regenerate_manager_intent_and_signals_in_order():
+        db.init_db(":memory:")
+        seed_previous_day()
+        seed_scaled_current_day()
+        events = []
+    
+        def fake_intent(date):
+            events.append(("intent", date))
+            return {"ok": True, "date": date, "rows": 12}
+    
+        def fake_signals(date):
+            events.append(("signals", date))
+            return {"ok": True, "date": date, "signals": 3}
+    
+        with patch("backfill_changes.generate_manager_intent_rollups", side_effect=fake_intent), \
+            patch("backfill_changes.generate_manager_signals", side_effect=fake_signals):
+            summary = backfill_changes(
+                from_date="2026-06-24",
+                to_date="2026-06-24",
+                regenerate_manager_intent=True,
+                regenerate_signals=True,
+            )
+    
+>       assert events == [("intent", "2026-06-24"), ("signals", "2026-06-24")]
+E       AssertionError: assert [] == [('intent', '...'2026-06-24')]
+E         
+E         Right contains 2 more items, first extra item: ('intent', '2026-06-24')
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     (
+E         -         'intent',
+E         -         '2026-06-24',
+E         -     ),
+E         -     (
+E         -         'signals',
+E         -         '2026-06-24',
+E         -     ),
+E         - ]
+
+tests/test_backfill_changes.py:237: AssertionError
+_________ test_backfill_all_derived_enables_manager_intent_and_signals _________
+
+    def test_backfill_all_derived_enables_manager_intent_and_signals():
+        db.init_db(":memory:")
+        seed_previous_day()
+        seed_scaled_current_day()
+    
+        with patch("backfill_changes.generate_manager_intent_rollups", return_value={"ok": True, "rows": 5}) as intent, \
+            patch("backfill_changes.generate_manager_signals", return_value={"ok": True, "signals": 2}) as signals:
+            summary = backfill_changes(
+                from_date="2026-06-24",
+                to_date="2026-06-24",
+                all_derived=True,
+            )
+    
+>       intent.assert_called_once_with("2026-06-24")
+
+tests/test_backfill_changes.py:257: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='generate_manager_intent_rollups' id='140671630367376'>
+args = ('2026-06-24',), kwargs = {}
+
+    def assert_called_once_with(self, /, *args, **kwargs):
+        """assert that the mock was called exactly once and that that call was
+        with the specified arguments."""
+        if not self.call_count == 1:
+            msg = ("Expected '%s' to be called once. Called %s times.%s"
+                   % (self._mock_name or 'mock',
+                      self.call_count,
+                      self._calls_repr()))
+>           raise AssertionError(msg)
+E           AssertionError: Expected 'generate_manager_intent_rollups' to be called once. Called 0 times.
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:950: AssertionError
+___ test_backfill_respects_requested_date_range_but_uses_previous_outer_date ___
+
+    def test_backfill_respects_requested_date_range_but_uses_previous_outer_date():
+        db.init_db(":memory:")
+        seed_previous_day("2026-06-22")
+        seed_previous_day("2026-06-23")
+        seed_scaled_current_day("2026-06-24")
+    
+        summary = backfill_changes(from_date="2026-06-24", to_date="2026-06-24")
+    
+>       assert summary["processed_dates"] == ["2026-06-24"]
+E       AssertionError: assert [] == ['2026-06-24']
+E         
+E         Right contains one more item: '2026-06-24'
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     '2026-06-24',
+E         - ]
+
+tests/test_backfill_changes.py:319: AssertionError
+_____ test_backfill_preserves_comparability_gate_and_records_skipped_etfs ______
+
+    def test_backfill_preserves_comparability_gate_and_records_skipped_etfs():
+        db.init_db(":memory:")
+        seed_previous_day("2026-06-23")
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5)
+    
+        summary = backfill_changes(from_date="2026-06-24", to_date="2026-06-24")
+    
+        assert summary["ok"] is True
+        assert summary["processed_dates"] == []
+>       assert summary["skipped_etfs_by_date"] == {"2026-06-24": ["00980A"]}
+E       AssertionError: assert {} == {'2026-06-24': ['00980A']}
+E         
+E         Right contains 1 more item:
+E         {'2026-06-24': ['00980A']}
+E         
+E         Full diff:
+E         + {}
+E         - {
+E         -     '2026-06-24': [
+E         -         '00980A',
+E         -     ],
+E         - }
+
+tests/test_backfill_changes.py:333: AssertionError
+___ test_production_browser_run_limits_concurrency_and_owns_pages_per_worker ___
+
+    @pytest.mark.asyncio
+    async def test_production_browser_run_limits_concurrency_and_owns_pages_per_worker():
+        browser_stack = _FakeBrowserStack()
+        active = 0
+        max_active = 0
+        completion_order = []
+        recording_order = []
+        seen_pages = {}
+        delays = {"ETF1": 0.04, "ETF2": 0.01, "ETF3": 0.02, "ETF4": 0.0}
+    
+        async def scrape_one(etf_code, page, target_date):
+            nonlocal active, max_active
+            active += 1
+            max_active = max(max_active, active)
+            seen_pages[etf_code] = page
+            try:
+                await asyncio.sleep(delays[etf_code])
+                completion_order.append(etf_code)
+                return _success(etf_code)
+            finally:
+                active -= 1
+    
+        def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+            recording_order.append(etf_code)
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671630454224'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',...ck_rows': [{'date': '2026-07-15', 'etf_code': 'ETF1', 'asset_name': '台積電(2330.TW)', 'asset_type': 'stock', ...}], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_production_browser_run_limits_concurrency_and_owns_pages_per_worker.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+___ test_worker_exception_becomes_one_failure_without_cancelling_other_etfs ____
+
+    @pytest.mark.asyncio
+    async def test_worker_exception_becomes_one_failure_without_cancelling_other_etfs():
+        browser_stack = _FakeBrowserStack()
+        etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
+        completed = []
+        recorded = []
+    
+        async def scrape_one(etf_code, page, target_date):
+            await asyncio.sleep(0)
+            if etf_code == "ETF2":
+                raise RuntimeError("worker exploded")
+            completed.append(etf_code)
+            return _success(etf_code)
+    
+        def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+            recorded.append((etf_code, result["ok"], result.get("reason")))
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(etfs),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:249: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671626115920'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',...ck_rows': [{'date': '2026-07-15', 'etf_code': 'ETF1', 'asset_name': '台積電(2330.TW)', 'asset_type': 'stock', ...}], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_worker_exception_becomes_one_failure_without_cancelling_other_etfs.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+________________ test_returned_failure_still_closes_worker_page ________________
+
+    @pytest.mark.asyncio
+    async def test_returned_failure_still_closes_worker_page():
+        browser_stack = _FakeBrowserStack()
+        etfs = [{"code": "ETF1"}]
+        recorded = []
+    
+        async def scrape_one(etf_code, page, target_date):
+            return _failure("returned failure")
+    
+        def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+            recorded.append((etf_code, result["ok"], result.get("reason")))
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(etfs),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:286: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671628773968'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',...7, 15), datetime.date(2026, 7, 15), {'ok': False, 'reason': 'returned failure', 'all_rows': [], 'stock_rows': [], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_returned_failure_still_closes_worker_page.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+__ test_page_close_exception_becomes_one_failure_without_aborting_other_etfs ___
+
+    @pytest.mark.asyncio
+    async def test_page_close_exception_becomes_one_failure_without_aborting_other_etfs():
+        browser_stack = _FakeBrowserStack()
+        etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
+        recorded = []
+    
+        async def scrape_one(etf_code, page, target_date):
+            await asyncio.sleep(0)
+            if etf_code == "ETF2":
+                page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
+            return _success(etf_code)
+    
+        def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+            recorded.append((etf_code, result["ok"], result.get("reason")))
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(etfs),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:320: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671630457104'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',...ck_rows': [{'date': '2026-07-15', 'etf_code': 'ETF1', 'asset_name': '台積電(2330.TW)', 'asset_type': 'stock', ...}], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_page_close_exception_becomes_one_failure_without_aborting_other_etfs.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+_ test_page_creation_exception_isolated_without_attempting_missing_page_cleanup _
+
+    @pytest.mark.asyncio
+    async def test_page_creation_exception_isolated_without_attempting_missing_page_cleanup():
+        browser_stack = _FakeBrowserStack()
+        original_new_page = browser_stack._new_page
+        creation_attempts = 0
+        recorded = []
+        etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
+    
+        async def new_page_with_one_failure():
+            nonlocal creation_attempts
+            creation_attempts += 1
+            if creation_attempts == 1:
+                raise RuntimeError("page creation exploded")
+            return await original_new_page()
+    
+        browser_stack.context.new_page = AsyncMock(side_effect=new_page_with_one_failure)
+    
+        async def scrape_one(etf_code, page, target_date):
+            await asyncio.sleep(0)
+            return _success(etf_code)
+    
+        def record_result(
+            summary,
+            etf_code,
+            run_date,
+            expected_date,
+            started_at,
+            finished_at,
+            result,
+        ):
+            recorded.append((etf_code, result["ok"], result.get("reason")))
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(etfs),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:429: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671625802320'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',... {'ok': False, 'reason': 'unhandled scraper exception: page creation exploded', 'all_rows': [], 'stock_rows': [], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_page_creation_exception_isolated_without_attempting_missing_page_cleanup.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+_______ test_page_close_failure_preserves_existing_scrape_failure_reason _______
+
+    @pytest.mark.asyncio
+    async def test_page_close_failure_preserves_existing_scrape_failure_reason():
+        browser_stack = _FakeBrowserStack()
+        recorded = []
+        etfs = [{"code": "ETF1"}, {"code": "ETF2"}, {"code": "ETF3"}]
+    
+        async def scrape_one(etf_code, page, target_date):
+            await asyncio.sleep(0)
+            if etf_code == "ETF2":
+                page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
+                return _failure("scrape failed first")
+            return _success(etf_code)
+    
+        def record_result(
+            summary,
+            etf_code,
+            run_date,
+            expected_date,
+            started_at,
+            finished_at,
+            result,
+        ):
+            recorded.append((etf_code, result["ok"], result.get("reason")))
+    
+        with patch(
+            "pipeline._prepare_scrape_run",
+            return_value=_prepared_run(etfs),
+        ), patch(
+            "playwright.async_api.async_playwright",
+            new=browser_stack.async_playwright,
+        ), patch(
+            "pipeline.scrape_holdings_with_browser_async",
+            new=scrape_one,
+        ), patch(
+            "pipeline._record_result",
+            side_effect=record_result,
+        ):
+>           await pipeline.run_daily_scrape_with_browser_async("unused.sqlite")
+
+tests/test_bounded_async_scraping.py:480: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/pipeline.py:69: in run_daily_scrape_with_browser_async
+    return await _execute_scrape_async_with_pages(
+scripts/pipeline.py:362: in _execute_scrape_async_with_pages
+    _record_result(summary, etf_code, run_date, expected_data_date, result)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1124: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1128: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_record_result' id='140671626116816'>
+args = ({'date': '2026-07-15', 'expected_data_date': '2026-07-15', 'is_trading_day': True, 'skip_reason': None, ...}, 'ETF1',...ck_rows': [{'date': '2026-07-15', 'etf_code': 'ETF1', 'asset_name': '台積電(2330.TW)', 'asset_type': 'stock', ...}], ...})
+kwargs = {}
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: test_page_close_failure_preserves_existing_scrape_failure_reason.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1189: TypeError
+_________ test_detect_holding_changes_writes_classification_version_v1 _________
+
+    def test_detect_holding_changes_writes_classification_version_v1():
+        db.init_db(":memory:")
+        _insert_etf_universe_entry()
+        _insert_holding("2026-06-20", "2330", "TSMC", 100, 10.0)
+        _insert_holding("2026-06-23", "2330", "TSMC", 110, 12.0)
+>       _insert_scrape_success("2026-06-20")
+
+tests/test_change_classification_version.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+date_value = '2026-06-20'
+
+    def _insert_scrape_success(date_value):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT OR REPLACE INTO etf_scrape_runs (
+                    date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url,
+                    error, started_at, finished_at
+                ) VALUES (?, 'ACTIVE', 'success', 'moneydj_primary', 1, 0, 0, 0,
+                    10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
+                    '2026-06-23T00:00:00', '2026-06-23T00:01:00')
+                """,
+                (date_value,),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_change_classification_version.py:49: OperationalError
+______ test_pipeline_success_path_uses_snapshot_replacement_once_per_etf _______
+
+    def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                FixedDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline._active_etfs_for_run", return_value=[{"code": "00981A"}]), \
+            patch("pipeline.scrape_holdings", return_value=scrape_result()), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_daily_snapshot_replacement.py:193: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0ab8ca150>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_ test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous_date _
+
+    def test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous_date():
+        run_at = datetime(2026, 7, 13, 14, 59, tzinfo=TAIPEI)
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=run_at, create=True) as current_run_at, \
+            patch("pipeline.is_tw_trading_day", return_value=True, create=True), \
+            patch(
+                "pipeline.latest_tw_trading_day_on_or_before",
+                return_value=PREVIOUS_TRADING_DATE,
+            ), \
+            patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
+            patch("pipeline.scrape_holdings", return_value=make_success(PREVIOUS_TRADING_DATE)) as scrape_holdings, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_expected_data_date_cutoff.py:79: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a92e2010>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+___________ test_daily_run_date_and_cutoff_use_the_same_taipei_clock ___________
+
+    def test_daily_run_date_and_cutoff_use_the_same_taipei_clock():
+        taipei_run_at = datetime(2026, 7, 14, 0, 30, tzinfo=TAIPEI)
+        taipei_date = taipei_run_at.date()
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=taipei_run_at), \
+            patch("pipeline.is_tw_trading_day", return_value=True), \
+            patch(
+                "pipeline.latest_tw_trading_day_on_or_before",
+                return_value=RUN_DATE,
+            ), \
+            patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
+            patch("pipeline.scrape_holdings", return_value=make_success(RUN_DATE)) as scrape_holdings, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_expected_data_date_cutoff.py:103: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a92c7a50>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+___________ test_nightly_warns_and_continues_on_incomplete_discovery ___________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0aa464790>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_nightly_warns_and_continu0')
+
+    def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=INCOMPLETE_DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE) as scrape, \
+             patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as intent, \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value=""), \
+             patch("traction_analysis.generate_traction_report", return_value=""):
+>           _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+tests/test_nightly_discovery_status.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_discovery_status.py:50: in _run_main
+    return mod.main()
+           ^^^^^^^^^^
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'discovery_complete': False, 'failed_markets': [{'market': 'TPEx', 'reason': 'timeout'}], 'completed_markets': ['TWSE'], 'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+⚠️ ETF universe discovery incomplete: TPEx:timeout
+  Continuing with existing DB-backed ETF universe
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+_________ test_preexisting_successes_do_not_trigger_incomplete_warning _________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_preexisting_successes_do_0')
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0aa48c490>
+
+    def test_preexisting_successes_do_not_trigger_incomplete_warning(tmp_path, capsys):
+        module = _load_module()
+        scrape_summary = {
+            "date": "2026-07-14",
+            "expected_data_date": "2026-07-14",
+            "is_trading_day": True,
+            "total_etfs": 2,
+            "preexisting_success": 2,
+            "moneydj_success": 0,
+            "official_success": 0,
+            "failed": 0,
+            "failures": [],
+            "moneydj_warnings": [],
+            "data_freshness": {"fresh": 2, "stale": 0, "unknown": 0},
+            "data_date_min": "2026-07-14",
+            "data_date_max": "2026-07-14",
+        }
+    
+>       _run_with_summary(module, tmp_path, scrape_summary)
+
+tests/test_nightly_existing_snapshot_completeness.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_existing_snapshot_completeness.py:41: in _run_with_summary
+    module.run_nightly_pipeline(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-07-14'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Skipping ETF universe discovery
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-07-14', 'expected_data_date': '2026-07-14', 'is_trading_day': True, 'total_etfs': 2, 'preexisting_success': 2, 'moneydj_success': 0, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 2, 'stale': 0, 'unknown': 0}, 'data_date_min': '2026-07-14', 'data_date_max': '2026-07-14'}
+
+Data freshness: fresh 2 / stale 0 / unknown 0
+Data date range: 2026-07-14 ~ 2026-07-14
+____________ test_mixed_preexisting_and_new_successes_are_complete _____________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_mixed_preexisting_and_new0')
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0aa466010>
+
+    def test_mixed_preexisting_and_new_successes_are_complete(tmp_path, capsys):
+        module = _load_module()
+        scrape_summary = {
+            "date": "2026-07-14",
+            "expected_data_date": "2026-07-14",
+            "is_trading_day": True,
+            "total_etfs": 3,
+            "preexisting_success": 1,
+            "moneydj_success": 1,
+            "official_success": 1,
+            "failed": 0,
+            "failures": [],
+            "moneydj_warnings": [],
+            "data_freshness": {"fresh": 3, "stale": 0, "unknown": 0},
+            "data_date_min": "2026-07-14",
+            "data_date_max": "2026-07-14",
+        }
+    
+>       _run_with_summary(module, tmp_path, scrape_summary)
+
+tests/test_nightly_existing_snapshot_completeness.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_existing_snapshot_completeness.py:41: in _run_with_summary
+    module.run_nightly_pipeline(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-07-14'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Skipping ETF universe discovery
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-07-14', 'expected_data_date': '2026-07-14', 'is_trading_day': True, 'total_etfs': 3, 'preexisting_success': 1, 'moneydj_success': 1, 'official_success': 1, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 3, 'stale': 0, 'unknown': 0}, 'data_date_min': '2026-07-14', 'data_date_max': '2026-07-14'}
+
+Data freshness: fresh 3 / stale 0 / unknown 0
+Data date range: 2026-07-14 ~ 2026-07-14
+_________________________ test_script_calls_all_steps __________________________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_script_calls_all_steps0')
+
+    def test_script_calls_all_steps(tmp_path):
+        db_path = str(tmp_path / "test.sqlite3")
+        report_dir = str(tmp_path / "reports")
+    
+        with patch("db.init_db") as mock_init, \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY) as mock_discovery, \
+             patch("pipeline.run_daily_scrape_with_browser") as mock_scrape, \
+             patch("changes.detect_holding_changes") as mock_changes, \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as mock_intent, \
+             patch("signals.generate_manager_signals") as mock_signals, \
+             patch("report.generate_signal_report") as mock_report, \
+             patch("traction_analysis.generate_traction_report") as mock_traction:
+    
+            mock_scrape.return_value = COMPLETE_SCRAPE
+            mock_changes.return_value = NO_SKIP_CHANGES
+            mock_signals.return_value = {"date": "2026-06-26"}
+            mock_report.return_value = "Test report"
+            mock_traction.return_value = "Test traction"
+    
+>           _run_main(db_path, report_dir)
+
+tests/test_nightly_pipeline.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+_________ test_manager_intent_rollups_run_after_changes_before_signals _________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_manager_intent_rollups_ru0')
+
+    def test_manager_intent_rollups_run_after_changes_before_signals(tmp_path):
+        db_path = str(tmp_path / "test.sqlite3")
+        report_dir = str(tmp_path / "reports")
+        events = []
+    
+        def changes_side_effect(current_date=None):
+            assert current_date == "2026-06-26"
+            events.append("changes")
+            return NO_SKIP_CHANGES
+    
+        def intent_side_effect(target_date=None):
+            events.append(("manager_intent", target_date))
+            return MANAGER_INTENT_SUMMARY
+    
+        def signals_side_effect(target_date=None):
+            events.append(("signals", target_date))
+            return {"date": target_date}
+    
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+             patch("changes.detect_holding_changes", side_effect=changes_side_effect), \
+             patch("manager_intent.generate_manager_intent_rollups", side_effect=intent_side_effect), \
+             patch("signals.generate_manager_signals", side_effect=signals_side_effect), \
+             patch("report.generate_signal_report", return_value="Signal report text"), \
+             patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
+>           _run_main(db_path, report_dir)
+
+tests/test_nightly_pipeline.py:153: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+____________________ test_manager_intent_summary_is_printed ____________________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0a98ca790>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_manager_intent_summary_is0')
+
+    def test_manager_intent_summary_is_printed(capsys, tmp_path):
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+             patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value=""), \
+             patch("traction_analysis.generate_traction_report", return_value=""):
+>           _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+tests/test_nightly_pipeline.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+_____________ test_script_writes_primary_and_archive_report_files ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_script_writes_primary_and0')
+
+    def test_script_writes_primary_and_archive_report_files(tmp_path):
+        db_path = str(tmp_path / "test.sqlite3")
+        report_dir = str(tmp_path / "reports")
+    
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+             patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value="Signal report text"), \
+             patch("traction_analysis.generate_traction_report", return_value="Traction raw text"):
+    
+>           _run_main(db_path, report_dir)
+
+tests/test_nightly_pipeline.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+______________________ test_warns_when_incomplete_scrape _______________________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0aa89c610>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_warns_when_incomplete_scr0')
+
+    def test_warns_when_incomplete_scrape(capsys, tmp_path):
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=PARTIAL_SCRAPE), \
+             patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value=""), \
+             patch("traction_analysis.generate_traction_report", return_value=""):
+>           _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+tests/test_nightly_pipeline.py:221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 13, 'official_success': 0, 'failed': 6, 'failures': [{'etf_code': '00401A', 'reason': 'timeout'}], 'moneydj_warnings': [], 'data_freshness': {'fresh': 13, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+⚠️ 資料不完整: 預期 19 檔 ETF，實際可用 13 檔（失敗: 00401A）
+
+Data freshness: fresh 13 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+_________________________ test_warns_when_skipped_etfs _________________________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0a8c31390>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_warns_when_skipped_etfs0')
+
+    def test_warns_when_skipped_etfs(capsys, tmp_path):
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+             patch("changes.detect_holding_changes", return_value=WITH_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value=""), \
+             patch("traction_analysis.generate_traction_report", return_value=""):
+>           _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+tests/test_nightly_pipeline.py:268: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+________________________ test_no_warning_when_complete _________________________
+
+capsys = <_pytest.capture.CaptureFixture object at 0x7ff0a9c0c590>
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-1/test_no_warning_when_complete0')
+
+    def test_no_warning_when_complete(capsys, tmp_path):
+        with patch("db.init_db"), \
+             patch("discover_active_etfs.discover_and_reconcile", return_value=DISCOVERY), \
+             patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE), \
+             patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
+             patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY), \
+             patch("signals.generate_manager_signals", return_value={}), \
+             patch("report.generate_signal_report", return_value=""), \
+             patch("traction_analysis.generate_traction_report", return_value=""):
+>           _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+tests/test_nightly_pipeline.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_nightly_pipeline.py:88: in _run_main
+    mod.main()
+scripts/nightly_pipeline.py:68: in main
+    runner(
+scripts/nightly_pipeline.py:292: in run_nightly_pipeline
+    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/nightly_pipeline.py:158: in _resolve_target_data_date
+    coverage = db.get_target_snapshot_coverage(target_data_date)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/db.py:393: in get_target_snapshot_coverage
+    persisted = set(get_snapshot_etf_codes(data_date))
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data_date = '2026-06-26'
+
+    def get_snapshot_etf_codes(data_date):
+        """Return ETFs with any persisted holdings snapshot on ``data_date``."""
+        data_date = _serialize(data_date)
+        with _connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+                UNION
+                SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+                ORDER BY etf_code
+                """,
+                (data_date, data_date),
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+
+scripts/db.py:353: OperationalError
+----------------------------- Captured stdout call -----------------------------
+Step 1/7: Discovering active ETF universe...
+  Discovery summary: {'inserted': [], 'reactivated': [], 'updated': [], 'retired': [], 'active_total': 19}
+Step 2/7: Running browser-enabled scrape...
+  Scrape summary: {'date': '2026-06-26', 'expected_data_date': '2026-06-26', 'total_etfs': 19, 'moneydj_success': 19, 'official_success': 0, 'failed': 0, 'failures': [], 'moneydj_warnings': [], 'data_freshness': {'fresh': 19, 'stale': 0, 'unknown': 0}, 'stale_etfs': [], 'unknown_date_etfs': [], 'data_date_min': '2026-06-26', 'data_date_max': '2026-06-26'}
+
+Data freshness: fresh 19 / stale 0 / unknown 0
+Data date range: 2026-06-26 ~ 2026-06-26
+______________________ test_run_daily_scrape_all_success _______________________
+
+    def test_run_daily_scrape_all_success():
+        expected_count = _active_count()
+>       with _patch_run_date(), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape, \
+            patch("pipeline.init_db") as init_db, \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_pipeline.py:122: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9226c90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_____ test_run_daily_scrape_with_browser_async_uses_browser_decision_tree ______
+
+    @pytest.mark.asyncio
+    async def test_run_daily_scrape_with_browser_async_uses_browser_decision_tree():
+        expected_count = _active_count()
+        page = object()
+        scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code, source_type="moneydj_browser"))
+    
+>       with _patch_run_date(), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+            patch("pipeline.init_db") as init_db, \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_pipeline.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9246f90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_______________________ test_run_daily_scrape_some_fail ________________________
+
+    def test_run_daily_scrape_some_fail():
+        failed_codes = set(_active_codes()[:2])
+        expected_count = _active_count()
+    
+        def fake_scrape(code, target_date=None):
+            if code in failed_codes:
+                return make_failure("blocked")
+            return make_success(code, source_type="official_fallback")
+    
+>       with _patch_run_date(), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_pipeline.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a99d7b10>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+____________________ test_run_daily_scrape_logs_scrape_runs ____________________
+
+    def test_run_daily_scrape_logs_scrape_runs():
+        expected_count = _active_count()
+        with _patch_run_date(), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)):
+            run_daily_scrape(":memory:")
+    
+        with db._connect() as conn:
+>           rows = conn.execute(
+                """
+                SELECT etf_code, status, primary_source, primary_success, date, data_date
+                FROM etf_scrape_runs
+                ORDER BY etf_code
+                """
+            ).fetchall()
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_pipeline.py:235: OperationalError
+__________________________ test_scrape_run_no_run_id ___________________________
+
+    def test_scrape_run_no_run_id():
+        """ScrapeRun dataclass should no longer have a run_id field."""
+        from dataclasses import fields
+>       from models import ScrapeRun
+E       ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+
+tests/test_pipeline.py:254: ImportError
+_____________________ test_insert_scrape_run_no_duplicates _____________________
+
+    def test_insert_scrape_run_no_duplicates():
+        """Inserting the same (date, etf_code) twice should not create duplicates."""
+        from datetime import date, datetime
+>       from models import ScrapeRun
+E       ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+
+tests/test_pipeline.py:266: ImportError
+_____________ test_insert_scrape_run_replaces_failure_with_success _____________
+
+    def test_insert_scrape_run_replaces_failure_with_success():
+        """A later success should overwrite an earlier failure for the same (date, etf_code)."""
+        from datetime import date, datetime
+>       from models import ScrapeRun
+E       ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+
+tests/test_pipeline.py:304: ImportError
+_______ test_scrape_run_records_per_etf_data_date_not_first_success_date _______
+
+    def test_scrape_run_records_per_etf_data_date_not_first_success_date():
+        captured_runs = []
+    
+        def fake_scrape(code, target_date=None):
+            if code == "00980A":
+                return make_success(code, row_date="2026/06/22")
+            return make_success(code, row_date="2026/06/23")
+    
+        def capture_run(run):
+            captured_runs.append(run)
+    
+>       with _patch_run_date(NextRunDate), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
+            patch("pipeline.insert_scrape_run", side_effect=capture_run):
+
+tests/test_pipeline.py:386: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0aafb7f10>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_ test_run_daily_scrape_reports_unknown_data_date_without_top_level_data_date __
+
+    def test_run_daily_scrape_reports_unknown_data_date_without_top_level_data_date():
+        unknown = make_success("00980A")
+        for row in unknown["all_rows"]:
+            row["date"] = ""
+    
+        def fake_scrape(code, target_date=None):
+            if code == "00980A":
+                return unknown
+            return make_success(code)
+    
+>       with _patch_run_date(), \
+            _patch_active_etfs(), \
+            patch("pipeline.scrape_holdings", side_effect=fake_scrape), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_pipeline.py:423: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0aa5dec90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_____________ test_scrape_unit_path_ignores_leaked_memory_snapshot _____________
+
+    def test_scrape_unit_path_ignores_leaked_memory_snapshot():
+        _seed_successful_memory_snapshot()
+        scraper = Mock(return_value=_success_result())
+    
+>       with patch("pipeline._current_run_at", return_value=RUN_AT), patch(
+            "pipeline._active_etfs_for_run", return_value=[{"code": "00980A"}]
+        ), patch(
+            "pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE
+        ), patch(
+            "pipeline.is_tw_trading_day", return_value=True
+        ), patch(
+            "pipeline.init_db"
+        ), patch(
+            "pipeline.scrape_holdings", scraper
+        ), patch(
+            "pipeline.replace_daily_snapshot", return_value={"inserted": True}
+        ), patch("pipeline.insert_scrape_run"):
+
+tests/test_pipeline_isolation_regression.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a92958d0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+____ test_report_uses_historical_listing_boundary_for_denominator_and_runs _____
+
+    def test_report_uses_historical_listing_boundary_for_denominator_and_runs():
+        db.init_db(":memory:")
+        _seed_with_future_etf()
+>       _insert_scrape_run("failed")
+
+tests/test_prelisting_etfs.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+status = 'failed', data_date = None
+
+    def _insert_scrape_run(status, data_date=None):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT INTO etf_scrape_runs (
+                    date, data_date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url, error,
+                    started_at, finished_at
+                ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
+                    1, 1, 0, 80.0, 80.0, 'https://test', NULL,
+                    '2026-07-14T20:00:00', '2026-07-14T20:01:00')
+                """,
+                ("2026-07-14", data_date, "00408A", status),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_prelisting_etfs.py:55: OperationalError
+_______ test_report_excludes_prelisting_freshness_and_change_diagnostics _______
+
+    def test_report_excludes_prelisting_freshness_and_change_diagnostics():
+        db.init_db(":memory:")
+        _seed_with_future_etf()
+>       _insert_scrape_run("success", data_date="2026-07-14")
+
+tests/test_prelisting_etfs.py:182: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+status = 'success', data_date = '2026-07-14'
+
+    def _insert_scrape_run(status, data_date=None):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT INTO etf_scrape_runs (
+                    date, data_date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url, error,
+                    started_at, finished_at
+                ) VALUES (?, ?, ?, ?, 'moneydj_primary', 1, 0, 0, 0,
+                    1, 1, 0, 80.0, 80.0, 'https://test', NULL,
+                    '2026-07-14T20:00:00', '2026-07-14T20:01:00')
+                """,
+                ("2026-07-14", data_date, "00408A", status),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_prelisting_etfs.py:55: OperationalError
+_ test_retired_etf_with_failed_scrape_run_does_not_appear_in_report_failed_section _
+
+    def test_retired_etf_with_failed_scrape_run_does_not_appear_in_report_failed_section():
+        db.init_db(":memory:")
+        insert_full_holdings_day("2026-06-26")
+        retire_test_etf("00980A")
+>       insert_failed_scrape_run("2026-06-26", "00980A", error="retired failure")
+
+tests/test_report_change_diagnostics.py:179: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+date = '2026-06-26', etf_code = '00980A', error = 'retired failure'
+
+    def insert_failed_scrape_run(date, etf_code, error="test failure"):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT INTO etf_scrape_runs (
+                    date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url,
+                    error, started_at, finished_at
+                ) VALUES (?, ?, 'failed', 'moneydj_primary', 0, 0, 0, 0,
+                    0, 0, 0, 0.0, 0.0, '', ?, ?, ?)
+                """,
+                (date, etf_code, error, f"{date}T00:00:00", f"{date}T00:01:00"),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_report_change_diagnostics.py:35: OperationalError
+_ test_active_etf_with_failed_scrape_run_still_appears_in_report_failed_section _
+
+    def test_active_etf_with_failed_scrape_run_still_appears_in_report_failed_section():
+        db.init_db(":memory:")
+        insert_full_holdings_day("2026-06-26")
+>       insert_failed_scrape_run("2026-06-26", "00981A", error="active failure")
+
+tests/test_report_change_diagnostics.py:190: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+date = '2026-06-26', etf_code = '00981A', error = 'active failure'
+
+    def insert_failed_scrape_run(date, etf_code, error="test failure"):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT INTO etf_scrape_runs (
+                    date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url,
+                    error, started_at, finished_at
+                ) VALUES (?, ?, 'failed', 'moneydj_primary', 0, 0, 0, 0,
+                    0, 0, 0, 0.0, 0.0, '', ?, ?, ?)
+                """,
+                (date, etf_code, error, f"{date}T00:00:00", f"{date}T00:01:00"),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_report_change_diagnostics.py:35: OperationalError
+______ test_report_puts_data_quality_before_summary_and_shows_failed_etfs ______
+
+    def test_report_puts_data_quality_before_summary_and_shows_failed_etfs():
+        db.init_db(":memory:")
+        for etf_code in ETF_CODES[1:]:
+            insert_holding("2026-06-26", etf_code)
+>           insert_scrape_run("2026-06-26", etf_code)
+
+tests/test_report_redesign.py:229: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+date = '2026-06-26', etf_code = '00401A', status = 'success'
+
+    def insert_scrape_run(date, etf_code, status="success"):
+        with db._connect() as conn:
+>           conn.execute(
+                """
+                INSERT INTO etf_scrape_runs (
+                    date, etf_code, status, primary_source, primary_success,
+                    moneydj_browser_used, official_fallback_used, official_success,
+                    rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
+                    total_weight_all_rows, total_weight_stock_rows, source_url, error,
+                    started_at, finished_at
+                ) VALUES (?, ?, ?, 'moneydj_primary', ?, 0, 0, 0, 1, 1, 0, 90, 90,
+                    'https://test', ?, ?, ?)
+                """,
+                (
+                    date,
+                    etf_code,
+                    status,
+                    1 if status == "success" else 0,
+                    None if status == "success" else "test failure",
+                    f"{date}T00:00:00",
+                    f"{date}T00:01:00",
+                ),
+            )
+E           sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_report_redesign.py:31: OperationalError
+_____ test_pipeline_summary_surfaces_row_count_manual_inspection_warnings ______
+
+    def test_pipeline_summary_surfaces_row_count_manual_inspection_warnings():
+        warning = {
+            "reason": "low_row_count_confirmed_by_fallback",
+            "manual_inspection_required": True,
+            "moneydj_stock_rows": 55,
+            "official_stock_rows": 55,
+            "historical_mean_stock_rows": 115.0,
+            "minimum_expected_stock_rows": 69.0,
+        }
+        result = {
+            **make_result(count=55, source_type="moneydj_primary"),
+            "manual_inspection_required": True,
+            "row_count_warning": warning,
+        }
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                FixedDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline._active_etfs_for_run", return_value=[{"code": "00984A"}]), \
+            patch("pipeline.scrape_holdings", return_value=result), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_row_count_validation.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9c82050>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_______ test_daily_pipeline_passes_expected_data_date_to_browser_scraper _______
+
+    @pytest.mark.asyncio
+    async def test_daily_pipeline_passes_expected_data_date_to_browser_scraper():
+        page = object()
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._active_etfs_for_run", return_value=[{"code": ETF_CODE}]), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TARGET_DATE), \
+            patch("pipeline.successful_snapshot_exists", return_value=False), \
+            patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_scraper_freshness_target.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9a81b50>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ test_selected_pipeline_passes_explicit_run_date_as_target ___________
+
+    @pytest.mark.asyncio
+    async def test_selected_pipeline_passes_explicit_run_date_as_target():
+        page = object()
+        explicit_run_date = date(2026, 7, 6)
+    
+>       with patch("pipeline.scrape_holdings_with_browser_async", autospec=True) as scraper_mock, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_scraper_freshness_target.py:116: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0aa5f3f90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+___ test_run_selected_scrape_with_browser_async_retries_only_requested_codes ___
+
+    @pytest.mark.asyncio
+    async def test_run_selected_scrape_with_browser_async_retries_only_requested_codes():
+        from pipeline import run_selected_scrape_with_browser_async
+    
+        page = object()
+        requested_codes = ["00401A", "00402A"]
+        scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code))
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                FixedDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+            patch("pipeline.init_db") as init_db, \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok) as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_selected_pipeline_retry.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9935e50>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+____ test_run_selected_scrape_with_browser_async_can_use_explicit_run_date _____
+
+    @pytest.mark.asyncio
+    async def test_run_selected_scrape_with_browser_async_can_use_explicit_run_date():
+        """Regression: retrying a prior report date must not depend on date.today()."""
+        from pipeline import run_selected_scrape_with_browser_async
+    
+        page = object()
+        requested_codes = ["00401A"]
+        scraper = AsyncMock(side_effect=lambda code, page_arg, target_date=None: make_success(code, row_date="2026/07/06"))
+    
+>       with patch("pipeline.date", FixedDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                FixedDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", side_effect=_snapshot_write_ok), \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_selected_pipeline_retry.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9abb190>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+____________________ test_failed_etfs_excludes_retired_etfs ____________________
+
+    def test_failed_etfs_excludes_retired_etfs():
+        """RED: Retired ETFs should NOT appear in the 抓取失敗 section."""
+        db.init_db(":memory:")
+    
+        with db._connect() as conn:
+            _seed_universe(conn, [
+                ("00983A", "CTBC", 1),   # retired — should NOT appear
+                ("00980A", "Nomura", 0),  # active
+            ])
+>           _seed_scrape_run(conn, "2026-06-23", "00983A", "failed")
+
+tests/test_signal_report_retired_exclusion.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+conn = <sqlite3.Connection object at 0x7ff0aa4d16c0>, date = '2026-06-23'
+etf_code = '00983A', status = 'failed'
+
+    def _seed_scrape_run(conn, date, etf_code, status):
+>       conn.execute(
+            "INSERT OR REPLACE INTO etf_scrape_runs "
+            "(date, etf_code, status, primary_source, primary_success, "
+            "moneydj_browser_used, official_fallback_used, official_success, "
+            "rows_extracted, stock_rows_extracted, non_stock_rows_extracted, "
+            "total_weight_all_rows, total_weight_stock_rows, "
+            "source_url, error, started_at, finished_at) "
+            "VALUES (?, ?, ?, 'moneydj_primary', 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, "
+            "'https://test', 'test error', '2026-06-22T00:00:00', '2026-06-22T00:00:00')",
+            (date, etf_code, status),
+        )
+E       sqlite3.OperationalError: no such table: etf_scrape_runs
+
+tests/test_signal_report_retired_exclusion.py:29: OperationalError
+______ test_stale_result_with_existing_snapshot_skips_holding_replacement ______
+
+    def test_stale_result_with_existing_snapshot_skips_holding_replacement():
+        captured_runs = []
+    
+>       with patch("pipeline.date", RunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                RunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+            patch("pipeline.is_tw_trading_day", return_value=True), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
+            patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+            patch(
+                "pipeline.snapshot_exists",
+                side_effect=lambda data_date, _: data_date == STALE_DATA_DATE,
+            ) as snapshot_exists, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run", side_effect=captured_runs.append):
+
+tests/test_skip_stale_existing_snapshots.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9242290>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+___________ test_stale_result_without_existing_snapshot_writes_once ____________
+
+    def test_stale_result_without_existing_snapshot_writes_once():
+>       with patch("pipeline.date", RunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                RunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+            patch("pipeline.is_tw_trading_day", return_value=True), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/22")), \
+            patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+            patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}) as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_skip_stale_existing_snapshots.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9afa690>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_________ test_fresh_result_does_not_check_for_existing_stale_snapshot _________
+
+    def test_fresh_result_does_not_check_for_existing_stale_snapshot():
+>       with patch("pipeline.date", RunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                RunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=RUN_DATE), \
+            patch("pipeline.is_tw_trading_day", return_value=True), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.scrape_holdings", return_value=make_success(row_date="2026/06/23")), \
+            patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+            patch("pipeline.snapshot_exists", return_value=False) as snapshot_exists, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}) as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_skip_stale_existing_snapshots.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9af0ed0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ test_missing_source_date_rejects_snapshot_before_db_write ___________
+
+    def test_missing_source_date_rejects_snapshot_before_db_write():
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": scrape_result("00981A", stock_dates=(None,)),
+        })
+
+tests/test_snapshot_date_validation.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9cbd550>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+________ test_inconsistent_source_dates_reject_snapshot_before_db_write ________
+
+    def test_inconsistent_source_dates_reject_snapshot_before_db_write():
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": scrape_result(
+                "00981A",
+                stock_dates=("2026/07/14", "2026/07/13"),
+            ),
+        })
+
+tests/test_snapshot_date_validation.py:137: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0aa48f310>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_____________ test_missing_non_stock_date_rejects_entire_snapshot ______________
+
+    def test_missing_non_stock_date_rejects_entire_snapshot():
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": scrape_result(
+                "00981A",
+                stock_dates=("2026/07/14",),
+                non_stock_dates=(None,),
+            ),
+        })
+
+tests/test_snapshot_date_validation.py:152: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9a573d0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_______ test_validation_checks_rows_written_even_if_all_rows_omits_them ________
+
+    def test_validation_checks_rows_written_even_if_all_rows_omits_them():
+        result = scrape_result(
+            "00981A",
+            stock_dates=("2026/07/14",),
+            non_stock_dates=(None,),
+        )
+        result["all_rows"] = result["stock_rows"]
+    
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": result,
+        })
+
+tests/test_snapshot_date_validation.py:173: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9937b90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ test_nonempty_all_rows_cannot_validate_an_empty_write_set ___________
+
+    def test_nonempty_all_rows_cannot_validate_an_empty_write_set():
+        result = scrape_result("00981A", stock_dates=("2026/07/14",))
+        result["stock_rows"] = []
+        result["non_stock_rows"] = []
+    
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": result,
+        })
+
+tests/test_snapshot_date_validation.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9ad2150>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ test_moneydj_validation_failure_does_not_rescrape_moneydj ___________
+
+    def test_moneydj_validation_failure_does_not_rescrape_moneydj():
+>       _, _, _, _, check_moneydj_warning = run_with_results({
+            "00981A": scrape_result("00981A", stock_dates=(None,)),
+        })
+
+tests/test_snapshot_date_validation.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0aa534c10>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__________ test_official_validation_failure_keeps_moneydj_diagnostic ___________
+
+    def test_official_validation_failure_keeps_moneydj_diagnostic():
+>       summary, _, _, _, check_moneydj_warning = run_with_results({
+            "00981A": scrape_result(
+                "00981A",
+                stock_dates=(None,),
+                source_type="official_fallback",
+            ),
+        })
+
+tests/test_snapshot_date_validation.py:209: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a92622d0>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+________ test_valid_single_date_snapshot_keeps_existing_write_behavior _________
+
+    def test_valid_single_date_snapshot_keeps_existing_write_behavior():
+>       summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": scrape_result(
+                "00981A",
+                stock_dates=("2026/07/14", "2026-07-14"),
+                non_stock_dates=("2026/07/14",),
+            ),
+        })
+
+tests/test_snapshot_date_validation.py:221: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9a40410>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+________________ test_invalid_snapshot_does_not_stop_later_etfs ________________
+
+    def test_invalid_snapshot_does_not_stop_later_etfs():
+>       summary, scrape_holdings, replace_snapshot, insert_scrape_run, _ = run_with_results({
+            "00981A": scrape_result("00981A", stock_dates=(None,)),
+            "00982A": scrape_result("00982A", stock_dates=("2026/07/14",)),
+        })
+
+tests/test_snapshot_date_validation.py:239: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_snapshot_date_validation.py:93: in run_with_results
+    with patch("pipeline._current_run_at", return_value=RUN_AT), \
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a98cbe10>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_ test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day __
+
+    def test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day():
+>       with patch("pipeline.date", NonTradingRunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                NonTradingRunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.is_tw_trading_day", return_value=False), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
+            patch("pipeline.scrape_holdings") as scrape_holdings, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_tw_stock_trading_calendar.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9281c90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+_ test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day _
+
+    @pytest.mark.asyncio
+    async def test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day():
+        page = object()
+        scraper = AsyncMock()
+    
+>       with patch("pipeline.date", NonTradingRunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                NonTradingRunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.is_tw_trading_day", return_value=False), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
+            patch("pipeline.scrape_holdings_with_browser_async", scraper), \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
+            patch("pipeline.insert_scrape_run") as insert_scrape_run:
+
+tests/test_tw_stock_trading_calendar.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9a3ac90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+____________ test_daily_scrape_runs_when_run_date_is_tw_trading_day ____________
+
+    def test_daily_scrape_runs_when_run_date_is_tw_trading_day():
+>       with patch("pipeline.date", TradingRunDate), \
+            patch("pipeline._current_run_at", return_value=datetime.combine(
+                TradingRunDate.today(),
+                pipeline.DATA_AVAILABILITY_CUTOFF,
+                tzinfo=pipeline.TAIPEI_TIMEZONE,
+            )), \
+            patch("pipeline.is_tw_trading_day", return_value=True), \
+            patch("pipeline._active_etfs_for_run", return_value=ETFS), \
+            patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TRADING_DATE), \
+            patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape_holdings, \
+            patch("pipeline.init_db"), \
+            patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
+            patch("pipeline.insert_scrape_run"):
+
+tests/test_tw_stock_trading_calendar.py:169: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a9b3e890>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
+__ test_pipeline_summary_surfaces_weight_warning_without_diagnostic_rescrape ___
+
+    def test_pipeline_summary_surfaces_weight_warning_without_diagnostic_rescrape():
+        warned = make_result(61.98)
+        diagnostic_scrape = Mock()
+    
+>       with patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), patch(
+            "pipeline.insert_scrape_run"
+        ), patch(
+            "scrapers.moneydj.scrape_moneydj", diagnostic_scrape
+        ):
+
+tests/test_weight_validation_warnings.py:176: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1446: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x7ff0a90d9e90>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:1419: AttributeError
 =============================== warnings summary ===============================
-tests/test_preexisting_successful_snapshots.py:120
-  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_preexisting_successful_snapshots.py:120: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
-    @pytest.mark.asyncio
+tests/test_official.py::test_scrape_capital_playwright_intercepts_api
+tests/test_official.py::test_scrape_capital_playwright_no_api_intercepted
+tests/test_official.py::test_scrape_capital_playwright_uses_domcontentloaded_not_networkidle
+tests/test_official.py::test_scrape_official_with_browser_dispatches_capital
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/scrapers/official.py:241: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    page.remove_listener("response", on_response)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
 
-tests/test_preexisting_successful_snapshots.py:142
-  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_preexisting_successful_snapshots.py:142: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
-    @pytest.mark.asyncio
-
-tests/test_preexisting_successful_snapshots.py:181
-  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_preexisting_successful_snapshots.py:181: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
-    @pytest.mark.asyncio
+tests/test_official.py::test_scrape_nomura_stealth_intercepts_api
+tests/test_official.py::test_scrape_nomura_stealth_no_api_intercepted
+tests/test_official.py::test_scrape_official_with_browser_dispatches_nomura
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/scrapers/official.py:282: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    page.remove_listener("response", on_response)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 =========================== short test summary info ============================
-FAILED tests/test_preexisting_successful_snapshots.py::test_all_complete_daily_browser_run_returns_before_playwright - Failed: async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
-FAILED tests/test_preexisting_successful_snapshots.py::test_mixed_daily_browser_run_scrapes_only_missing_etfs - Failed: async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
-FAILED tests/test_preexisting_successful_snapshots.py::test_selected_internal_browser_still_forces_scrape - Failed: async def functions are not natively supported.
-You need to install a suitable plugin for your async framework, for example:
-  - anyio
-  - pytest-asyncio
-  - pytest-tornasync
-  - pytest-trio
-  - pytest-twisted
-3 failed, 47 passed, 3 warnings in 0.85s
+FAILED tests/test_backfill_changes.py::test_backfill_recomputes_old_changes_and_populates_fund_flow_fields - AssertionError: assert [] == ['2026-06-24']
+  
+  Right contains one more item: '2026-06-24'
+  
+  Full diff:
+  + []
+  - [
+  -     '2026-06-24',
+  - ]
+FAILED tests/test_backfill_changes.py::test_backfill_can_regenerate_manager_intent_and_signals_in_order - AssertionError: assert [] == [('intent', '...'2026-06-24')]
+  
+  Right contains 2 more items, first extra item: ('intent', '2026-06-24')
+  
+  Full diff:
+  + []
+  - [
+  -     (
+  -         'intent',
+  -         '2026-06-24',
+  -     ),
+  -     (
+  -         'signals',
+  -         '2026-06-24',
+  -     ),
+  - ]
+FAILED tests/test_backfill_changes.py::test_backfill_all_derived_enables_manager_intent_and_signals - AssertionError: Expected 'generate_manager_intent_rollups' to be called once. Called 0 times.
+FAILED tests/test_backfill_changes.py::test_backfill_respects_requested_date_range_but_uses_previous_outer_date - AssertionError: assert [] == ['2026-06-24']
+  
+  Right contains one more item: '2026-06-24'
+  
+  Full diff:
+  + []
+  - [
+  -     '2026-06-24',
+  - ]
+FAILED tests/test_backfill_changes.py::test_backfill_preserves_comparability_gate_and_records_skipped_etfs - AssertionError: assert {} == {'2026-06-24': ['00980A']}
+  
+  Right contains 1 more item:
+  {'2026-06-24': ['00980A']}
+  
+  Full diff:
+  + {}
+  - {
+  -     '2026-06-24': [
+  -         '00980A',
+  -     ],
+  - }
+FAILED tests/test_bounded_async_scraping.py::test_production_browser_run_limits_concurrency_and_owns_pages_per_worker - TypeError: test_production_browser_run_limits_concurrency_and_owns_pages_per_worker.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_bounded_async_scraping.py::test_worker_exception_becomes_one_failure_without_cancelling_other_etfs - TypeError: test_worker_exception_becomes_one_failure_without_cancelling_other_etfs.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_bounded_async_scraping.py::test_returned_failure_still_closes_worker_page - TypeError: test_returned_failure_still_closes_worker_page.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_bounded_async_scraping.py::test_page_close_exception_becomes_one_failure_without_aborting_other_etfs - TypeError: test_page_close_exception_becomes_one_failure_without_aborting_other_etfs.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_bounded_async_scraping.py::test_page_creation_exception_isolated_without_attempting_missing_page_cleanup - TypeError: test_page_creation_exception_isolated_without_attempting_missing_page_cleanup.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_bounded_async_scraping.py::test_page_close_failure_preserves_existing_scrape_failure_reason - TypeError: test_page_close_failure_preserves_existing_scrape_failure_reason.<locals>.record_result() missing 2 required positional arguments: 'finished_at' and 'result'
+FAILED tests/test_change_classification_version.py::test_detect_holding_changes_writes_classification_version_v1 - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_daily_snapshot_replacement.py::test_pipeline_success_path_uses_snapshot_replacement_once_per_etf - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_expected_data_date_cutoff.py::test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous_date - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_expected_data_date_cutoff.py::test_daily_run_date_and_cutoff_use_the_same_taipei_clock - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_nightly_discovery_status.py::test_nightly_warns_and_continues_on_incomplete_discovery - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_existing_snapshot_completeness.py::test_preexisting_successes_do_not_trigger_incomplete_warning - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_existing_snapshot_completeness.py::test_mixed_preexisting_and_new_successes_are_complete - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_script_calls_all_steps - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_manager_intent_rollups_run_after_changes_before_signals - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_manager_intent_summary_is_printed - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_script_writes_primary_and_archive_report_files - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_warns_when_incomplete_scrape - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_warns_when_skipped_etfs - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_nightly_pipeline.py::test_no_warning_when_complete - sqlite3.OperationalError: no such table: etf_daily_non_stock_assets
+FAILED tests/test_pipeline.py::test_run_daily_scrape_all_success - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_pipeline.py::test_run_daily_scrape_with_browser_async_uses_browser_decision_tree - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_pipeline.py::test_run_daily_scrape_some_fail - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_pipeline.py::test_run_daily_scrape_logs_scrape_runs - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_pipeline.py::test_scrape_run_no_run_id - ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+FAILED tests/test_pipeline.py::test_insert_scrape_run_no_duplicates - ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+FAILED tests/test_pipeline.py::test_insert_scrape_run_replaces_failure_with_success - ImportError: cannot import name 'ScrapeRun' from 'models' (/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/models.py)
+FAILED tests/test_pipeline.py::test_scrape_run_records_per_etf_data_date_not_first_success_date - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_pipeline.py::test_run_daily_scrape_reports_unknown_data_date_without_top_level_data_date - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_pipeline_isolation_regression.py::test_scrape_unit_path_ignores_leaked_memory_snapshot - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_prelisting_etfs.py::test_report_uses_historical_listing_boundary_for_denominator_and_runs - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_prelisting_etfs.py::test_report_excludes_prelisting_freshness_and_change_diagnostics - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_report_change_diagnostics.py::test_retired_etf_with_failed_scrape_run_does_not_appear_in_report_failed_section - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_report_change_diagnostics.py::test_active_etf_with_failed_scrape_run_still_appears_in_report_failed_section - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_report_redesign.py::test_report_puts_data_quality_before_summary_and_shows_failed_etfs - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_row_count_validation.py::test_pipeline_summary_surfaces_row_count_manual_inspection_warnings - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_scraper_freshness_target.py::test_daily_pipeline_passes_expected_data_date_to_browser_scraper - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+FAILED tests/test_scraper_freshness_target.py::test_selected_pipeline_passes_explicit_run_date_as_target - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_selected_pipeline_retry.py::test_run_selected_scrape_with_browser_async_retries_only_requested_codes - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_selected_pipeline_retry.py::test_run_selected_scrape_with_browser_async_can_use_explicit_run_date - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_signal_report_retired_exclusion.py::test_failed_etfs_excludes_retired_etfs - sqlite3.OperationalError: no such table: etf_scrape_runs
+FAILED tests/test_skip_stale_existing_snapshots.py::test_stale_result_with_existing_snapshot_skips_holding_replacement - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+FAILED tests/test_skip_stale_existing_snapshots.py::test_stale_result_without_existing_snapshot_writes_once - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+FAILED tests/test_skip_stale_existing_snapshots.py::test_fresh_result_does_not_check_for_existing_stale_snapshot - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'successful_snapshot_exists'
+FAILED tests/test_snapshot_date_validation.py::test_missing_source_date_rejects_snapshot_before_db_write - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_inconsistent_source_dates_reject_snapshot_before_db_write - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_missing_non_stock_date_rejects_entire_snapshot - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_validation_checks_rows_written_even_if_all_rows_omits_them - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_nonempty_all_rows_cannot_validate_an_empty_write_set - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_moneydj_validation_failure_does_not_rescrape_moneydj - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_official_validation_failure_keeps_moneydj_diagnostic - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_valid_single_date_snapshot_keeps_existing_write_behavior - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_snapshot_date_validation.py::test_invalid_snapshot_does_not_stop_later_etfs - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_tw_stock_trading_calendar.py::test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_tw_stock_trading_calendar.py::test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_tw_stock_trading_calendar.py::test_daily_scrape_runs_when_run_date_is_tw_trading_day - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+FAILED tests/test_weight_validation_warnings.py::test_pipeline_summary_surfaces_weight_warning_without_diagnostic_rescrape - AttributeError: <module 'pipeline' from '/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/pipeline.py'> does not have the attribute 'insert_scrape_run'
+62 failed, 325 passed, 7 warnings in 15.34s
 STATUS=1
