@@ -60,6 +60,10 @@ jobs:
             python scripts/_apply_holdings_source_supplement.py >> "$RESULT" 2>&1
             STATUS=$?
           fi
+          if [ "$STATUS" -eq 0 ]; then
+            python scripts/_apply_holdings_source_targeted_fix.py >> "$RESULT" 2>&1
+            STATUS=$?
+          fi
 
           if [ "$STATUS" -eq 0 ]; then
             echo "=== REMAINING REFERENCES ===" >> "$RESULT"
@@ -97,6 +101,7 @@ jobs:
             rm holdings-green-result.txt
             rm scripts/_apply_holdings_source_green.py
             rm scripts/_apply_holdings_source_supplement.py
+            rm scripts/_apply_holdings_source_targeted_fix.py
             rm .github/workflows/holdings-source-green.yml
             git add -A
             git commit -m "refactor: make holdings the freshness source of truth"
