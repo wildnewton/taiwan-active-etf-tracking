@@ -132,6 +132,15 @@ def test_parse_allianz_fund_options_fails_when_requested_code_is_missing():
         official.parse_allianz_fund_options(OPTIONS_JSON, "00999A")
 
 
+def test_parse_allianz_fund_options_rejects_api_error_status():
+    payload = json.loads(OPTIONS_JSON)
+    payload["StatusCode"] = 500
+    payload["Message"] = "service unavailable"
+
+    with pytest.raises(ValueError, match="service unavailable"):
+        official.parse_allianz_fund_options(json.dumps(payload), "00993A")
+
+
 def test_parse_allianz_api_uses_five_column_headers_and_pcf_date():
     rows = official.parse_allianz_api(
         json.dumps(_trade_payload()),
@@ -148,8 +157,38 @@ def test_parse_allianz_api_uses_five_column_headers_and_pcf_date():
     assert rows[0]["weight_pct"] == 11.51
     assert rows[0]["date"] == "2026/07/17"
     assert rows[0]["source_type"] == "official_fallback"
-    assert rows[0]["extraction_method"] == "playwright_api_intercept"
+    assert rows[0]["extraction_method"] == "playwright_api_request"
     assert rows[4]["stock_name"] == "國巨*"
+
+
+def test_parse_allianz_api_rejects_api_error_status():
+    payload = _trade_payload()
+    payload["StatusCode"] = 500
+    payload["Message"] = "trade service unavailable"
+
+    with pytest.raises(ValueError, match="trade service unavailable"):
+        official.parse_allianz_api(
+            json.dumps(payload),
+            "00993A",
+            ALLIANZ_URL,
+            expected_fund_no="E0002",
+        )
+
+
+def test_parse_allianz_api_rejects_unknown_stock_schema():
+    payload = _trade_payload()
+    payload["Entries"]["DynamicTableData"][0]["Columns"] = [
+        {"Name": "序號"},
+        {"Name": "未知欄位"},
+    ]
+
+    with pytest.raises(ValueError, match="schema"):
+        official.parse_allianz_api(
+            json.dumps(payload),
+            "00993A",
+            ALLIANZ_URL,
+            expected_fund_no="E0002",
+        )
 
 
 def test_parse_allianz_api_skips_futures_table():
@@ -184,18 +223,26 @@ def test_parse_allianz_api_fails_closed_on_identity_or_shape_errors(payload, mes
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("etf_code", "fund_no"),
+    [("00984A", "E0001"), ("00993A", "E0002")],
+)
 @patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_posts_exact_fund_mapping_and_trade_request(mock_config):
+async def test_scrape_allianz_posts_exact_fund_mapping_and_trade_request(
+    mock_config,
+    etf_code,
+    fund_no,
+):
     page = _mock_page(
         _FakeApiResponse(json.loads(OPTIONS_JSON)),
-        _FakeApiResponse(_trade_payload()),
+        _FakeApiResponse(_trade_payload(etf_code=etf_code, fund_no=fund_no)),
     )
 
-    result = await official.scrape_allianz_playwright("00993A", page)
+    result = await official.scrape_allianz_playwright(etf_code, page)
 
     assert result["ok"] is True
     assert len(result["stock_rows"]) == 5
-    assert result["stock_rows"][0]["etf_code"] == "00993A"
+    assert result["stock_rows"][0]["etf_code"] == etf_code
     page.goto.assert_awaited_once_with(
         ALLIANZ_URL,
         wait_until="domcontentloaded",
@@ -208,9 +255,26 @@ async def test_scrape_allianz_posts_exact_fund_mapping_and_trade_request(mock_co
         ),
         call(
             TRADE_URL,
-            data={"Date": None, "FundNo": "E0002"},
+            data={"Date": None, "FundNo": fund_no},
         ),
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failed_request", ["options", "trade"])
+@patch("scrapers.official.get_official_config", return_value=_allianz_config())
+async def test_scrape_allianz_fails_closed_on_http_error(mock_config, failed_request):
+    failed = _FakeApiResponse({}, ok=False, status=503)
+    responses = [failed]
+    if failed_request == "trade":
+        responses = [_FakeApiResponse(json.loads(OPTIONS_JSON)), failed]
+    page = _mock_page(*responses)
+
+    result = await official.scrape_allianz_playwright("00993A", page)
+
+    assert result["ok"] is False
+    assert result["all_rows"] == []
+    assert "HTTP 503" in result["reason"]
 
 
 @pytest.mark.asyncio
