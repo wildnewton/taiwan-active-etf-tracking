@@ -10,7 +10,7 @@ ETF_CODES = [
 ]
 
 
-def insert_holding(date, etf_code, weight_pct=90.0):
+def insert_holding(date, etf_code, weight_pct=100.0):
     with db._connect() as conn:
         conn.execute(
             """
