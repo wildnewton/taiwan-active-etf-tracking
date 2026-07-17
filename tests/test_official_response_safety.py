@@ -271,12 +271,12 @@ def test_ctbc_parser_preserves_exact_holding_values():
         (
             _is_nomura_assets_response,
             NOMURA_API_URL,
-            "https://evil.example/API/ETFAPI/api/Fund/GetFundAssets",
+            "https://evilnomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
         ),
         (
             _is_ctbc_holdings_response,
             CTBC_API_URL,
-            "https://evil.example/API/etf/ETFHoldingWeight",
+            "https://evilctbcinvestments.com.tw/API/etf/ETFHoldingWeight",
         ),
     ],
 )
