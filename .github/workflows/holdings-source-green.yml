@@ -1,4 +1,5 @@
 name: Holdings source GREEN
+# rerun after full-suite cleanup
 
 on:
   push:
