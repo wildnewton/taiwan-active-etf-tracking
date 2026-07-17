@@ -133,9 +133,35 @@ jobs:
             /tmp/pr103-full.log
           if-no-files-found: warn
 
-      - name: Commit and push GREEN implementation
+      - name: Create verified GREEN commit locally
         working-directory: repo
         run: |
           git add scripts/db.py scripts/changes.py scripts/manager_intent.py scripts/report.py scripts/etf_universe.py
           git commit -m "fix: align canonical snapshots and historical windows"
-          git push origin HEAD:fix/90-canonical-snapshot-followups
+
+      - name: Package verified commit contents
+        run: |
+          rm -rf /tmp/pr103-verified
+          mkdir -p /tmp/pr103-verified/scripts /tmp/pr103-verified/tests
+          cp repo/scripts/db.py repo/scripts/changes.py repo/scripts/manager_intent.py repo/scripts/report.py repo/scripts/etf_universe.py /tmp/pr103-verified/scripts/
+          cp \
+            repo/tests/test_active_classification.py \
+            repo/tests/test_canonical_comparability.py \
+            repo/tests/test_change_classification_version.py \
+            repo/tests/test_change_diagnostics.py \
+            repo/tests/test_changes.py \
+            repo/tests/test_flow_adjusted_materiality.py \
+            repo/tests/test_fund_flow_adjustment.py \
+            repo/tests/test_manager_intent_rollups.py \
+            repo/tests/test_report_canonical_sources.py \
+            /tmp/pr103-verified/tests/
+          git -C repo format-patch -2 --stdout > /tmp/pr103-verified/commits.patch
+          git -C repo log -2 --format='%H %s' > /tmp/pr103-verified/commit-log.txt
+          git -C repo diff HEAD~2..HEAD --check
+
+      - name: Upload verified commit tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr103-verified-tree-${{ github.run_id }}
+          path: /tmp/pr103-verified
+          if-no-files-found: error
