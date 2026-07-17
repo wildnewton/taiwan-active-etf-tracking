@@ -183,8 +183,7 @@ def test_pipeline_summary_surfaces_row_count_manual_inspection_warnings():
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00984A"}]), \
         patch("pipeline.scrape_holdings", return_value=result), \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}):
         summary = run_daily_scrape(":memory:")
 
     assert summary["row_count_warnings"] == [{"etf_code": "00984A", **warning}]

@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 
 import db
 import pipeline
-from models import HoldingRow, ScrapeRun
+from models import HoldingRow
 
 
 RUN_DATE = date(2026, 6, 22)
@@ -35,28 +35,7 @@ def _seed_successful_memory_snapshot():
             scraped_at=RUN_AT,
         )
     ])
-    db.insert_scrape_run(
-        ScrapeRun(
-            date=RUN_DATE,
-            data_date=RUN_DATE,
-            etf_code="00980A",
-            status="success",
-            primary_source="moneydj_primary",
-            primary_success=True,
-            moneydj_browser_used=False,
-            official_fallback_used=False,
-            official_success=False,
-            rows_extracted=1,
-            stock_rows_extracted=1,
-            non_stock_rows_extracted=0,
-            total_weight_all_rows=10.0,
-            total_weight_stock_rows=10.0,
-            source_url="https://example.test",
-            error=None,
-            started_at=RUN_AT,
-            finished_at=RUN_AT,
-        )
-    )
+
 
 
 def _success_result():
@@ -102,7 +81,7 @@ def test_scrape_unit_path_ignores_leaked_memory_snapshot():
         "pipeline.scrape_holdings", scraper
     ), patch(
         "pipeline.replace_daily_snapshot", return_value={"inserted": True}
-    ), patch("pipeline.insert_scrape_run"):
+    ):
         summary = pipeline.run_daily_scrape(":memory:")
 
     scraper.assert_called_once_with("00980A", RUN_DATE)

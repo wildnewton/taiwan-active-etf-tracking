@@ -155,6 +155,61 @@ def test_lower_priority_incoming_source_does_not_overwrite_higher_priority_exist
     assert rows_for() == [("2026-07-08", "00981A", "2330", "moneydj_primary")]
 
 
+def test_complete_lower_priority_snapshot_replaces_incomplete_higher_priority_snapshot():
+    db.init_db(":memory:")
+    db.insert_holdings([
+        holding(
+            stock_code="2330",
+            source_type="moneydj_primary",
+            weight_pct=50.0,
+        )
+    ])
+
+    result = db.replace_daily_snapshot(
+        [
+            holding(
+                stock_code="2330",
+                source_type="official_fallback",
+                weight_pct=100.0,
+            )
+        ],
+        [],
+    )
+
+    assert result == {"inserted": True, "source_type": "official_fallback"}
+    assert rows_for() == [
+        ("2026-07-08", "00981A", "2330", "official_fallback")
+    ]
+
+
+def test_complete_higher_priority_snapshot_still_beats_complete_lower_priority_snapshot():
+    db.init_db(":memory:")
+    db.insert_holdings([
+        holding(
+            stock_code="2330",
+            source_type="moneydj_primary",
+            weight_pct=100.0,
+        )
+    ])
+
+    result = db.replace_daily_snapshot(
+        [
+            holding(
+                stock_code="2330",
+                source_type="official_fallback",
+                weight_pct=100.0,
+            )
+        ],
+        [],
+    )
+
+    assert result["inserted"] is False
+    assert result["reason"] == "existing_higher_priority_source_preserved"
+    assert rows_for() == [
+        ("2026-07-08", "00981A", "2330", "moneydj_primary")
+    ]
+
+
 def test_non_stock_assets_are_replaced_atomically_with_stock_snapshot():
     db.init_db(":memory:")
     db.insert_holdings([holding(stock_code="2330", source_type="official_fallback")])
@@ -199,8 +254,7 @@ def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00981A"}]), \
         patch("pipeline.scrape_holdings", return_value=scrape_result()), \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot:
         run_daily_scrape(":memory:")
 
     replace_daily_snapshot.assert_called_once()

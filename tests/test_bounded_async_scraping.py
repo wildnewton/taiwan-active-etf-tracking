@@ -186,7 +186,7 @@ async def test_production_browser_run_limits_concurrency_and_owns_pages_per_work
         finally:
             active -= 1
 
-    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recording_order.append(etf_code)
 
     with patch(
@@ -230,7 +230,7 @@ async def test_worker_exception_becomes_one_failure_without_cancelling_other_etf
         completed.append(etf_code)
         return _success(etf_code)
 
-    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recorded.append((etf_code, result["ok"], result.get("reason")))
 
     with patch(
@@ -267,7 +267,7 @@ async def test_returned_failure_still_closes_worker_page():
     async def scrape_one(etf_code, page, target_date):
         return _failure("returned failure")
 
-    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recorded.append((etf_code, result["ok"], result.get("reason")))
 
     with patch(
@@ -301,7 +301,7 @@ async def test_page_close_exception_becomes_one_failure_without_aborting_other_e
             page.close = AsyncMock(side_effect=RuntimeError("page close exploded"))
         return _success(etf_code)
 
-    def record_result(summary, etf_code, run_date, expected_date, started_at, finished_at, result):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recorded.append((etf_code, result["ok"], result.get("reason")))
 
     with patch(
@@ -402,15 +402,7 @@ async def test_page_creation_exception_isolated_without_attempting_missing_page_
         await asyncio.sleep(0)
         return _success(etf_code)
 
-    def record_result(
-        summary,
-        etf_code,
-        run_date,
-        expected_date,
-        started_at,
-        finished_at,
-        result,
-    ):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recorded.append((etf_code, result["ok"], result.get("reason")))
 
     with patch(
@@ -453,15 +445,7 @@ async def test_page_close_failure_preserves_existing_scrape_failure_reason():
             return _failure("scrape failed first")
         return _success(etf_code)
 
-    def record_result(
-        summary,
-        etf_code,
-        run_date,
-        expected_date,
-        started_at,
-        finished_at,
-        result,
-    ):
+    def record_result(summary, etf_code, run_date, expected_date, result):
         recorded.append((etf_code, result["ok"], result.get("reason")))
 
     with patch(

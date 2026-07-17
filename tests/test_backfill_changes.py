@@ -14,6 +14,15 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
     with db._connect() as conn:
         conn.execute(
             """
+            INSERT OR IGNORE INTO etf_universe (
+                code, name, issuer, listing_date, retired, created_at, updated_at
+            ) VALUES (?, ?, 'Nomura', '2026-01-01', 0,
+                      '2026-01-01T00:00:00', '2026-01-01T00:00:00')
+            """,
+            (etf_code, etf_code),
+        )
+        conn.execute(
+            """
             INSERT INTO etf_daily_holdings (
                 date, etf_code, asset_name, asset_type, stock_code, stock_name,
                 shares, weight_pct, source_url, source_type, extraction_method,
@@ -30,6 +39,20 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
                 shares,
                 weight_pct,
             ),
+        )
+
+
+def insert_cash(date, etf_code, weight_pct):
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, '現金', 'cash', ?, 'https://example.test',
+                'moneydj_primary', 'test', '2026-06-25T00:00:00')
+            """,
+            (date, etf_code, weight_pct),
         )
 
 
@@ -91,6 +114,20 @@ def signal_types(date="2026-06-24"):
         conn.row_factory = old_factory
 
 
+def seed_etf_universe():
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_universe (
+                code, name, issuer, listing_date, retired, created_at, updated_at
+            ) VALUES (
+                '00980A', 'Test ETF', 'Nomura', '2026-01-01', 0,
+                '2026-01-01T00:00:00', '2026-01-01T00:00:00'
+            )
+            """
+        )
+
+
 def seed_previous_day(date="2026-06-23"):
     for code, name, weight in [
         ("2330", "台積電", 10.0),
@@ -100,6 +137,7 @@ def seed_previous_day(date="2026-06-23"):
         ("2345", "智邦", 3.0),
     ]:
         insert_holding(date, "00980A", code, name, 100, weight)
+    insert_cash(date, "00980A", 69.0)
 
 
 def seed_scaled_current_day(date="2026-06-24"):
@@ -112,6 +150,7 @@ def seed_scaled_current_day(date="2026-06-24"):
         ("6669", "緯穎", 50, 3.2),
     ]:
         insert_holding(date, "00980A", code, name, shares, weight)
+    insert_cash(date, "00980A", 64.8)
 
 
 def test_backfill_uses_previous_valid_date_not_immediate_holding_date():
@@ -174,6 +213,7 @@ def test_backfill_recomputes_old_changes_and_populates_fund_flow_fields():
 
 def test_backfill_is_idempotent_and_can_regenerate_signals():
     db.init_db(":memory:")
+    seed_etf_universe()
     seed_previous_day()
     seed_scaled_current_day()
 

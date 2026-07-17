@@ -123,13 +123,11 @@ def test_daily_scrape_skips_before_scraping_when_run_date_is_not_tw_trading_day(
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
         patch("pipeline.scrape_holdings") as scrape_holdings, \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
-        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot:
         summary = run_daily_scrape(":memory:")
 
     scrape_holdings.assert_not_called()
     replace_daily_snapshot.assert_not_called()
-    insert_scrape_run.assert_not_called()
     assert summary["date"] == "2026-06-27"
     assert summary["expected_data_date"] == "2026-06-26"
     assert summary["is_trading_day"] is False
@@ -153,13 +151,11 @@ async def test_daily_browser_scrape_skips_before_scraping_when_run_date_is_not_t
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=LAST_TRADING_DATE), \
         patch("pipeline.scrape_holdings_with_browser_async", scraper), \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot, \
-        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+        patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot:
         summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
 
     scraper.assert_not_called()
     replace_daily_snapshot.assert_not_called()
-    insert_scrape_run.assert_not_called()
     assert summary["expected_data_date"] == "2026-06-26"
     assert summary["is_trading_day"] is False
     assert summary["skipped_non_trading_day"] == 2
@@ -177,8 +173,7 @@ def test_daily_scrape_runs_when_run_date_is_tw_trading_day():
         patch("pipeline.latest_tw_trading_day_on_or_before", return_value=TRADING_DATE), \
         patch("pipeline.scrape_holdings", side_effect=lambda code, target_date=None: make_success(code)) as scrape_holdings, \
         patch("pipeline.init_db"), \
-        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}), \
-        patch("pipeline.insert_scrape_run"):
+        patch("pipeline.replace_daily_snapshot", return_value={"inserted": True}):
         summary = run_daily_scrape(":memory:")
 
     assert scrape_holdings.call_count == 2

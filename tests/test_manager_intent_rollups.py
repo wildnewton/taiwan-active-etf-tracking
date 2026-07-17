@@ -13,7 +13,16 @@ ETF_ROWS = {
     "00982A": {"issuer": "統一", "retired": 0},
     "00984A": {"issuer": "台新", "retired": 0},
     "00985A": {"issuer": "群益", "retired": 0},
-    "00999A": {"issuer": "退休投信", "retired": 1},
+    "00998A": {
+        "issuer": "歷史投信",
+        "retired": 1,
+        "last_active_date": "2026-06-26",
+    },
+    "00999A": {
+        "issuer": "退休投信",
+        "retired": 1,
+        "last_active_date": "2026-06-21",
+    },
 }
 ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
@@ -36,13 +45,14 @@ def seed_universe():
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
                     first_seen_date, last_active_date, created_at, updated_at
-                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', '2026-06-26', ?, ?)
+                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', ?, ?, ?)
                 """,
                 (
                     etf_code,
                     f"Test {etf_code}",
                     row["issuer"],
                     row["retired"],
+                    row.get("last_active_date", "2026-06-26"),
                     "2026-06-01T00:00:00",
                     "2026-06-01T00:00:00",
                 ),
@@ -300,6 +310,18 @@ def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
     assert rows[0] > 0
     assert rows[1] == 1
     assert rows[2]
+
+
+def test_retired_etf_events_are_included_through_last_active_date():
+    setup_db()
+    insert_eligible_history(etfs=("00998A",))
+    insert_change("2026-06-26", "00998A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    stock_row = get_rollup()
+
+    assert stock_row["cum_active_sell_score"] == 2.0
+    assert stock_row["sell_etf_count"] == 1
 
 
 def test_retired_etf_events_are_excluded_before_scoring():

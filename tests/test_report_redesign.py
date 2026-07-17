@@ -24,30 +24,15 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", we
             """,
             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, weight_pct, f"{date}T00:00:00"),
         )
-
-
-def insert_scrape_run(date, etf_code, status="success"):
-    with db._connect() as conn:
         conn.execute(
             """
-            INSERT INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url, error,
-                started_at, finished_at
-            ) VALUES (?, ?, ?, 'moneydj_primary', ?, 0, 0, 0, 1, 1, 0, 90, 90,
-                'https://test', ?, ?, ?)
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, '現金', 'cash', ?, 'https://test',
+                      'moneydj_primary', 'test', ?)
             """,
-            (
-                date,
-                etf_code,
-                status,
-                1 if status == "success" else 0,
-                None if status == "success" else "test failure",
-                f"{date}T00:00:00",
-                f"{date}T00:01:00",
-            ),
+            (date, etf_code, 100.0 - weight_pct, f"{date}T00:00:00"),
         )
 
 
@@ -222,12 +207,10 @@ def insert_report_change(
         )
 
 
-def test_report_puts_data_quality_before_summary_and_shows_failed_etfs():
+def test_report_puts_data_quality_before_summary_and_shows_missing_etfs():
     db.init_db(":memory:")
     for etf_code in ETF_CODES[1:]:
         insert_holding("2026-06-26", etf_code)
-        insert_scrape_run("2026-06-26", etf_code)
-    insert_scrape_run("2026-06-26", "00400A", status="failed")
 
     report = generate_signal_report("2026-06-26")
 
