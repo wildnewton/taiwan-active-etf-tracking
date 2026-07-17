@@ -94,6 +94,15 @@ jobs:
           set -e
           exit "$status"
 
+      - name: Run full test suite
+        working-directory: repo
+        run: |
+          set +e
+          PYTHONPATH=. pytest -q 2>&1 | tee /tmp/pr103-full.log
+          status=${PIPESTATUS[0]}
+          set -e
+          exit "$status"
+
       - name: Upload diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,11 +111,8 @@ jobs:
           path: |
             /tmp/pr103-red.log
             /tmp/pr103-targeted.log
+            /tmp/pr103-full.log
           if-no-files-found: warn
-
-      - name: Run full test suite
-        working-directory: repo
-        run: PYTHONPATH=. pytest -q
 
       - name: Commit and push GREEN implementation
         working-directory: repo
