@@ -23,6 +23,7 @@ from scrapers.moneydj import classify_asset, dedupe_rows, split_rows
 SOURCE_TYPE = "official_fallback"
 EXTRACTION_METHOD_STATIC = "requests_bs4"
 EXTRACTION_METHOD_API = "playwright_api_intercept"
+EXTRACTION_METHOD_API_REQUEST = "playwright_api_request"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
 EXTRACTION_METHOD_STEALTH = "stealth_playwright_api"
 _API_RESPONSE_TIMEOUT_MS = 10_000
@@ -205,11 +206,13 @@ def parse_ctbc_api(api_json: str, etf_code: str, source_url: str) -> list[dict]:
     return dedupe_rows(rows)
 
 
-
 def parse_allianz_fund_options(options_json: str, etf_code: str) -> str:
     """Return Allianz's internal FundNo for one exact exchange ETF code."""
     data = json.loads(options_json)
-    entries = data.get("Entries", []) if isinstance(data, dict) else []
+    if not isinstance(data, dict) or data.get("StatusCode") != 0:
+        message = data.get("Message") if isinstance(data, dict) else "invalid payload"
+        raise ValueError(f"Allianz fund options API failed: {message}")
+    entries = data.get("Entries", [])
     requested_code = etf_code.upper()
     matches = [
         item
@@ -236,7 +239,10 @@ def parse_allianz_api(
 ) -> list[dict]:
     """Parse one exact Allianz fund trade-info response."""
     data = json.loads(trade_json)
-    entries = data.get("Entries", {}) if isinstance(data, dict) else {}
+    if not isinstance(data, dict) or data.get("StatusCode") != 0:
+        message = data.get("Message") if isinstance(data, dict) else "invalid payload"
+        raise ValueError(f"Allianz trade info API failed: {message}")
+    entries = data.get("Entries", {})
     if not isinstance(entries, dict):
         raise ValueError("Allianz trade response entries missing")
 
@@ -264,8 +270,12 @@ def parse_allianz_api(
     except ValueError as exc:
         raise ValueError(f"Allianz holdings date invalid: {raw_date}") from exc
 
+    tables = entries.get("DynamicTableData")
+    if not isinstance(tables, list):
+        raise ValueError("Allianz holdings tables missing")
+
     stock_table = None
-    for table in entries.get("DynamicTableData", []):
+    for table in tables:
         if not isinstance(table, dict):
             continue
         title = str(table.get("TableTitle") or "").strip()
@@ -275,7 +285,9 @@ def parse_allianz_api(
     if stock_table is None:
         raise ValueError("Allianz stock table not found")
 
-    columns = stock_table.get("Columns", [])
+    columns = stock_table.get("Columns")
+    if not isinstance(columns, list):
+        raise ValueError("Allianz stock table schema invalid")
     headers = [
         _normalize_header(str(column.get("Name") or ""))
         for column in columns
@@ -286,8 +298,12 @@ def parse_allianz_api(
     if not required_fields.issubset(header_map):
         raise ValueError("Allianz stock table schema invalid")
 
+    raw_rows = stock_table.get("Rows")
+    if not isinstance(raw_rows, list):
+        raise ValueError("Allianz stock table rows invalid")
+
     rows = []
-    for raw in stock_table.get("Rows", []):
+    for raw in raw_rows:
         if not isinstance(raw, list):
             continue
         values = _extract_cells([str(value) for value in raw], header_map)
@@ -303,7 +319,7 @@ def parse_allianz_api(
                 weight_pct,
                 source_url,
                 date,
-                EXTRACTION_METHOD_API,
+                EXTRACTION_METHOD_API_REQUEST,
             )
         )
     if not rows:
@@ -472,7 +488,6 @@ async def scrape_ctbc_playwright(etf_code: str, page) -> dict:
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
-
 def _allianz_api_url(source_url: str, path: str) -> str:
     parsed = urlparse(source_url)
     if not parsed.scheme or not parsed.netloc:
@@ -520,7 +535,7 @@ async def scrape_allianz_playwright(etf_code: str, page) -> dict:
     except Exception as exc:
         return _failed_result(source_url, f"Allianz API error: {exc}")
 
-    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
+    return _build_result(all_rows, source_url, EXTRACTION_METHOD_API_REQUEST)
 
 async def scrape_mega_playwright(etf_code: str, page) -> dict:
     etf_code = etf_code.upper()
