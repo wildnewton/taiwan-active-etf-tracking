@@ -1,9 +1,345 @@
 === APPLY ===
-Traceback (most recent call last):
-  File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/_apply_holdings_source_green.py", line 468, in <module>
-    text = replace_between(
-           ^^^^^^^^^^^^^^^^
-  File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/_apply_holdings_source_green.py", line 26, in replace_between
-    raise RuntimeError(f"{label}: markers not found")
-RuntimeError: valid holdings date selector: markers not found
-STATUS=1
+Applied holdings-source-of-truth GREEN changes
+=== REMAINING REFERENCES ===
+scripts/_apply_holdings_source_green.py:45:    '''        conn.execute("CREATE TABLE IF NOT EXISTS etf_scrape_runs (date TEXT NOT NULL, data_date TEXT, etf_code TEXT NOT NULL, status TEXT NOT NULL, primary_source TEXT NOT NULL, primary_success INTEGER NOT NULL, moneydj_browser_used INTEGER NOT NULL, official_fallback_used INTEGER NOT NULL, official_success INTEGER NOT NULL, rows_extracted INTEGER NOT NULL, stock_rows_extracted INTEGER NOT NULL, non_stock_rows_extracted INTEGER NOT NULL, total_weight_all_rows REAL NOT NULL, total_weight_stock_rows REAL NOT NULL, source_url TEXT, error TEXT, started_at TEXT NOT NULL, finished_at TEXT, PRIMARY KEY (date, etf_code))")
+scripts/_apply_holdings_source_green.py:50:        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
+scripts/_apply_holdings_source_green.py:147:    "def successful_snapshot_exists(date_value, etf_code):\n",
+scripts/_apply_holdings_source_green.py:171:marker = "\n\n@dataclass\nclass ScrapeRun:\n"
+scripts/_apply_holdings_source_green.py:174:    raise RuntimeError("ScrapeRun marker not found")
+scripts/_apply_holdings_source_green.py:186:    insert_scrape_run,
+scripts/_apply_holdings_source_green.py:189:    successful_snapshot_exists,
+scripts/_apply_holdings_source_green.py:198:    "from models import HoldingRow, NonStockAssetRow, ScrapeRun\n",
+scripts/_apply_holdings_source_green.py:204:    '            if successful_snapshot_exists(expected_data_date, etf["code"])\n',
+scripts/_apply_holdings_source_green.py:850:text = read(path).replace("pipeline.successful_snapshot_exists", "pipeline.snapshot_exists")
+scripts/db.py:113:        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
+tests/test_row_count_validation.py:187:        patch("pipeline.insert_scrape_run"):
+tests/test_changes.py:191:            INSERT OR REPLACE INTO etf_scrape_runs (
+tests/test_expected_data_date_cutoff.py:90:        patch("pipeline.insert_scrape_run"):
+tests/test_expected_data_date_cutoff.py:114:        patch("pipeline.insert_scrape_run"):
+tests/test_try_run_preexisting_success.py:8:from models import HoldingRow, ScrapeRun
+tests/test_try_run_preexisting_success.py:51:    db.insert_scrape_run(
+tests/test_try_run_preexisting_success.py:52:        ScrapeRun(
+tests/test_holdings_source_of_truth.py:59:        conn.execute("CREATE TABLE etf_scrape_runs (date TEXT, etf_code TEXT)")
+tests/test_holdings_source_of_truth.py:60:        conn.execute("INSERT INTO etf_scrape_runs VALUES ('2026-07-15', 'A')")
+tests/test_holdings_source_of_truth.py:66:            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='etf_scrape_runs'"
+tests/test_holdings_source_of_truth.py:76:            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='etf_scrape_runs'"
+tests/test_tw_stock_trading_calendar.py:127:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_tw_stock_trading_calendar.py:132:    insert_scrape_run.assert_not_called()
+tests/test_tw_stock_trading_calendar.py:157:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_tw_stock_trading_calendar.py:162:    insert_scrape_run.assert_not_called()
+tests/test_tw_stock_trading_calendar.py:181:        patch("pipeline.insert_scrape_run"):
+tests/test_daily_snapshot_replacement.py:203:        patch("pipeline.insert_scrape_run"):
+tests/test_selected_pipeline_retry.py:63:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_selected_pipeline_retry.py:73:    assert insert_scrape_run.call_count == 2
+tests/test_selected_pipeline_retry.py:94:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_selected_pipeline_retry.py:104:    assert insert_scrape_run.call_args.args[0].date == date(2026, 7, 6)
+tests/test_selected_pipeline_retry.py:105:    assert insert_scrape_run.call_args.args[0].data_date == date(2026, 7, 6)
+tests/test_scraper_freshness_target.py:100:        patch("pipeline.successful_snapshot_exists", return_value=False), \
+tests/test_scraper_freshness_target.py:104:        patch("pipeline.insert_scrape_run"):
+tests/test_scraper_freshness_target.py:119:        patch("pipeline.insert_scrape_run"):
+tests/test_report_redesign.py:29:def insert_scrape_run(date, etf_code, status="success"):
+tests/test_report_redesign.py:33:            INSERT INTO etf_scrape_runs (
+tests/test_report_redesign.py:229:        insert_scrape_run("2026-06-26", etf_code)
+tests/test_report_redesign.py:230:    insert_scrape_run("2026-06-26", "00400A", status="failed")
+tests/test_skip_stale_existing_snapshots.py:67:        patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+tests/test_skip_stale_existing_snapshots.py:74:        patch("pipeline.insert_scrape_run", side_effect=captured_runs.append):
+tests/test_skip_stale_existing_snapshots.py:77:    successful_snapshot_exists.assert_called_once_with(RUN_DATE, "00980A")
+tests/test_skip_stale_existing_snapshots.py:108:        patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+tests/test_skip_stale_existing_snapshots.py:112:        patch("pipeline.insert_scrape_run"):
+tests/test_skip_stale_existing_snapshots.py:115:    successful_snapshot_exists.assert_called_once_with(RUN_DATE, "00980A")
+tests/test_skip_stale_existing_snapshots.py:134:        patch("pipeline.successful_snapshot_exists", return_value=False) as successful_snapshot_exists, \
+tests/test_skip_stale_existing_snapshots.py:138:        patch("pipeline.insert_scrape_run"):
+tests/test_skip_stale_existing_snapshots.py:141:    successful_snapshot_exists.assert_called_once_with(RUN_DATE, "00980A")
+tests/test_snapshot_date_validation.py:100:        patch("pipeline.insert_scrape_run") as insert_scrape_run, \
+tests/test_snapshot_date_validation.py:108:        insert_scrape_run,
+tests/test_snapshot_date_validation.py:113:def assert_failed_run(insert_scrape_run, expected_error: str) -> None:
+tests/test_snapshot_date_validation.py:114:    scrape_run = insert_scrape_run.call_args.args[0]
+tests/test_snapshot_date_validation.py:121:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:133:    assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
+tests/test_snapshot_date_validation.py:137:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:148:    assert_failed_run(insert_scrape_run, "inconsistent_source_dates")
+tests/test_snapshot_date_validation.py:152:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:162:    assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
+tests/test_snapshot_date_validation.py:173:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:179:    assert_failed_run(insert_scrape_run, "missing_or_unparseable_source_date")
+tests/test_snapshot_date_validation.py:187:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:197:    assert_failed_run(insert_scrape_run, "empty_snapshot")
+tests/test_snapshot_date_validation.py:221:    summary, _, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:233:    scrape_run = insert_scrape_run.call_args.args[0]
+tests/test_snapshot_date_validation.py:239:    summary, scrape_holdings, replace_snapshot, insert_scrape_run, _ = run_with_results({
+tests/test_snapshot_date_validation.py:251:    assert [call.args[0].status for call in insert_scrape_run.call_args_list] == [
+tests/test_models.py:4:from models import HoldingRow, NonStockAssetRow, ScrapeResult, ScrapeRun
+tests/test_models.py:65:    assert is_dataclass(ScrapeRun)
+tests/test_models.py:66:    assert [field.name for field in fields(ScrapeRun)] == [
+tests/test_models.py:77:    run = ScrapeRun(
+tests/test_change_classification_version.py:51:            INSERT OR REPLACE INTO etf_scrape_runs (
+tests/test_weight_validation_warnings.py:177:        "pipeline.insert_scrape_run"
+tests/test_signal_report_retired_exclusion.py:30:        "INSERT OR REPLACE INTO etf_scrape_runs "
+tests/test_date_semantics_audit.py:9:from models import ScrapeRun
+tests/test_date_semantics_audit.py:66:) -> ScrapeRun:
+tests/test_date_semantics_audit.py:68:    return ScrapeRun(
+tests/test_date_semantics_audit.py:95:            FROM etf_scrape_runs
+tests/test_date_semantics_audit.py:132:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:140:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:159:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:167:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:186:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:194:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:212:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:220:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:240:        db.insert_scrape_run(
+tests/test_date_semantics_audit.py:250:        db.insert_scrape_run(
+tests/test_date_semantics_audit.py:268:        db.insert_scrape_run(
+tests/test_date_semantics_audit.py:280:        db.insert_scrape_run(
+tests/test_date_semantics_audit.py:297:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:321:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:330:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:349:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:352:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:365:    db.insert_scrape_run(
+tests/test_date_semantics_audit.py:469:        "pipeline.insert_scrape_run"
+tests/test_date_semantics_audit.py:499:        "pipeline.insert_scrape_run"
+tests/test_date_semantics_final_review.py:62:            INSERT OR REPLACE INTO etf_scrape_runs (
+tests/test_pipeline.py:127:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_pipeline.py:147:    assert insert_scrape_run.call_count == expected_count
+tests/test_pipeline.py:161:        patch("pipeline.insert_scrape_run") as insert_scrape_run:
+tests/test_pipeline.py:178:    assert insert_scrape_run.call_count == expected_count
+tests/test_pipeline.py:195:        patch("pipeline.insert_scrape_run"):
+tests/test_pipeline.py:238:            FROM etf_scrape_runs
+tests/test_pipeline.py:252:    """ScrapeRun dataclass should no longer have a run_id field."""
+tests/test_pipeline.py:254:    from models import ScrapeRun
+tests/test_pipeline.py:256:    field_names = [f.name for f in fields(ScrapeRun)]
+tests/test_pipeline.py:263:def test_insert_scrape_run_no_duplicates():
+tests/test_pipeline.py:266:    from models import ScrapeRun
+tests/test_pipeline.py:269:    run = ScrapeRun(
+tests/test_pipeline.py:290:    db.insert_scrape_run(run)
+tests/test_pipeline.py:291:    db.insert_scrape_run(run)  # second insert should be ignored
+tests/test_pipeline.py:295:            "SELECT COUNT(*) FROM etf_scrape_runs WHERE etf_code = '00980A'"
+tests/test_pipeline.py:301:def test_insert_scrape_run_replaces_failure_with_success():
+tests/test_pipeline.py:304:    from models import ScrapeRun
+tests/test_pipeline.py:308:    failure = ScrapeRun(
+tests/test_pipeline.py:329:    success = ScrapeRun(
+tests/test_pipeline.py:350:    db.insert_scrape_run(failure)
+tests/test_pipeline.py:351:    db.insert_scrape_run(success)  # should REPLACE the failure
+tests/test_pipeline.py:355:            "SELECT status, rows_extracted, error, data_date FROM etf_scrape_runs WHERE etf_code = '00400A'"
+tests/test_pipeline.py:391:        patch("pipeline.insert_scrape_run", side_effect=capture_run):
+tests/test_pipeline.py:428:        patch("pipeline.insert_scrape_run"):
+tests/test_preexisting_successful_snapshots.py:8:from models import HoldingRow, ScrapeRun
+tests/test_preexisting_successful_snapshots.py:45:) -> ScrapeRun:
+tests/test_preexisting_successful_snapshots.py:46:    return ScrapeRun(
+tests/test_preexisting_successful_snapshots.py:98:    db.insert_scrape_run(_scrape_run(etf_code, data_date=run_data_date))
+tests/test_preexisting_successful_snapshots.py:107:            FROM etf_scrape_runs
+tests/test_preexisting_successful_snapshots.py:147:    with patch("pipeline.insert_scrape_run", wraps=db.insert_scrape_run) as insert_run:
+tests/test_preexisting_successful_snapshots.py:199:    db.insert_scrape_run(_scrape_run("00980A"))
+tests/test_preexisting_successful_snapshots.py:282:        "pipeline.insert_scrape_run", wraps=db.insert_scrape_run
+tests/test_report_change_diagnostics.py:37:            INSERT INTO etf_scrape_runs (
+tests/test_pipeline_isolation_regression.py:6:from models import HoldingRow, ScrapeRun
+tests/test_pipeline_isolation_regression.py:38:    db.insert_scrape_run(
+tests/test_pipeline_isolation_regression.py:39:        ScrapeRun(
+tests/test_pipeline_isolation_regression.py:105:    ), patch("pipeline.insert_scrape_run"):
+tests/test_prelisting_etfs.py:53:def _insert_scrape_run(status, data_date=None):
+tests/test_prelisting_etfs.py:57:            INSERT INTO etf_scrape_runs (
+tests/test_prelisting_etfs.py:171:    _insert_scrape_run("failed")
+tests/test_prelisting_etfs.py:182:    _insert_scrape_run("success", data_date="2026-07-14")
+tests/test_signal_report.py:52:def insert_scrape_run(date, etf_code, status="success", data_date=None):
+tests/test_signal_report.py:56:            INSERT OR REPLACE INTO etf_scrape_runs (
+tests/test_signal_report.py:255:    insert_scrape_run(
+tests/test_signal_report.py:258:    insert_scrape_run("2026-07-08", "00981A", status="failed", data_date=None)
+tests/test_signal_report.py:259:    insert_scrape_run("2026-07-08", "00982A", data_date="2026-07-08")
+tests/test_signal_report.py:280:    insert_scrape_run(
+tests/test_signal_report.py:283:    insert_scrape_run(
+=== INSTALL ===
+Collecting requests>=2.31.0 (from -r requirements.txt (line 1))
+  Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Collecting beautifulsoup4>=4.12.0 (from -r requirements.txt (line 2))
+  Downloading beautifulsoup4-4.15.0-py3-none-any.whl.metadata (3.8 kB)
+Collecting lxml>=5.0.0 (from -r requirements.txt (line 3))
+  Downloading lxml-6.1.1-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (3.5 kB)
+Collecting playwright>=1.40.0 (from -r requirements.txt (line 4))
+  Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl.metadata (3.3 kB)
+Collecting pytest>=8.0.0 (from -r requirements.txt (line 5))
+  Downloading pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting charset_normalizer<4,>=2 (from requests>=2.31.0->-r requirements.txt (line 1))
+  Downloading charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (41 kB)
+Collecting idna<4,>=2.5 (from requests>=2.31.0->-r requirements.txt (line 1))
+  Downloading idna-3.18-py3-none-any.whl.metadata (6.1 kB)
+Collecting urllib3<3,>=1.26 (from requests>=2.31.0->-r requirements.txt (line 1))
+  Downloading urllib3-2.7.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting certifi>=2023.5.7 (from requests>=2.31.0->-r requirements.txt (line 1))
+  Downloading certifi-2026.6.17-py3-none-any.whl.metadata (2.5 kB)
+Collecting soupsieve>=1.6.1 (from beautifulsoup4>=4.12.0->-r requirements.txt (line 2))
+  Downloading soupsieve-2.8.4-py3-none-any.whl.metadata (4.6 kB)
+Collecting typing-extensions>=4.0.0 (from beautifulsoup4>=4.12.0->-r requirements.txt (line 2))
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting pyee<14,>=13 (from playwright>=1.40.0->-r requirements.txt (line 4))
+  Downloading pyee-13.0.1-py3-none-any.whl.metadata (3.0 kB)
+Collecting greenlet<4.0.0,>=3.1.1 (from playwright>=1.40.0->-r requirements.txt (line 4))
+  Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+Collecting iniconfig>=1.0.1 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting packaging>=22 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading packaging-26.2-py3-none-any.whl.metadata (3.5 kB)
+Collecting pluggy<2,>=1.5 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting pygments>=2.7.2 (from pytest>=8.0.0->-r requirements.txt (line 5))
+  Downloading pygments-2.20.0-py3-none-any.whl.metadata (2.5 kB)
+Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+Downloading charset_normalizer-3.4.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (221 kB)
+Downloading idna-3.18-py3-none-any.whl (65 kB)
+Downloading urllib3-2.7.0-py3-none-any.whl (131 kB)
+Downloading beautifulsoup4-4.15.0-py3-none-any.whl (109 kB)
+Downloading lxml-6.1.1-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 188.6 MB/s  0:00:00
+Downloading playwright-1.61.0-py3-none-manylinux1_x86_64.whl (47.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 47.4/47.4 MB 185.1 MB/s  0:00:00
+Downloading greenlet-3.5.3-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (617 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 617.4/617.4 kB 110.1 MB/s  0:00:00
+Downloading pyee-13.0.1-py3-none-any.whl (15 kB)
+Downloading pytest-9.1.1-py3-none-any.whl (386 kB)
+Downloading pluggy-1.6.0-py3-none-any.whl (20 kB)
+Downloading certifi-2026.6.17-py3-none-any.whl (133 kB)
+Downloading iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+Downloading packaging-26.2-py3-none-any.whl (100 kB)
+Downloading pygments-2.20.0-py3-none-any.whl (1.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.2/1.2 MB 207.7 MB/s  0:00:00
+Downloading soupsieve-2.8.4-py3-none-any.whl (37 kB)
+Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Installing collected packages: urllib3, typing-extensions, soupsieve, pygments, pluggy, packaging, lxml, iniconfig, idna, greenlet, charset_normalizer, certifi, requests, pytest, pyee, beautifulsoup4, playwright
+
+Successfully installed beautifulsoup4-4.15.0 certifi-2026.6.17 charset_normalizer-3.4.9 greenlet-3.5.3 idna-3.18 iniconfig-2.3.0 lxml-6.1.1 packaging-26.2 playwright-1.61.0 pluggy-1.6.0 pyee-13.0.1 pygments-2.20.0 pytest-9.1.1 requests-2.34.2 soupsieve-2.8.4 typing-extensions-4.16.0 urllib3-2.7.0
+=== TARGETED ===
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/test_holdings_source_of_truth.py ____________
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/python.py:508: in importtestmodule
+    mod = import_path(
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/pathlib.py:596: in import_path
+    importlib.import_module(module_name)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/test_holdings_source_of_truth.py:4: in <module>
+    import db
+E     File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/db.py", line 206
+E       def _ensure_change_diagnostics_table(conn):
+E       ^^^
+E   IndentationError: expected an indented block after function definition on line 205
+______________ ERROR collecting tests/test_retry_stale_scrapes.py ______________
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/python.py:508: in importtestmodule
+    mod = import_path(
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/pathlib.py:596: in import_path
+    importlib.import_module(module_name)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/test_retry_stale_scrapes.py:5: in <module>
+    import db
+E     File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/db.py", line 206
+E       def _ensure_change_diagnostics_table(conn):
+E       ^^^
+E   IndentationError: expected an indented block after function definition on line 205
+____________ ERROR collecting tests/test_pipeline_date_contract.py _____________
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/python.py:508: in importtestmodule
+    mod = import_path(
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/pathlib.py:596: in import_path
+    importlib.import_module(module_name)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:179: in exec_module
+    source_stat, co = _rewrite_test(fn, self.config)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:348: in _rewrite_test
+    tree = ast.parse(source, filename=strfn)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/ast.py:50: in parse
+    return compile(source, filename, mode, flags,
+E     File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/tests/test_pipeline_date_contract.py", line 167
+E       def test_historical_retry_traction_uses_the_explicit_retry_date(tmp_path):
+E       ^^^
+E   IndentationError: expected an indented block after function definition on line 166
+____________________ ERROR collecting tests/test_changes.py ____________________
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/python.py:508: in importtestmodule
+    mod = import_path(
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/pathlib.py:596: in import_path
+    importlib.import_module(module_name)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/test_changes.py:3: in <module>
+    import db
+E     File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/db.py", line 206
+E       def _ensure_change_diagnostics_table(conn):
+E       ^^^
+E   IndentationError: expected an indented block after function definition on line 205
+_________________ ERROR collecting tests/test_signal_report.py _________________
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/python.py:508: in importtestmodule
+    mod = import_path(
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/pathlib.py:596: in import_path
+    importlib.import_module(module_name)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap>:1204: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/test_signal_report.py:5: in <module>
+    import db
+E     File "/home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/scripts/db.py", line 206
+E       def _ensure_change_diagnostics_table(conn):
+E       ^^^
+E   IndentationError: expected an indented block after function definition on line 205
+=========================== short test summary info ============================
+ERROR tests/test_holdings_source_of_truth.py
+ERROR tests/test_retry_stale_scrapes.py
+ERROR tests/test_pipeline_date_contract.py
+ERROR tests/test_changes.py
+ERROR tests/test_signal_report.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+5 errors in 0.58s
+STATUS=2
