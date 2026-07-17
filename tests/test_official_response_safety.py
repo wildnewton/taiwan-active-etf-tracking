@@ -138,7 +138,7 @@ class _ResponseErrorContext:
         return self._response_info
 
     async def __aexit__(self, exc_type, exc, traceback):
-        if exc_type is None:
+        if exc_type is None and self._error is not None:
             raise self._error
         return False
 
@@ -148,6 +148,9 @@ class _ResponsePage:
         self.response = response
         self.error = error
         self.goto = AsyncMock()
+        self.wait_for_response = AsyncMock(
+            side_effect=AssertionError("late response wait used")
+        )
 
     def expect_response(self, predicate, timeout):
         assert timeout <= 10000
@@ -193,6 +196,7 @@ async def test_response_wait_playwright_error_after_navigation_returns_failure(
     assert result["ok"] is False
     assert "not intercepted" in result["reason"]
     page.goto.assert_awaited_once()
+    page.wait_for_response.assert_not_awaited()
 
 
 @pytest.mark.asyncio
