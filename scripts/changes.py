@@ -4,7 +4,7 @@ from statistics import median
 from typing import Optional
 
 import db
-from etf_universe import get_etf_config
+from etf_universe import get_eligible_etf_codes, get_etf_config
 from source_priority import source_priority
 
 
@@ -53,7 +53,9 @@ def _get_valid_holding_date(
         coverage = db.get_target_snapshot_coverage(date_value)
         expected_count = coverage["expected_count"]
         actual_count = coverage["actual_count"]
-        required_count = ceil(expected_count * min_success_ratio) if expected_count else 1
+        if expected_count == 0:
+            continue
+        required_count = ceil(expected_count * min_success_ratio)
         if actual_count >= required_count:
             return date_value
     return None
@@ -141,20 +143,17 @@ def _empty_summary(current_date, previous_date, reason: str, skipped_etfs=None) 
 
 
 def _select_canonical_sources(date_value: str) -> dict:
+    eligible_codes = set(get_eligible_etf_codes(date_value))
     with db._connect() as conn:
         rows = conn.execute(
             "SELECT etf_code, source_type, stock_code, shares, weight_pct "
             "FROM etf_daily_holdings WHERE date = ?",
             (date_value,),
         ).fetchall()
-        retired_rows = conn.execute(
-            "SELECT code FROM etf_universe WHERE retired = 1"
-        ).fetchall()
-    retired_codes = {row[0] for row in retired_rows}
 
     grouped = {}
     for etf_code, source_type, stock_code, shares, weight_pct in rows:
-        if etf_code in retired_codes:
+        if etf_code not in eligible_codes:
             continue
         key = (etf_code, source_type)
         entry = grouped.setdefault(

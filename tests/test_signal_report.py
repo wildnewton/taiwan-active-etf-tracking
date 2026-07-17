@@ -104,6 +104,23 @@ def insert_holding(date, etf_code, stock_code, stock_name, weight_pct=5.0):
             """,
             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, weight_pct, f"{date}T00:00:00"),
         )
+        stock_total = conn.execute(
+            """
+            SELECT COALESCE(SUM(weight_pct), 0.0)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = ? AND source_type = 'test'
+            """,
+            (date, etf_code),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, '現金', 'cash', ?, 'https://test', 'test', 'test', ?)
+            """,
+            (date, etf_code, 100.0 - stock_total, f"{date}T00:00:00"),
+        )
 
 
 def test_get_latest_signal_date_returns_most_recent_date():

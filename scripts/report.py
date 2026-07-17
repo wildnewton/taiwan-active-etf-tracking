@@ -10,7 +10,11 @@ from changes import (
     get_latest_valid_date,
     get_previous_valid_date,
 )
-from etf_universe import get_active_etf_count
+from etf_universe import (
+    get_active_etf_count,
+    get_eligible_etf_codes,
+    get_eligible_etf_count,
+)
 
 CST = timezone(timedelta(hours=8))
 _MATERIAL_POSITION_WEIGHT = 0.5
@@ -472,16 +476,14 @@ def _get_data_quality(data_date, quality_run_date=None):
 def _get_skipped_change_diagnostics(data_date):
     if not data_date:
         return []
+    eligible_codes = set(get_eligible_etf_codes(data_date))
     try:
         with _using_row_factory(_dict_factory) as conn:
-            return conn.execute(
+            rows = conn.execute(
                 """SELECT d.etf_code, d.reason, d.current_source_type, d.previous_source_type
                    FROM etf_change_diagnostics d
-                   JOIN etf_universe u ON d.etf_code = u.code
                    WHERE d.date = ?
                      AND d.status = 'skipped'
-                     AND u.retired = 0
-                      AND (u.listing_date IS NULL OR u.listing_date <= d.date)
                      AND d.created_at = (
                          SELECT MAX(created_at)
                          FROM etf_change_diagnostics
@@ -490,6 +492,7 @@ def _get_skipped_change_diagnostics(data_date):
                    ORDER BY d.etf_code""",
                 (data_date, data_date),
             ).fetchall()
+        return [row for row in rows if row["etf_code"] in eligible_codes]
     except sqlite3.OperationalError:
         return []
 
@@ -687,7 +690,7 @@ def _get_consensus_stocks(data_date, min_etfs=15):
         group["etfs"].add(row["etf_code"])
         group["weights"].append(row["weight_pct"] or 0.0)
 
-    active_count = get_active_etf_count(as_of_date=data_date)
+    active_count = get_eligible_etf_count(as_of_date=data_date)
     rows = []
     for group in stock_groups.values():
         etf_count = len(group["etfs"])

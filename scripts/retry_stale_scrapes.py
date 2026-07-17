@@ -1,7 +1,9 @@
 """Retry ETFs missing a persisted holdings snapshot for one target date."""
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import db
 from changes import detect_holding_changes
@@ -10,6 +12,9 @@ from pipeline import run_selected_scrape_with_browser
 from report import generate_signal_report
 from signals import generate_manager_signals
 from traction_analysis import generate_traction_report
+
+
+TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 
 
 def get_retry_candidates(target_date: str) -> list[dict]:
@@ -40,7 +45,10 @@ def retry_missing_holdings(
     candidates = get_retry_candidates(target_date)
     missing_before = len(candidates)
     if missing_before == 0:
-        return _empty_summary(target_date)
+        return _empty_summary(
+            target_date,
+            datetime.now(TAIPEI_TIMEZONE).date().isoformat(),
+        )
 
     etf_codes = [row["etf_code"] for row in candidates]
     retry_summary = run_selected_scrape_with_browser(
@@ -52,9 +60,14 @@ def retry_missing_holdings(
     remaining_codes = {row["etf_code"] for row in remaining}
     improved_etfs = sorted(set(etf_codes) - remaining_codes)
     improved = bool(improved_etfs)
+    run_date = (
+        retry_summary.get("date")
+        or datetime.now(TAIPEI_TIMEZONE).date().isoformat()
+    )
 
     summary = {
-        "date": target_date,
+        "run_date": run_date,
+        "target_date": target_date,
         "retried_etfs": etf_codes,
         "improved_etfs": improved_etfs,
         "missing_before": missing_before,
@@ -75,7 +88,7 @@ def retry_missing_holdings(
 
     intent_summary = generate_manager_intent_rollups(target_date)
     signal_summary = generate_manager_signals(target_date)
-    quality_run_date = retry_summary.get("date") or target_date
+    quality_run_date = run_date
     report_paths = _overwrite_reports(
         db_path,
         target_date,
@@ -121,9 +134,10 @@ def _overwrite_reports(
     return {"signal_report": str(signal_path), "traction_report": str(traction_path)}
 
 
-def _empty_summary(target_date: str) -> dict:
+def _empty_summary(target_date: str, run_date: str) -> dict:
     return {
-        "date": target_date,
+        "run_date": run_date,
+        "target_date": target_date,
         "retried_etfs": [],
         "missing_before": 0,
         "missing_after": 0,

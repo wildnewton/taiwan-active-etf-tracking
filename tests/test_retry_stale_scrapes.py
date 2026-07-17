@@ -31,7 +31,7 @@ def _holding(data_date, etf_code):
             stock_code="2330",
             stock_name="Stock 2330",
             shares=100,
-            weight_pct=10,
+            weight_pct=100,
             source_url="https://example.com",
             source_type="moneydj_primary",
             extraction_method="test",

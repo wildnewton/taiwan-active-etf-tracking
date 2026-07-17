@@ -42,6 +42,20 @@ def insert_holding(date, etf_code, stock_code, stock_name, shares, weight_pct):
         )
 
 
+def insert_cash(date, etf_code, weight_pct):
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, '現金', 'cash', ?, 'https://example.test',
+                'moneydj_primary', 'test', '2026-06-25T00:00:00')
+            """,
+            (date, etf_code, weight_pct),
+        )
+
+
 def insert_stale_change(date="2026-06-24", stock_code="2330"):
     with db._connect() as conn:
         conn.execute(
@@ -123,6 +137,7 @@ def seed_previous_day(date="2026-06-23"):
         ("2345", "智邦", 3.0),
     ]:
         insert_holding(date, "00980A", code, name, 100, weight)
+    insert_cash(date, "00980A", 69.0)
 
 
 def seed_scaled_current_day(date="2026-06-24"):
@@ -135,6 +150,7 @@ def seed_scaled_current_day(date="2026-06-24"):
         ("6669", "緯穎", 50, 3.2),
     ]:
         insert_holding(date, "00980A", code, name, shares, weight)
+    insert_cash(date, "00980A", 64.8)
 
 
 def test_backfill_uses_previous_valid_date_not_immediate_holding_date():

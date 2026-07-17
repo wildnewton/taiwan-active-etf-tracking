@@ -41,7 +41,7 @@ def _seed_validated_snapshot(db_path: Path):
             stock_code="2330",
             stock_name="台積電",
             shares=1000,
-            weight_pct=10.0,
+            weight_pct=100.0,
             source_url="https://example.test",
             source_type="moneydj_primary",
             extraction_method="test",

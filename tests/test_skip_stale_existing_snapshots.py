@@ -112,7 +112,7 @@ def test_snapshot_exists_detects_existing_stock_snapshot():
             stock_code="2330",
             stock_name="台積電",
             shares=1000,
-            weight_pct=10.0,
+            weight_pct=100.0,
             source_url="https://example.test",
             source_type="moneydj_primary",
             extraction_method="requests_bs4",

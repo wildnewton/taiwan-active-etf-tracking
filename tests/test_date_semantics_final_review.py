@@ -49,7 +49,7 @@ def _seed_holding(data_date: str, code: str) -> None:
                 date, etf_code, asset_name, asset_type, stock_code, stock_name,
                 shares, weight_pct, source_url, source_type, extraction_method,
                 scraped_at
-            ) VALUES (?, ?, ?, 'stock', '2330', '台積電', 1000, 90.0,
+            ) VALUES (?, ?, ?, 'stock', '2330', '台積電', 1000, 100.0,
                       'https://example.test', 'moneydj_primary', 'test', ?)
             """,
             (data_date, code, f"台積電({code})", f"{data_date}T21:00:00"),
