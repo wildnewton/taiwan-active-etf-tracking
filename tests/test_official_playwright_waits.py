@@ -253,7 +253,7 @@ async def test_nomura_registers_bounded_response_wait_before_navigation(mock_con
         "official_logic": "GetFundAssets",
     }
     page = _mock_page(
-        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
         response_body=NOMURA_API_JSON,
     )
 
@@ -277,7 +277,7 @@ async def test_nomura_navigation_error_still_propagates(mock_config):
         "official_logic": "GetFundAssets",
     }
     page = _mock_page(
-        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
         response_body=NOMURA_API_JSON,
     )
     page.goto.side_effect = RuntimeError("navigation failed")
@@ -299,7 +299,7 @@ async def test_nomura_navigation_timeout_still_propagates(mock_config):
         "official_logic": "GetFundAssets",
     }
     page = _mock_page(
-        response_url="https://www.nomurafunds.com.tw/api/getfundassets",
+        response_url="https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets",
         response_body=NOMURA_API_JSON,
     )
     page.goto.side_effect = PlaywrightTimeoutError("navigation timed out")
@@ -309,7 +309,7 @@ async def test_nomura_navigation_timeout_still_propagates(mock_config):
 
 
 def test_nomura_assets_response_predicate_is_case_insensitive():
-    response = _Response("https://www.nomurafunds.com.tw/api/getfundassets", "{}")
+    response = _Response("https://www.nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets", "{}")
 
     assert _is_nomura_assets_response(response) is True
 
