@@ -24,15 +24,36 @@ jobs:
           persist-credentials: true
 
       - name: Apply and commit reviewed fixes
+        id: apply
+        shell: bash
         run: |
-          if [ ! -f .github/review-fixes.patch ]; then
-            echo "Patch already applied"
-            exit 0
-          fi
-          git apply .github/review-fixes.patch
-          rm .github/review-fixes.patch
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "fix: harden official response contracts"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          set +e
+          {
+            if [ ! -f .github/review-fixes.patch ]; then
+              echo "Patch already applied"
+              exit 0
+            fi
+            git apply .github/review-fixes.patch
+            rm .github/review-fixes.patch
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git status --short
+            git commit -m "fix: harden official response contracts"
+            git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          } > fix-application.log 2>&1
+          status=$?
+          cat fix-application.log
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fix-application-log
+          path: fix-application.log
+
+      - name: Fail when application failed
+        if: steps.apply.outputs.status != '0'
+        run: exit 1
