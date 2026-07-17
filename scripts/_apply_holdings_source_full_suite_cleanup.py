@@ -18,7 +18,7 @@ def between(text, start, end, replacement, label):
     b = text.find(end, a + len(start))
     if a < 0 or b < 0:
         raise RuntimeError(f"{label}: markers not found")
-    return text[:a] + replacement + text[b:]
+    return text[:a] + replacement + text[b + len(end):]
 
 
 # Backfill fixtures need the candidate-date universe they exercise.
@@ -471,7 +471,7 @@ def test_fresh_result_writes_target_snapshot():
     ) as replace_snapshot:
         summary = run_daily_scrape(":memory:")
 
-    assert snapshot_exists.call_count == 1  # preexisting target check only
+    assert snapshot_exists.call_count == 1
     replace_snapshot.assert_called_once()
     assert summary["data_freshness"] == {"fresh": 1, "stale": 0, "unknown": 0}
 
@@ -599,8 +599,8 @@ text = read(path)
 text = between(
     text,
     "def _seed_scrape_run(conn, date, etf_code, status):\n",
-    "def _seed_change_diagnostic(\n",
-    "def _seed_change_diagnostic(\n",
+    "def _seed_change_diagnostic(conn,",
+    "def _seed_change_diagnostic(conn,",
     "remove retired scrape helper",
 )
 start = text.find("def test_failed_etfs_excludes_retired_etfs():\n")
