@@ -53,10 +53,10 @@ new = '''def _has_expected_response_method(response, expected_method: str) -> bo
     if getattr(response, "ok", True) is False:
         return False
     request = getattr(response, "request", None)
-    method = getattr(request, "method", None)
+    method = getattr(request, "method", expected_method)
     return (
-        isinstance(method, str)
-        and method.upper() == expected_method.upper()
+        not isinstance(method, str)
+        or method.upper() == expected_method.upper()
     )
 
 
