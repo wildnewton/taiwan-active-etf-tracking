@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import date, datetime
+from pathlib import Path
 
 import db
 import pipeline
@@ -76,6 +77,24 @@ def test_new_database_has_no_scrape_run_table(tmp_path):
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='etf_scrape_runs'"
         ).fetchone()
     assert table is None
+
+
+def test_production_source_has_no_scrape_run_state():
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    forbidden = ("insert_scrape_run", "successful_snapshot_exists", "class ScrapeRun")
+
+    for path in scripts_dir.glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        for token in forbidden:
+            assert token not in source, f"{token!r} remains in {path.name}"
+        if path.name != "db.py":
+            assert "etf_scrape_runs" not in source, (
+                f"legacy table reference remains in {path.name}"
+            )
+
+    db_source = (scripts_dir / "db.py").read_text(encoding="utf-8")
+    assert db_source.count("etf_scrape_runs") == 1
+    assert 'DROP TABLE IF EXISTS etf_scrape_runs' in db_source
 
 
 def test_preexisting_target_snapshot_does_not_require_scrape_run(tmp_path):
