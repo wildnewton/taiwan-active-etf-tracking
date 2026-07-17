@@ -155,6 +155,61 @@ def test_lower_priority_incoming_source_does_not_overwrite_higher_priority_exist
     assert rows_for() == [("2026-07-08", "00981A", "2330", "moneydj_primary")]
 
 
+def test_complete_lower_priority_snapshot_replaces_incomplete_higher_priority_snapshot():
+    db.init_db(":memory:")
+    db.insert_holdings([
+        holding(
+            stock_code="2330",
+            source_type="moneydj_primary",
+            weight_pct=50.0,
+        )
+    ])
+
+    result = db.replace_daily_snapshot(
+        [
+            holding(
+                stock_code="2330",
+                source_type="official_fallback",
+                weight_pct=100.0,
+            )
+        ],
+        [],
+    )
+
+    assert result == {"inserted": True, "source_type": "official_fallback"}
+    assert rows_for() == [
+        ("2026-07-08", "00981A", "2330", "official_fallback")
+    ]
+
+
+def test_complete_higher_priority_snapshot_still_beats_complete_lower_priority_snapshot():
+    db.init_db(":memory:")
+    db.insert_holdings([
+        holding(
+            stock_code="2330",
+            source_type="moneydj_primary",
+            weight_pct=100.0,
+        )
+    ])
+
+    result = db.replace_daily_snapshot(
+        [
+            holding(
+                stock_code="2330",
+                source_type="official_fallback",
+                weight_pct=100.0,
+            )
+        ],
+        [],
+    )
+
+    assert result["inserted"] is False
+    assert result["reason"] == "existing_higher_priority_source_preserved"
+    assert rows_for() == [
+        ("2026-07-08", "00981A", "2330", "moneydj_primary")
+    ]
+
+
 def test_non_stock_assets_are_replaced_atomically_with_stock_snapshot():
     db.init_db(":memory:")
     db.insert_holdings([holding(stock_code="2330", source_type="official_fallback")])
