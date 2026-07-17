@@ -24,7 +24,7 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Inspect Allianz page
         run: |
-          python - <<'PY'
+          python - <<'PY' | tee allianz-recon.txt
           import asyncio
           import json
           from playwright.async_api import async_playwright
@@ -77,4 +77,6 @@ jobs:
         if: always()
         with:
           name: allianz-recon
-          path: allianz-page.png
+          path: |
+            allianz-page.png
+            allianz-recon.txt
