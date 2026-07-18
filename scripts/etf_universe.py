@@ -74,10 +74,7 @@ def _is_eligible_on(
         return False
     if not row.get("retired"):
         return True
-    return (
-        latest_holdings_date is not None
-        and as_of_date <= latest_holdings_date
-    )
+    return latest_holdings_date is not None and as_of_date <= latest_holdings_date
 
 
 def _with_derived_fields(row: dict) -> dict:
@@ -264,9 +261,9 @@ def get_eligible_etf_codes(
         rows = conn.execute(
             f"SELECT {_ETF_SELECT_COLUMNS} FROM etf_universe ORDER BY code"
         ).fetchall()
-        latest_dates = _latest_holdings_dates(conn)
     finally:
         conn.row_factory = old
+    latest_dates = _latest_holdings_dates(conn)
     return [
         row["code"]
         for row in rows
@@ -297,7 +294,12 @@ def upsert_etf(row: dict) -> None:
     normalized = {
         key: value
         for key, value in row.items()
-        if key not in {"last_active_date", "last_seen_date", "retired_since", "pending_retirement_since"}
+        if key not in {
+            "last_active_date",
+            "last_seen_date",
+            "retired_since",
+            "pending_retirement_since",
+        }
     }
 
     if existing:
