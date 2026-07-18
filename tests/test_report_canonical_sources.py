@@ -40,6 +40,29 @@ def insert_holding(
                 f"{date}T00:00:00",
             ),
         )
+        stock_total = conn.execute(
+            """
+            SELECT COALESCE(SUM(weight_pct), 0.0)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = ? AND source_type = ?
+            """,
+            (date, etf_code, source_type),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, '現金', 'cash', ?, 'https://test', ?, 'test', ?)
+            """,
+            (
+                date,
+                etf_code,
+                100.0 - stock_total,
+                source_type,
+                f"{date}T00:00:00",
+            ),
+        )
 
 
 def insert_full_day(date, canonical_weight=90.0, duplicate_weight=1.0):
@@ -54,7 +77,7 @@ def test_report_summary_stats_ignore_noncanonical_holdings_rows():
 
     report = generate_signal_report("2026-06-26")
 
-    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 0" in report
+    assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19" in report
 
 
 def test_report_consensus_ignores_noncanonical_duplicate_source_rows():

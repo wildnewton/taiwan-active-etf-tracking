@@ -15,9 +15,9 @@ def _insert_etf_universe_entry():
             """
             INSERT INTO etf_universe
                 (code, name, issuer, market, retired,
-                 first_seen_date, last_active_date, created_at, updated_at)
+                 first_seen_date, created_at, updated_at)
             VALUES ('ACTIVE', 'Active ETF', 'ActiveAM', 'TWSE', 0,
-                    '2026-06-20', '2026-06-23', datetime('now'), datetime('now'))
+                    '2026-06-20', datetime('now'), datetime('now'))
             """
         )
 
@@ -42,23 +42,24 @@ def _insert_holding(date_value, stock_code, stock_name, shares, weight_pct):
                 weight_pct,
             ),
         )
-
-
-def _insert_scrape_success(date_value):
-    with db._connect() as conn:
-        conn.execute(
+        stock_total = conn.execute(
             """
-            INSERT OR REPLACE INTO etf_scrape_runs (
-                date, etf_code, status, primary_source, primary_success,
-                moneydj_browser_used, official_fallback_used, official_success,
-                rows_extracted, stock_rows_extracted, non_stock_rows_extracted,
-                total_weight_all_rows, total_weight_stock_rows, source_url,
-                error, started_at, finished_at
-            ) VALUES (?, 'ACTIVE', 'success', 'moneydj_primary', 1, 0, 0, 0,
-                10, 8, 2, 100.0, 95.0, 'https://example.test', NULL,
-                '2026-06-23T00:00:00', '2026-06-23T00:01:00')
+            SELECT COALESCE(SUM(weight_pct), 0.0)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = 'ACTIVE'
+              AND source_type = 'moneydj_primary'
             """,
             (date_value,),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, 'ACTIVE', 'Cash', 'cash', ?, 'https://example.test',
+                      'moneydj_primary', 'test', '2026-06-23T00:00:00')
+            """,
+            (date_value, 100.0 - stock_total),
         )
 
 
@@ -108,8 +109,6 @@ def test_detect_holding_changes_writes_classification_version_v1():
     _insert_etf_universe_entry()
     _insert_holding("2026-06-20", "2330", "TSMC", 100, 10.0)
     _insert_holding("2026-06-23", "2330", "TSMC", 110, 12.0)
-    _insert_scrape_success("2026-06-20")
-    _insert_scrape_success("2026-06-23")
 
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 

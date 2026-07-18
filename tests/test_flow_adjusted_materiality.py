@@ -34,6 +34,24 @@ def insert_holding(date, stock_code, stock_name, shares, weight_pct, etf_code="0
                 weight_pct,
             ),
         )
+        stock_total = conn.execute(
+            """
+            SELECT COALESCE(SUM(weight_pct), 0.0)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = ? AND source_type = 'moneydj_primary'
+            """,
+            (date, etf_code),
+        ).fetchone()[0]
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
+                      'moneydj_primary', 'test', '2026-06-25T00:00:00')
+            """,
+            (date, etf_code, 100.0 - stock_total),
+        )
 
 
 def seed_day(date, base_shares, tsmc_shares=None, tsmc_weight=10.0):

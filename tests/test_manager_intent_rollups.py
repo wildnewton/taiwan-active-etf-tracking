@@ -13,6 +13,7 @@ ETF_ROWS = {
     "00982A": {"issuer": "統一", "retired": 0},
     "00984A": {"issuer": "台新", "retired": 0},
     "00985A": {"issuer": "群益", "retired": 0},
+    "00998A": {"issuer": "歷史投信", "retired": 1},
     "00999A": {"issuer": "退休投信", "retired": 1},
 }
 ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
@@ -35,8 +36,8 @@ def seed_universe():
                 """
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
-                    first_seen_date, last_active_date, created_at, updated_at
-                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', '2026-06-26', ?, ?)
+                    first_seen_date, created_at, updated_at
+                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', ?, ?)
                 """,
                 (
                     etf_code,
@@ -60,6 +61,21 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", we
             ) VALUES (?, ?, ?, 'stock', ?, ?, 1000, ?, 'https://test', 'moneydj_primary', 'test', ?)
             """,
             (date, etf_code, f"{stock_name}({stock_code}.TW)", stock_code, stock_name, weight_pct, f"{date}T00:00:00"),
+        )
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO etf_daily_non_stock_assets (
+                date, etf_code, asset_name, asset_type, weight_pct,
+                source_url, source_type, extraction_method, scraped_at
+            ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://test',
+                      'moneydj_primary', 'test', ?)
+            """,
+            (
+                date,
+                etf_code,
+                100.0 - weight_pct,
+                f"{date}T00:00:00",
+            ),
         )
 
 
@@ -302,9 +318,25 @@ def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
     assert rows[2]
 
 
-def test_retired_etf_events_are_excluded_before_scoring():
+def test_retired_etf_events_are_included_through_latest_holdings_date():
     setup_db()
-    insert_eligible_history(etfs=("00980A", "00999A"))
+    insert_eligible_history(etfs=("00998A",))
+    insert_change("2026-06-26", "00998A", is_active_reduce=1)
+
+    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    stock_row = get_rollup()
+
+    assert stock_row["cum_active_sell_score"] == 2.0
+    assert stock_row["sell_etf_count"] == 1
+
+
+def test_retired_etf_events_after_latest_holdings_date_are_excluded_before_scoring():
+    setup_db()
+    insert_eligible_history(etfs=("00980A",))
+    insert_eligible_history(
+        etfs=("00999A",),
+        dates=["2026-06-20", "2026-06-21"],
+    )
     insert_change("2026-06-26", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00999A", is_active_reduce=1)
 

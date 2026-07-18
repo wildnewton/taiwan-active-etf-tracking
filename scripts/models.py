@@ -43,25 +43,3 @@ class ScrapeResult:
     source_type: str
     total_weight_all_rows: float
     total_weight_stock_rows: float
-
-
-@dataclass
-class ScrapeRun:
-    date: date
-    data_date: Optional[date]
-    etf_code: str
-    status: str
-    primary_source: str
-    primary_success: bool
-    moneydj_browser_used: bool
-    official_fallback_used: bool
-    official_success: bool
-    rows_extracted: int
-    stock_rows_extracted: int
-    non_stock_rows_extracted: int
-    total_weight_all_rows: float
-    total_weight_stock_rows: float
-    source_url: Optional[str]
-    error: Optional[str]
-    started_at: datetime
-    finished_at: Optional[datetime]

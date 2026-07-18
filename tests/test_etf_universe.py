@@ -1,5 +1,6 @@
 import importlib
 import sqlite3
+from datetime import datetime
 from unittest.mock import patch
 
 import pytest
@@ -38,13 +39,29 @@ def _discovered_without(*missing_codes):
     ]
 
 
+def _insert_usable_holdings_date(data_date, etf_code="00981A"):
+    now = datetime.now().isoformat()
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO etf_daily_holdings (
+                date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                shares, weight_pct, source_url, source_type,
+                extraction_method, scraped_at
+            ) VALUES (?, ?, '台積電', 'stock', '2330', '台積電', 1, 1,
+                      'https://example.test', 'test', 'test', ?)
+            """,
+            (data_date, etf_code, now),
+        )
+
+
 def test_config_no_longer_exports_tracked_etfs():
     config = importlib.import_module("config")
 
     assert not hasattr(config, "TRACKED_ETFS")
 
 
-def test_init_db_creates_etf_universe_table():
+def test_init_db_creates_etf_universe_without_obsolete_lifecycle_columns():
     db.init_db(":memory:")
 
     with db._connect() as conn:
@@ -62,8 +79,6 @@ def test_init_db_creates_etf_universe_table():
         "listing_date",
         "retired",
         "first_seen_date",
-        "last_active_date",
-        "pending_retirement_since",
         "official_url",
         "official_method",
         "official_logic",
@@ -74,7 +89,7 @@ def test_init_db_creates_etf_universe_table():
     assert "retired_since" not in columns
 
 
-def test_init_db_migrates_legacy_seen_and_retired_dates_to_last_active_date(tmp_path):
+def test_init_db_rebuilds_older_universe_without_lifecycle_columns(tmp_path):
     db_path = tmp_path / "legacy.sqlite"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -113,15 +128,64 @@ def test_init_db_migrates_legacy_seen_and_retired_dates_to_last_active_date(tmp_
 
     with db._connect() as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
-        rows = {
-            row[0]: row[1]
-            for row in conn.execute("SELECT code, last_active_date FROM etf_universe")
-        }
+        rows = conn.execute(
+            "SELECT code, name, retired FROM etf_universe ORDER BY code"
+        ).fetchall()
 
-    assert "last_active_date" in columns
+    assert "last_active_date" not in columns
+    assert "pending_retirement_since" not in columns
     assert "last_seen_date" not in columns
     assert "retired_since" not in columns
-    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-04"}
+    assert rows == [
+        ("ACTIVE", "Active ETF", 0),
+        ("RETIRED", "Retired ETF", 1),
+    ]
+
+
+def test_init_db_does_not_rebuild_deployed_current_schema_just_to_drop_columns(tmp_path):
+    db_path = tmp_path / "deployed.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE etf_universe (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                issuer TEXT,
+                market TEXT,
+                isin TEXT,
+                listing_date TEXT,
+                retired INTEGER NOT NULL DEFAULT 0,
+                first_seen_date TEXT,
+                last_active_date TEXT,
+                pending_retirement_since TEXT,
+                official_url TEXT,
+                official_method TEXT,
+                official_logic TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO etf_universe (
+                code, name, retired, last_active_date,
+                pending_retirement_since, created_at, updated_at
+            ) VALUES ('ACTIVE', 'Active ETF', 0, '2026-07-03', '2026-07-04', 'c', 'u')
+            """
+        )
+
+    db.init_db(str(db_path))
+
+    with db._connect() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
+        row = conn.execute(
+            "SELECT code, last_active_date, pending_retirement_since FROM etf_universe"
+        ).fetchone()
+
+    assert "last_active_date" in columns
+    assert "pending_retirement_since" in columns
+    assert row == ("ACTIVE", "2026-07-03", "2026-07-04")
 
 
 def test_seed_etf_universe_from_seed_file_populates_known_etfs():
@@ -141,7 +205,7 @@ def test_seed_is_idempotent_and_preserves_existing_db_metadata():
     db.init_db(":memory:")
     from etf_universe import get_etf_config, seed_etf_universe_from_file, upsert_etf
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     upsert_etf({"code": "00980A", "name": "手動名稱", "issuer": "ManualIssuer"})
     inserted_again = seed_etf_universe_from_file()
     config = get_etf_config("00980A")
@@ -156,7 +220,7 @@ def test_get_active_etfs_excludes_retired_rows():
     from etf_universe import get_active_etfs, retire_etf, seed_etf_universe_from_file
 
     seed_etf_universe_from_file()
-    retire_etf("00980A", last_active_date="2026-07-01", reason="not listed")
+    retire_etf("00980A", reason="not listed")
 
     active_codes = {row["code"] for row in get_active_etfs()}
 
@@ -169,59 +233,63 @@ def test_get_etf_config_can_return_retired_for_historical_lookup():
     from etf_universe import get_etf_config, retire_etf, seed_etf_universe_from_file
 
     seed_etf_universe_from_file()
-    retire_etf("00980A", last_active_date="2026-07-01", reason="not listed")
+    retire_etf("00980A", reason="not listed")
 
     assert get_etf_config("00980A")["code"] == "00980A"
     with pytest.raises(KeyError):
         get_etf_config("NOPE")
 
 
-def test_reconcile_discovery_inserts_new_and_marks_missing_pending_first():
+def test_reconcile_discovery_inserts_new_without_persisting_missing_state():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     discovered = _discovered_without("00980A")
     discovered.append({"code": "01000A", "name": "主動測試新ETF", "market": "TWSE", "isin": "TW00001000A"})
 
     summary = reconcile_discovered_universe(discovered, seen_date="2026-07-01")
     active_codes = {row["code"] for row in get_active_etfs()}
     new_config = get_etf_config("01000A")
-    pending_config = get_etf_config("00980A")
+    missing_config = get_etf_config("00980A")
 
     assert summary["inserted"] == ["01000A"]
-    assert summary["retired"] == []
-    assert summary["pending_retirement"] == ["00980A"]
+    assert summary["retirement_candidates"] == []
     assert "01000A" in active_codes
     assert "00980A" in active_codes
     assert new_config["official_method"] is None
-    assert pending_config["retired"] == 0
-    assert pending_config["pending_retirement_since"] == "2026-07-01"
+    assert missing_config["retired"] == 0
 
 
-def test_complete_second_consecutive_absence_retires_pending_etf():
+def test_complete_discovery_reports_candidate_but_never_retires_it():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
-    reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
-    summary = reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-02")
+    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_usable_holdings_date("2026-06-29")
+    _insert_usable_holdings_date("2026-06-30")
+
+    summary = reconcile_discovered_universe(
+        _discovered_without("00980A"),
+        seen_date="2026-07-01",
+    )
 
     active_codes = {row["code"] for row in get_active_etfs()}
-    retired_config = get_etf_config("00980A")
+    config = get_etf_config("00980A")
 
-    assert summary["retired"] == ["00980A"]
-    assert "00980A" not in active_codes
-    assert retired_config["retired"] == 1
-    assert retired_config["last_active_date"] == "2026-07-02"
-    assert retired_config["pending_retirement_since"] is None
+    assert summary["retirement_candidates"] == ["00980A"]
+    assert "00980A" in active_codes
+    assert config["retired"] == 0
 
 
-def test_incomplete_discovery_does_not_mark_or_retire_missing_etfs():
+def test_incomplete_discovery_does_not_report_or_retire_missing_etfs():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
+    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_usable_holdings_date("2026-06-29")
+    _insert_usable_holdings_date("2026-06-30")
+
     summary = reconcile_discovered_universe(
         _discovered_without("00980A"),
         seen_date="2026-07-01",
@@ -231,45 +299,42 @@ def test_incomplete_discovery_does_not_mark_or_retire_missing_etfs():
     active_codes = {row["code"] for row in get_active_etfs()}
     config = get_etf_config("00980A")
 
-    assert summary["retired"] == []
-    assert summary["pending_retirement"] == []
-    assert summary["retirement_skipped"] == ["00980A"]
+    assert summary["retirement_candidates"] == []
     assert "00980A" in active_codes
-    assert config["pending_retirement_since"] is None
     assert config["retired"] == 0
 
 
-def test_reappearance_clears_pending_retirement():
+def test_reappearance_needs_no_pending_state_cleanup():
     db.init_db(":memory:")
     from etf_universe import get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
 
-    seed_etf_universe_from_file()
-    reconcile_discovered_universe(_discovered_without("00980A"), seen_date="2026-07-01")
+    seed_etf_universe_from_file(seen_date="2026-06-30")
     summary = reconcile_discovered_universe(_discovered_without(), seen_date="2026-07-02")
 
     config = get_etf_config("00980A")
 
     assert summary["updated"] == sorted(EXPECTED_CODES)
+    assert summary["retirement_candidates"] == []
     assert config["retired"] == 0
-    assert config["pending_retirement_since"] is None
 
 
-def test_reconcile_discovery_reactivates_retired_etf_and_clears_pending_state():
+def test_reconcile_discovery_does_not_change_manual_retired_state():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, seed_etf_universe_from_file
 
     seed_etf_universe_from_file()
-    retire_etf("00980A", last_active_date="2026-07-01", reason="not listed")
-    discovered = _discovered_without()
+    retire_etf("00980A", reason="not listed")
 
-    summary = reconcile_discovered_universe(discovered, seen_date="2026-07-02")
+    summary = reconcile_discovered_universe(
+        _discovered_without(),
+        seen_date="2026-07-02",
+    )
     active_codes = {row["code"] for row in get_active_etfs()}
     config = get_etf_config("00980A")
 
-    assert summary["reactivated"] == ["00980A"]
-    assert "00980A" in active_codes
-    assert config["last_active_date"] == "2026-07-02"
-    assert config["pending_retirement_since"] is None
+    assert summary["reactivated"] == []
+    assert config["retired"] == 1
+    assert "00980A" not in active_codes
 
 
 def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
@@ -279,7 +344,7 @@ def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
     from pipeline import run_daily_scrape
 
     seed_etf_universe_from_file()
-    retire_etf("00980A", last_active_date="2026-07-01", reason="not listed")
+    retire_etf("00980A", reason="not listed")
     seen_codes = []
 
     def fake_scrape(code, target_date=None):

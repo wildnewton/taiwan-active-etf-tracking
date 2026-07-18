@@ -32,10 +32,6 @@ _CHANGE_COLUMN_MIGRATIONS = {
     "flow_adjusted_direction": "TEXT DEFAULT 'none'",
 }
 
-_SCRAPE_RUN_COLUMN_MIGRATIONS = {
-    "data_date": "TEXT",
-}
-
 _ETF_UNIVERSE_COLUMN_MIGRATIONS = {
     "name": "TEXT",
     "issuer": "TEXT",
@@ -44,8 +40,6 @@ _ETF_UNIVERSE_COLUMN_MIGRATIONS = {
     "listing_date": "TEXT",
     "retired": "INTEGER NOT NULL DEFAULT 0",
     "first_seen_date": "TEXT",
-    "last_active_date": "TEXT",
-    "pending_retirement_since": "TEXT",
     "official_url": "TEXT",
     "official_method": "TEXT",
     "official_logic": "TEXT",
@@ -62,8 +56,6 @@ _ETF_UNIVERSE_COLUMNS_SQL = """
     listing_date TEXT,
     retired INTEGER NOT NULL DEFAULT 0,
     first_seen_date TEXT,
-    last_active_date TEXT,
-    pending_retirement_since TEXT,
     official_url TEXT,
     official_method TEXT,
     official_logic TEXT,
@@ -112,8 +104,9 @@ def init_db(db_path):
         _ensure_etf_universe_columns(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_holdings (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, shares REAL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code, source_type))")
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_non_stock_assets (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, asset_name, source_type))")
-        conn.execute("CREATE TABLE IF NOT EXISTS etf_scrape_runs (date TEXT NOT NULL, data_date TEXT, etf_code TEXT NOT NULL, status TEXT NOT NULL, primary_source TEXT NOT NULL, primary_success INTEGER NOT NULL, moneydj_browser_used INTEGER NOT NULL, official_fallback_used INTEGER NOT NULL, official_success INTEGER NOT NULL, rows_extracted INTEGER NOT NULL, stock_rows_extracted INTEGER NOT NULL, non_stock_rows_extracted INTEGER NOT NULL, total_weight_all_rows REAL NOT NULL, total_weight_stock_rows REAL NOT NULL, source_url TEXT, error TEXT, started_at TEXT NOT NULL, finished_at TEXT, PRIMARY KEY (date, etf_code))")
-        _ensure_scrape_run_columns(conn)
+        # Scrape attempts are operational logs, not canonical business data.
+        # Remove the legacy hybrid state table during normal DB initialization.
+        conn.execute("DROP TABLE IF EXISTS etf_scrape_runs")
         conn.execute("CREATE TABLE IF NOT EXISTS etf_holding_changes (date TEXT NOT NULL, etf_code TEXT NOT NULL, issuer TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, prev_date TEXT, prev_weight_pct REAL, weight_pct REAL, weight_delta_1d REAL, weight_delta_pct_1d REAL, prev_shares REAL, shares REAL, shares_delta_1d REAL, shares_delta_pct_1d REAL, etf_scale_factor REAL, expected_shares REAL, active_shares_delta_1d REAL, active_shares_delta_pct_1d REAL, prev_rank INTEGER, rank INTEGER, rank_delta_1d INTEGER, is_new_position INTEGER DEFAULT 0, is_removed_position INTEGER DEFAULT 0, weight_delta_3d REAL, weight_delta_5d REAL, weight_delta_10d REAL, shares_delta_3d REAL, shares_delta_5d REAL, shares_delta_10d REAL, consecutive_add_days INTEGER DEFAULT 0, consecutive_reduce_days INTEGER DEFAULT 0, consecutive_active_add_days INTEGER DEFAULT 0, consecutive_active_reduce_days INTEGER DEFAULT 0, position_change_type TEXT DEFAULT 'unchanged', active_direction TEXT DEFAULT 'none', active_delta_source TEXT DEFAULT 'shares', is_active_add INTEGER DEFAULT 0, is_active_reduce INTEGER DEFAULT 0, is_passive_weight_change INTEGER DEFAULT 0, is_mixed_weight_share_signal INTEGER DEFAULT 0, is_flow_scaled_change INTEGER DEFAULT 0, flow_adjusted_direction TEXT DEFAULT 'none', confidence TEXT DEFAULT 'normal', classification_version TEXT NOT NULL DEFAULT 'v1', source_type TEXT, created_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code))")
         _ensure_change_columns(conn)
         _ensure_change_diagnostics_table(conn)
@@ -150,19 +143,6 @@ def _legacy_expr(existing, column_name, fallback="NULL"):
     return column_name if column_name in existing else fallback
 
 
-def _legacy_last_active_expr(existing):
-    last_active = _legacy_expr(existing, "last_active_date")
-    last_seen = _legacy_expr(existing, "last_seen_date")
-    retired_since = _legacy_expr(existing, "retired_since")
-    retired = _legacy_expr(existing, "retired", "0")
-    first_seen = _legacy_expr(existing, "first_seen_date")
-    return (
-        f"COALESCE({last_active}, "
-        f"CASE WHEN {retired} = 1 THEN {retired_since} ELSE {last_seen} END, "
-        f"{last_seen}, {retired_since}, {first_seen})"
-    )
-
-
 def _rebuild_legacy_etf_universe(conn, existing):
     legacy_table = "etf_universe_legacy_migration"
     conn.execute(f"DROP TABLE IF EXISTS {legacy_table}")
@@ -172,8 +152,7 @@ def _rebuild_legacy_etf_universe(conn, existing):
         f"""
         INSERT INTO etf_universe (
             code, name, issuer, market, isin, listing_date, retired,
-            first_seen_date, last_active_date, pending_retirement_since,
-            official_url, official_method, official_logic,
+            first_seen_date, official_url, official_method, official_logic,
             created_at, updated_at
         )
         SELECT
@@ -185,8 +164,6 @@ def _rebuild_legacy_etf_universe(conn, existing):
             {_legacy_expr(existing, 'listing_date')},
             COALESCE({_legacy_expr(existing, 'retired')}, 0),
             {_legacy_expr(existing, 'first_seen_date')},
-            {_legacy_last_active_expr(existing)},
-            {_legacy_expr(existing, 'pending_retirement_since')},
             {_legacy_expr(existing, 'official_url')},
             {_legacy_expr(existing, 'official_method')},
             {_legacy_expr(existing, 'official_logic')},
@@ -203,13 +180,6 @@ def _ensure_change_columns(conn):
     for column_name, column_type in _CHANGE_COLUMN_MIGRATIONS.items():
         if column_name not in existing:
             conn.execute(f"ALTER TABLE etf_holding_changes ADD COLUMN {column_name} {column_type}")
-
-
-def _ensure_scrape_run_columns(conn):
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(etf_scrape_runs)").fetchall()}
-    for column_name, column_type in _SCRAPE_RUN_COLUMN_MIGRATIONS.items():
-        if column_name not in existing:
-            conn.execute(f"ALTER TABLE etf_scrape_runs ADD COLUMN {column_name} {column_type}")
 
 
 def _ensure_change_diagnostics_table(conn):
@@ -294,10 +264,18 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
     with _connect() as conn:
         existing_entries = _existing_snapshot_entries(conn, *snapshot_key)
         existing_best = _best_snapshot_entry(existing_entries)
-        if existing_best and existing_best["source_type"] != source_type:
-            incoming_key = _snapshot_sort_key(incoming)
-            existing_key = _snapshot_sort_key(existing_best)
-            if incoming_key < existing_key:
+        if existing_best:
+            same_source = existing_best["source_type"] == source_type
+            existing_complete = _snapshot_is_complete(existing_best)
+            incoming_complete = _snapshot_is_complete(incoming)
+            if same_source and existing_complete and not incoming_complete:
+                return {
+                    "inserted": False,
+                    "reason": "existing_complete_snapshot_preserved",
+                    "preserved_source_type": existing_best["source_type"],
+                    "incoming_source_type": source_type,
+                }
+            if not same_source and _snapshot_sort_key(incoming) < _snapshot_sort_key(existing_best):
                 _delete_snapshot_sources_except(conn, *snapshot_key, existing_best["source_type"])
                 return {
                     "inserted": False,
@@ -312,43 +290,166 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
         return {"inserted": True, "source_type": source_type}
 
 
+_SNAPSHOT_WEIGHT_TOLERANCE = 1.0
+
+
+def _snapshot_metrics_by_source(conn, date_value, etf_code):
+    return conn.execute(
+        """
+        SELECT source_type,
+               SUM(stock_count) AS stock_count,
+               SUM(row_count) AS row_count,
+               SUM(total_weight) AS total_weight
+        FROM (
+            SELECT source_type,
+                   COUNT(*) AS stock_count,
+                   COUNT(*) AS row_count,
+                   COALESCE(SUM(weight_pct), 0.0) AS total_weight
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = ?
+            GROUP BY source_type
+            UNION ALL
+            SELECT source_type,
+                   0 AS stock_count,
+                   COUNT(*) AS row_count,
+                   COALESCE(SUM(weight_pct), 0.0) AS total_weight
+            FROM etf_daily_non_stock_assets
+            WHERE date = ? AND etf_code = ?
+            GROUP BY source_type
+        )
+        GROUP BY source_type
+        """,
+        (date_value, etf_code, date_value, etf_code),
+    ).fetchall()
+
+
 def _snapshot_exists(conn, date_value, etf_code):
-    holding = conn.execute(
-        "SELECT 1 FROM etf_daily_holdings WHERE date = ? AND etf_code = ? LIMIT 1",
-        (date_value, etf_code),
-    ).fetchone()
-    if holding:
-        return True
-    non_stock = conn.execute(
-        "SELECT 1 FROM etf_daily_non_stock_assets WHERE date = ? AND etf_code = ? LIMIT 1",
-        (date_value, etf_code),
-    ).fetchone()
-    return non_stock is not None
+    for _source_type, stock_count, row_count, total_weight in _snapshot_metrics_by_source(
+        conn, date_value, etf_code
+    ):
+        weight_is_complete = (
+            abs((total_weight or 0.0) - 100.0) < _SNAPSHOT_WEIGHT_TOLERANCE
+        )
+        if stock_count > 0 and row_count > 0 and weight_is_complete:
+            return True
+    return False
+
+
+def get_canonical_snapshot_entry(data_date, etf_code):
+    """Return the highest-ranked complete snapshot entry for one ETF/date."""
+    data_date = _serialize(data_date)
+    with _connect() as conn:
+        entry = _best_snapshot_entry(
+            _existing_snapshot_entries(conn, data_date, etf_code)
+        )
+        if not entry or not _snapshot_is_complete(entry):
+            return None
+        stock_codes = {
+            row[0]
+            for row in conn.execute(
+                """
+                SELECT stock_code
+                FROM etf_daily_holdings
+                WHERE date = ? AND etf_code = ? AND source_type = ?
+                """,
+                (data_date, etf_code, entry["source_type"]),
+            ).fetchall()
+        }
+        return {**entry, "stock_codes": stock_codes}
+
+
+def get_canonical_snapshot_source(data_date, etf_code):
+    """Return the canonical complete source type for one ETF/date."""
+    entry = get_canonical_snapshot_entry(data_date, etf_code)
+    return entry["source_type"] if entry else None
 
 
 def snapshot_exists(date_value, etf_code):
-    """Return whether any snapshot rows exist for one ETF/data date."""
+    """Return whether one complete snapshot exists for an ETF/data date."""
     date_value = _serialize(date_value)
     with _connect() as conn:
         return _snapshot_exists(conn, date_value, etf_code)
 
 
-def successful_snapshot_exists(date_value, etf_code):
-    """Return whether an exact snapshot has a canonical successful scrape record."""
-    date_value = _serialize(date_value)
+def get_snapshot_etf_codes(data_date):
+    """Return ETFs with a complete persisted snapshot on ``data_date``."""
+    data_date = _serialize(data_date)
     with _connect() as conn:
-        successful_run = conn.execute(
+        rows = conn.execute(
             """
-            SELECT 1
-            FROM etf_scrape_runs
-            WHERE etf_code = ?
-              AND status = 'success'
-              AND data_date = ?
-            LIMIT 1
+            SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+            UNION
+            SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+            ORDER BY etf_code
             """,
-            (etf_code, date_value),
-        ).fetchone()
-        return bool(successful_run and _snapshot_exists(conn, date_value, etf_code))
+            (data_date, data_date),
+        ).fetchall()
+        return [
+            row[0]
+            for row in rows
+            if _snapshot_exists(conn, data_date, row[0])
+        ]
+
+
+def get_latest_snapshot_date(etf_code, before_date=None, eligible_only=False):
+    """Return the latest complete snapshot date, optionally historically eligible."""
+    if before_date is not None:
+        before_date = _serialize(before_date)
+        params = [etf_code, before_date, etf_code, before_date]
+    else:
+        params = [etf_code, etf_code]
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT date
+            FROM (
+                SELECT date FROM etf_daily_holdings
+                WHERE etf_code = ? {"AND date < ?" if before_date is not None else ""}
+                UNION
+                SELECT date FROM etf_daily_non_stock_assets
+                WHERE etf_code = ? {"AND date < ?" if before_date is not None else ""}
+            )
+            ORDER BY date DESC
+            """,
+            params,
+        ).fetchall()
+        for row in rows:
+            if eligible_only:
+                from etf_universe import get_eligible_etf_codes
+
+                if etf_code not in get_eligible_etf_codes(row[0]):
+                    continue
+            if _snapshot_exists(conn, row[0], etf_code):
+                return row[0]
+    return None
+
+
+def get_target_snapshot_coverage(data_date):
+    """Return persisted holdings coverage for one candidate data date."""
+    from etf_universe import get_eligible_etf_codes
+
+    data_date = _serialize(data_date)
+    expected = set(get_eligible_etf_codes(data_date))
+    persisted = set(get_snapshot_etf_codes(data_date))
+    actual = persisted & expected
+    missing = sorted(expected - actual)
+    latest_available = {
+        etf_code: get_latest_snapshot_date(
+            etf_code,
+            before_date=data_date,
+            eligible_only=True,
+        )
+        for etf_code in missing
+    }
+    return {
+        "date": data_date,
+        "expected_etf_codes": sorted(expected),
+        "actual_etf_codes": sorted(actual),
+        "missing_etfs": missing,
+        "latest_available_dates": latest_available,
+        "expected_count": len(expected),
+        "actual_count": len(actual),
+    }
 
 
 def _snapshot_key(rows):
@@ -368,7 +469,10 @@ def _snapshot_source_type(rows):
 def _snapshot_entry(source_type, stock_rows, non_stock_rows):
     stock_count = len(stock_rows)
     shares_count = sum(1 for row in stock_rows if row.get("shares") is not None)
-    total_weight = sum((row.get("weight_pct") or 0.0) for row in stock_rows)
+    total_weight = sum(
+        (row.get("weight_pct") or 0.0)
+        for row in stock_rows + non_stock_rows
+    )
     return {
         "source_type": source_type,
         "stock_count": stock_count,
@@ -400,9 +504,10 @@ def _existing_snapshot_entries(conn, date_value, etf_code):
             "total_weight": total_weight or 0.0,
         }
 
-    for source_type, non_stock_count in conn.execute(
+    for source_type, non_stock_count, non_stock_weight in conn.execute(
         """
-        SELECT source_type, COUNT(*) AS non_stock_count
+        SELECT source_type, COUNT(*) AS non_stock_count,
+               COALESCE(SUM(weight_pct), 0.0) AS non_stock_weight
         FROM etf_daily_non_stock_assets
         WHERE date = ? AND etf_code = ?
         GROUP BY source_type
@@ -420,6 +525,7 @@ def _existing_snapshot_entries(conn, date_value, etf_code):
             },
         )
         entry["non_stock_count"] = non_stock_count or 0
+        entry["total_weight"] += non_stock_weight or 0.0
     return list(grouped.values())
 
 
@@ -429,14 +535,22 @@ def _best_snapshot_entry(entries):
     return max(entries, key=_snapshot_sort_key)
 
 
-def _snapshot_sort_key(entry):
+def _snapshot_is_complete(entry):
     total_weight = entry.get("total_weight") or 0.0
-    weight_ok = 80.0 <= total_weight <= 105.0
+    stock_count = entry.get("stock_count") or 0
     return (
+        stock_count > 0
+        and abs(total_weight - 100.0) < _SNAPSHOT_WEIGHT_TOLERANCE
+    )
+
+
+def _snapshot_sort_key(entry):
+    stock_count = entry.get("stock_count") or 0
+    return (
+        1 if _snapshot_is_complete(entry) else 0,
         source_priority(entry.get("source_type")),
-        entry.get("stock_count") or 0,
+        stock_count,
         entry.get("shares_coverage") or 0.0,
-        1 if weight_ok else 0,
         entry.get("non_stock_count") or 0,
         entry.get("source_type") or "",
     )
@@ -466,22 +580,3 @@ def _insert_holdings(conn, rows):
 def _insert_non_stock_assets(conn, rows):
     if rows:
         conn.executemany("INSERT OR REPLACE INTO etf_daily_non_stock_assets (date, etf_code, asset_name, asset_type, weight_pct, source_url, source_type, extraction_method, scraped_at) VALUES (:date, :etf_code, :asset_name, :asset_type, :weight_pct, :source_url, :source_type, :extraction_method, :scraped_at)", rows)
-
-
-def insert_scrape_run(run):
-    row = _row_dict(run)
-    with _connect() as conn:
-        if row["status"] != "success":
-            existing = conn.execute(
-                "SELECT status FROM etf_scrape_runs WHERE date = ? AND etf_code = ?",
-                (row["date"], row["etf_code"]),
-            ).fetchone()
-            if existing and existing[0] == "success":
-                return
-        conn.execute("INSERT OR REPLACE INTO etf_scrape_runs (date, data_date, etf_code, status, primary_source, primary_success, moneydj_browser_used, official_fallback_used, official_success, rows_extracted, stock_rows_extracted, non_stock_rows_extracted, total_weight_all_rows, total_weight_stock_rows, source_url, error, started_at, finished_at) VALUES (:date, :data_date, :etf_code, :status, :primary_source, :primary_success, :moneydj_browser_used, :official_fallback_used, :official_success, :rows_extracted, :stock_rows_extracted, :non_stock_rows_extracted, :total_weight_all_rows, :total_weight_stock_rows, :source_url, :error, :started_at, :finished_at)", row)
-
-
-def get_last_scrape_date(etf_code):
-    with _connect() as conn:
-        row = conn.execute("SELECT MAX(date) FROM etf_scrape_runs WHERE etf_code = ? AND status = 'success'", (etf_code,)).fetchone()
-    return row[0] if row and row[0] else None
