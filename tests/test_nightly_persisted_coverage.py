@@ -115,4 +115,5 @@ def test_nightly_completeness_uses_persisted_coverage_not_scrape_telemetry(
     coverage_query.assert_called_once_with(TARGET_DATE)
     output = capsys.readouterr().out
     assert "⚠️ 資料不完整: 預期 5 檔 ETF，實際可用 4 檔" in output
+    assert "實際可用 5 檔" not in output
     assert f"缺少目標日持倉: {MISSING_ETF}" in output
