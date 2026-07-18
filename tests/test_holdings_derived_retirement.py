@@ -19,6 +19,7 @@ def _seed_etf(
     *,
     retired: int = 0,
     listing_date: str = "2026-07-01",
+    official_logic: str | None = None,
 ) -> None:
     upsert_etf(
         {
@@ -27,6 +28,7 @@ def _seed_etf(
             "issuer": f"Issuer-{code}",
             "listing_date": listing_date,
             "retired": retired,
+            "official_logic": official_logic,
         }
     )
 
@@ -156,6 +158,23 @@ def test_recently_listed_etf_is_not_a_retirement_candidate():
     )
 
     assert "NEW" not in summary["retirement_candidates"]
+
+
+def test_scope_excluded_etf_is_not_a_retirement_candidate():
+    db.init_db(":memory:")
+    _seed_etf(
+        "EXCLUDED",
+        official_logic="excluded_from_taiwan_stock_universe",
+    )
+    _seed_two_usable_dates()
+
+    summary = reconcile_discovered_universe(
+        _discovered("REFERENCE"),
+        seen_date=DISCOVERY_DATE,
+        discovery_complete=True,
+    )
+
+    assert "EXCLUDED" not in summary["retirement_candidates"]
 
 
 def test_incomplete_discovery_produces_no_candidate_or_retirement_change():
