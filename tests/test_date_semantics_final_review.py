@@ -19,22 +19,19 @@ def _seed_etf(
     *,
     listing_date: str = "2026-07-01",
     retired: int = 0,
-    last_active_date: str | None = None,
 ) -> None:
     with db._connect() as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO etf_universe (
-                code, name, listing_date, retired, last_active_date,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                code, name, listing_date, retired, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 code,
                 code,
                 listing_date,
                 retired,
-                last_active_date,
                 "2026-07-01T00:00:00",
                 "2026-07-01T00:00:00",
             ),
@@ -89,7 +86,8 @@ def test_retry_excludes_prelisting_and_historically_retired_etfs():
     db.init_db(":memory:")
     _seed_etf("ACTIVE")
     _seed_etf("FUTURE", listing_date="2026-07-20")
-    _seed_etf("RETIRED", retired=1, last_active_date="2026-07-14")
+    _seed_etf("RETIRED", retired=1)
+    _seed_holding(PARTIAL_DATE, "RETIRED")
 
     assert get_retry_candidates(CURRENT_DATE) == [
         {"etf_code": "ACTIVE", "data_date": None}
