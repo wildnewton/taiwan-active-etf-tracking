@@ -185,13 +185,20 @@ def _non_trading_day_downstream_outcome(scrape_summary, target_coverage):
         return None
 
     attempted_codes = set(scrape_summary.get("attempted_etf_codes") or [])
+    missing_codes = set(target_coverage["missing_etfs"])
     if not attempted_codes:
-        return "target_snapshot_already_complete"
+        if not missing_codes:
+            return "target_snapshot_already_complete"
+        missing = ",".join(sorted(missing_codes))
+        raise RuntimeError(
+            "non-trading-day recovery had no eligible attempts: "
+            f"missing={missing}"
+        )
 
     persisted_codes = set(target_coverage["actual_etf_codes"])
     recovered_codes = sorted(attempted_codes & persisted_codes)
     if not recovered_codes:
-        missing = ",".join(target_coverage["missing_etfs"]) or "none"
+        missing = ",".join(sorted(missing_codes)) or "none"
         attempted = ",".join(sorted(attempted_codes)) or "none"
         raise RuntimeError(
             "non-trading-day recovery produced no complete target snapshots: "
