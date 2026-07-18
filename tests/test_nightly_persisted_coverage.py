@@ -58,7 +58,7 @@ def _run_nightly(tmp_path, scrape_summary):
         nightly_pipeline.db,
         "get_target_snapshot_coverage",
         return_value=coverage,
-    ), patch.object(
+    ) as coverage_query, patch.object(
         nightly_pipeline,
         "get_latest_valid_date",
         return_value=TARGET_DATE,
@@ -94,6 +94,7 @@ def _run_nightly(tmp_path, scrape_summary):
             str(tmp_path / "reports"),
             skip_discovery=True,
         )
+    return coverage_query
 
 
 @pytest.mark.parametrize(
@@ -109,8 +110,9 @@ def test_nightly_completeness_uses_persisted_coverage_not_scrape_telemetry(
     capsys,
     data_freshness,
 ):
-    _run_nightly(tmp_path, _scrape_summary(data_freshness))
+    coverage_query = _run_nightly(tmp_path, _scrape_summary(data_freshness))
 
+    coverage_query.assert_called_once_with(TARGET_DATE)
     output = capsys.readouterr().out
     assert "⚠️ 資料不完整: 預期 5 檔 ETF，實際可用 4 檔" in output
     assert f"缺少目標日持倉: {MISSING_ETF}" in output
