@@ -92,7 +92,8 @@ def test_trading_day_before_cutoff_is_not_skipped_and_sync_scraper_gets_previous
     current_run_at.assert_called_once_with()
     scrape_holdings.assert_called_once_with(ETF_CODE, PREVIOUS_TRADING_DATE)
     assert summary["is_trading_day"] is True
-    assert summary["skip_reason"] is None
+    assert "skip_reason" not in summary
+    assert "skipped_non_trading_day" not in summary
 
 
 def test_daily_run_date_and_cutoff_use_the_same_taipei_clock():
