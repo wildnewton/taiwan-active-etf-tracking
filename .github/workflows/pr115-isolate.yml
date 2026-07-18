@@ -1,0 +1,60 @@
+name: PR115 Isolate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  new-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: PYTHONPATH=. pytest -q tests/test_nightly_persisted_coverage.py
+
+  existing-completeness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: PYTHONPATH=. pytest -q tests/test_nightly_existing_snapshot_completeness.py
+
+  date-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: PYTHONPATH=. pytest -q tests/test_pipeline_date_contract.py
+
+  date-semantics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: PYTHONPATH=. pytest -q tests/test_date_semantics_final_review.py
+
+  nightly-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt pytest pytest-asyncio
+      - run: PYTHONPATH=. pytest -q tests/test_nightly_pipeline.py
