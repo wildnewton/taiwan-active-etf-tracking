@@ -144,6 +144,20 @@ def test_fewer_than_two_usable_holdings_dates_produces_no_candidate():
     assert get_etf_config("MISSING")["retired"] == 0
 
 
+def test_recently_listed_etf_is_not_a_retirement_candidate():
+    db.init_db(":memory:")
+    _seed_etf("NEW", listing_date=LATEST_DATE)
+    _seed_two_usable_dates()
+
+    summary = reconcile_discovered_universe(
+        _discovered("REFERENCE"),
+        seen_date=DISCOVERY_DATE,
+        discovery_complete=True,
+    )
+
+    assert "NEW" not in summary["retirement_candidates"]
+
+
 def test_incomplete_discovery_produces_no_candidate_or_retirement_change():
     db.init_db(":memory:")
     _seed_etf("MISSING")
@@ -173,17 +187,21 @@ def test_discovery_does_not_reactivate_a_manually_retired_etf():
     assert get_etf_config("RETIRED")["retired"] == 1
 
 
-def test_new_database_does_not_define_obsolete_lifecycle_columns():
+def test_legacy_lifecycle_columns_do_not_control_historical_eligibility():
     db.init_db(":memory:")
-
+    _seed_etf("HISTORICAL", retired=1)
+    _insert_stock_holding(OLDER_DATE, "HISTORICAL")
     with db._connect() as conn:
-        columns = {
-            row[1]
-            for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()
-        }
+        conn.execute(
+            """
+            UPDATE etf_universe
+            SET last_active_date = ?, pending_retirement_since = ?
+            WHERE code = 'HISTORICAL'
+            """,
+            (DISCOVERY_DATE, OLDER_DATE),
+        )
 
-    assert "last_active_date" not in columns
-    assert "pending_retirement_since" not in columns
+    assert "HISTORICAL" not in get_eligible_etf_codes(LATEST_DATE)
 
 
 def test_retired_historical_cutoff_is_derived_from_latest_holdings_date():
