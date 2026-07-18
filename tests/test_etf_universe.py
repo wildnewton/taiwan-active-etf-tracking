@@ -61,7 +61,7 @@ def test_config_no_longer_exports_tracked_etfs():
     assert not hasattr(config, "TRACKED_ETFS")
 
 
-def test_init_db_creates_etf_universe_table():
+def test_init_db_creates_etf_universe_without_obsolete_lifecycle_columns():
     db.init_db(":memory:")
 
     with db._connect() as conn:
@@ -79,8 +79,6 @@ def test_init_db_creates_etf_universe_table():
         "listing_date",
         "retired",
         "first_seen_date",
-        "last_active_date",
-        "pending_retirement_since",
         "official_url",
         "official_method",
         "official_logic",
@@ -91,7 +89,7 @@ def test_init_db_creates_etf_universe_table():
     assert "retired_since" not in columns
 
 
-def test_init_db_preserves_legacy_seen_dates_in_compatibility_columns(tmp_path):
+def test_init_db_rebuilds_older_universe_without_lifecycle_columns(tmp_path):
     db_path = tmp_path / "legacy.sqlite"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -130,15 +128,64 @@ def test_init_db_preserves_legacy_seen_dates_in_compatibility_columns(tmp_path):
 
     with db._connect() as conn:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
-        rows = {
-            row[0]: row[1]
-            for row in conn.execute("SELECT code, last_active_date FROM etf_universe")
-        }
+        rows = conn.execute(
+            "SELECT code, name, retired FROM etf_universe ORDER BY code"
+        ).fetchall()
 
-    assert "last_active_date" in columns
+    assert "last_active_date" not in columns
+    assert "pending_retirement_since" not in columns
     assert "last_seen_date" not in columns
     assert "retired_since" not in columns
-    assert rows == {"ACTIVE": "2026-07-03", "RETIRED": "2026-07-03"}
+    assert rows == [
+        ("ACTIVE", "Active ETF", 0),
+        ("RETIRED", "Retired ETF", 1),
+    ]
+
+
+def test_init_db_does_not_rebuild_deployed_current_schema_just_to_drop_columns(tmp_path):
+    db_path = tmp_path / "deployed.sqlite"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE etf_universe (
+                code TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                issuer TEXT,
+                market TEXT,
+                isin TEXT,
+                listing_date TEXT,
+                retired INTEGER NOT NULL DEFAULT 0,
+                first_seen_date TEXT,
+                last_active_date TEXT,
+                pending_retirement_since TEXT,
+                official_url TEXT,
+                official_method TEXT,
+                official_logic TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO etf_universe (
+                code, name, retired, last_active_date,
+                pending_retirement_since, created_at, updated_at
+            ) VALUES ('ACTIVE', 'Active ETF', 0, '2026-07-03', '2026-07-04', 'c', 'u')
+            """
+        )
+
+    db.init_db(str(db_path))
+
+    with db._connect() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()}
+        row = conn.execute(
+            "SELECT code, last_active_date, pending_retirement_since FROM etf_universe"
+        ).fetchone()
+
+    assert "last_active_date" in columns
+    assert "pending_retirement_since" in columns
+    assert row == ("ACTIVE", "2026-07-03", "2026-07-04")
 
 
 def test_seed_etf_universe_from_seed_file_populates_known_etfs():
