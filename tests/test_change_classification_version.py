@@ -15,9 +15,9 @@ def _insert_etf_universe_entry():
             """
             INSERT INTO etf_universe
                 (code, name, issuer, market, retired,
-                 first_seen_date, last_active_date, created_at, updated_at)
+                 first_seen_date, created_at, updated_at)
             VALUES ('ACTIVE', 'Active ETF', 'ActiveAM', 'TWSE', 0,
-                    '2026-06-20', '2026-06-23', datetime('now'), datetime('now'))
+                    '2026-06-20', datetime('now'), datetime('now'))
             """
         )
 
