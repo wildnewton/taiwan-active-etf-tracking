@@ -249,10 +249,6 @@ def _prepare_scrape_run(
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
-    if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
-        _record_non_trading_day_skip(summary, len(etfs))
-        return run_date, expected_data_date, summary, []
-
     if not skip_existing_snapshot:
         return run_date, expected_data_date, summary, etfs
 
@@ -415,13 +411,6 @@ def _is_trading_day_for_run(
     return is_tw_trading_day(run_date)
 
 
-def _should_skip_non_trading_day(
-    is_trading_day: Optional[bool],
-    use_trading_calendar: bool,
-) -> bool:
-    return use_trading_calendar and is_trading_day is False
-
-
 def _coerce_run_date(value):
     if value is None:
         return None
@@ -466,11 +455,6 @@ def _new_summary(
     }
 
 
-def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
-    summary["skipped_non_trading_day"] = skipped_count
-    summary["skip_reason"] = "tw_stock_market_closed"
-
-
 def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
     rows = [
         *(result.get("stock_rows") or []),
@@ -490,7 +474,6 @@ def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str
     if len(unique_dates) != 1:
         return None, "inconsistent_source_dates"
     return parsed_dates[0], None
-
 
 
 def _classify_scrape_status(
@@ -677,6 +660,7 @@ def _record_freshness(
         })
         return
     raise ValueError(f"Unknown scrape status: {status}")
+
 
 def _finalize_data_date_range(summary: dict) -> None:
     known_dates = summary.pop("_known_data_dates", [])
