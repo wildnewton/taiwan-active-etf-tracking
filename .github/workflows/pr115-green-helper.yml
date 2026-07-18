@@ -36,61 +36,40 @@ jobs:
           assert text.count(old_coverage) == 1
           text = text.replace(old_coverage, new_coverage, 1)
 
-          old_block = '''    total_etfs = scrape_summary.get("total_etfs")
-              moneydj_success = scrape_summary.get("moneydj_success", 0)
-              official_success = scrape_summary.get("official_success", 0)
-              successful_etfs = moneydj_success + official_success
-              available_etfs = (
-                  successful_etfs + scrape_summary.get("preexisting_success", 0)
-              )
-              if total_etfs is not None and available_etfs < total_etfs:
-                  failures = scrape_summary.get("failures", [])
-                  failed_codes = [
-                      failure.get("etf_code")
-                      for failure in failures
-                      if isinstance(failure, dict) and failure.get("etf_code")
-                  ]
-                  failure_text = f"（失敗: {', '.join(failed_codes)}）" if failed_codes else ""
-                  print(
-                      f"⚠️ 資料不完整: 預期 {total_etfs} 檔 ETF，"
-                      f"實際可用 {available_etfs} 檔{failure_text}"
-                  )
-          '''
-          old_block = old_block.replace("          ", "    ", 1)
-          old_block = old_block.replace("              ", "    ")
-
-          new_block = '''    total_etfs = scrape_summary.get("total_etfs")
-              target_data_date = scrape_summary.get("expected_data_date")
-              if not target_data_date:
-                  raise RuntimeError("nightly scrape did not provide expected_data_date")
-
-              target_coverage = db.get_target_snapshot_coverage(target_data_date)
-              expected_etfs = target_coverage["expected_count"]
-              available_etfs = target_coverage["actual_count"]
-              missing_etfs = target_coverage["missing_etfs"]
-              if expected_etfs and available_etfs < expected_etfs:
-                  print(
-                      f"⚠️ 資料不完整: 預期 {expected_etfs} 檔 ETF，"
-                      f"實際可用 {available_etfs} 檔"
-                  )
-                  if missing_etfs:
-                      print(f"缺少目標日持倉: {', '.join(missing_etfs)}")
-          '''
-          new_block = new_block.replace("          ", "    ", 1)
-          new_block = new_block.replace("              ", "    ")
-
-          assert text.count(old_block) == 1, "nightly availability block changed unexpectedly"
-          text = text.replace(old_block, new_block, 1)
+          start_marker = '    total_etfs = scrape_summary.get("total_etfs")\n'
+          end_marker = '    moneydj_warnings = scrape_summary.get("moneydj_warnings", [])\n'
+          start = text.index(start_marker)
+          end = text.index(end_marker, start)
+          new_block = "\n".join([
+              '    total_etfs = scrape_summary.get("total_etfs")',
+              '    target_data_date = scrape_summary.get("expected_data_date")',
+              '    if not target_data_date:',
+              '        raise RuntimeError("nightly scrape did not provide expected_data_date")',
+              '',
+              '    target_coverage = db.get_target_snapshot_coverage(target_data_date)',
+              '    expected_etfs = target_coverage["expected_count"]',
+              '    available_etfs = target_coverage["actual_count"]',
+              '    missing_etfs = target_coverage["missing_etfs"]',
+              '    if expected_etfs and available_etfs < expected_etfs:',
+              '        print(',
+              '            f"⚠️ 資料不完整: 預期 {expected_etfs} 檔 ETF，"',
+              '            f"實際可用 {available_etfs} 檔"',
+              '        )',
+              '        if missing_etfs:',
+              '            print(f"缺少目標日持倉: {\', \'.join(missing_etfs)}")',
+              '',
+          ])
+          text = text[:start] + new_block + text[end:]
 
           old_call = "    target_data_date = _resolve_target_data_date(scrape_summary, db_path)\n"
-          new_call = '''    target_data_date = _resolve_target_data_date(
-              scrape_summary,
-              db_path,
-              coverage=target_coverage,
-          )
-          '''
-          new_call = new_call.replace("          ", "    ", 1)
-          new_call = new_call.replace("              ", "    ")
+          new_call = "\n".join([
+              '    target_data_date = _resolve_target_data_date(',
+              '        scrape_summary,',
+              '        db_path,',
+              '        coverage=target_coverage,',
+              '    )',
+              '',
+          ])
           assert text.count(old_call) == 1
           text = text.replace(old_call, new_call, 1)
 
