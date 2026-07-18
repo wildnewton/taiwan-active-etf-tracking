@@ -10,15 +10,15 @@ from changes import get_latest_valid_date
 from models import HoldingRow
 
 
-def _seed_universe(code, *, listing_date="2026-07-01", retired=0, last_active_date=None):
+def _seed_universe(code, *, listing_date="2026-07-01", retired=0):
     now = datetime.now().isoformat()
     with db._connect() as conn:
         conn.execute(
             """
             INSERT INTO etf_universe (
                 code, name, listing_date, retired, first_seen_date,
-                last_active_date, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 code,
@@ -26,7 +26,6 @@ def _seed_universe(code, *, listing_date="2026-07-01", retired=0, last_active_da
                 listing_date,
                 retired,
                 listing_date,
-                last_active_date,
                 now,
                 now,
             ),
@@ -116,7 +115,7 @@ def test_retry_candidates_are_derived_from_missing_target_holdings(tmp_path):
     _seed_universe("A")
     _seed_universe("B")
     _seed_universe("FUTURE", listing_date="2026-07-20")
-    _seed_universe("RETIRED", retired=1, last_active_date="2026-07-14")
+    _seed_universe("RETIRED", retired=1)
     _insert_holding("2026-07-14", "A")
     _insert_holding("2026-07-15", "B")
 
@@ -161,11 +160,8 @@ def test_report_quality_is_derived_from_holdings_and_universe(tmp_path):
 def test_historical_completeness_uses_candidate_date_universe(tmp_path):
     db.init_db(tmp_path / "holdings.sqlite")
     _seed_universe("A")
-    _seed_universe(
-        "B",
-        retired=1,
-        last_active_date="2026-07-20",
-    )
+    _seed_universe("B", retired=1)
     _insert_holding("2026-07-15", "A")
+    _insert_holding("2026-07-20", "B")
 
     assert get_latest_valid_date(min_success_ratio=1.0) is None
