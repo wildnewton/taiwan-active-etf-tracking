@@ -149,8 +149,17 @@ def test_non_trading_day_with_complete_preexisting_target_is_clean_noop(tmp_path
             fresh=1,
             stale=1,
         ),
+        _scrape_summary(
+            preexisting_success=1,
+            moneydj_success=1,
+            fresh=2,
+        ),
     ],
-    ids=["failed-source", "stale-source-success"],
+    ids=[
+        "failed-source",
+        "stale-source-success",
+        "fresh-result-not-persisted-complete",
+    ],
 )
 def test_non_trading_day_gap_without_new_complete_snapshot_fails(
     tmp_path,
