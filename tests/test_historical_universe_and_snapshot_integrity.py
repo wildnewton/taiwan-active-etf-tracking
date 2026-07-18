@@ -4,12 +4,7 @@ from unittest.mock import patch
 import db
 import report
 from changes import detect_holding_changes, get_latest_valid_date
-from etf_universe import (
-    get_eligible_etf_codes,
-    get_etf_config,
-    reconcile_discovered_universe,
-    retire_etf,
-)
+from etf_universe import get_eligible_etf_codes, retire_etf
 from retry_stale_scrapes import retry_missing_holdings
 
 
@@ -23,7 +18,6 @@ def _seed_etf(
     *,
     listing_date: str | None = "2026-07-01",
     retired: int = 0,
-    last_active_date: str | None = None,
     official_logic: str | None = None,
 ) -> None:
     now = datetime.now().isoformat()
@@ -32,9 +26,9 @@ def _seed_etf(
             """
             INSERT INTO etf_universe (
                 code, name, issuer, listing_date, retired,
-                first_seen_date, last_active_date, official_logic,
+                first_seen_date, official_logic,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 code,
@@ -43,7 +37,6 @@ def _seed_etf(
                 listing_date,
                 retired,
                 listing_date,
-                last_active_date,
                 official_logic,
                 now,
                 now,
@@ -132,26 +125,28 @@ def test_non_stock_only_rows_do_not_form_a_holdings_snapshot():
     assert db.snapshot_exists(TARGET_DATE, "A") is False
 
 
-def test_candidate_date_eligibility_includes_last_active_date_and_excludes_scope():
+def test_candidate_date_eligibility_uses_holdings_cutoff_and_excludes_scope():
     db.init_db(":memory:")
     _seed_etf("ACTIVE")
-    _seed_etf("RETIRED_AFTER", retired=1, last_active_date=TARGET_DATE)
-    _seed_etf("RETIRED_BEFORE", retired=1, last_active_date=PREVIOUS_DATE)
+    _seed_etf("RETIRED_AFTER", retired=1)
+    _seed_etf("RETIRED_BEFORE", retired=1)
     _seed_etf("FUTURE", listing_date="2026-07-20")
     _seed_etf(
         "OUT_OF_SCOPE",
         retired=1,
-        last_active_date=TARGET_DATE,
         official_logic="excluded_from_taiwan_stock_universe",
     )
+    _insert_snapshot(TARGET_DATE, "RETIRED_AFTER")
+    _insert_snapshot(PREVIOUS_DATE, "RETIRED_BEFORE")
+    _insert_snapshot(TARGET_DATE, "OUT_OF_SCOPE")
 
     assert get_eligible_etf_codes(TARGET_DATE) == ["ACTIVE", "RETIRED_AFTER"]
     assert get_eligible_etf_codes("2026-07-16") == ["ACTIVE"]
 
 
-def test_retired_etf_is_analyzed_through_its_last_active_date():
+def test_retired_etf_is_analyzed_through_its_latest_holdings_date():
     db.init_db(":memory:")
-    _seed_etf("HISTORICAL", retired=1, last_active_date=TARGET_DATE)
+    _seed_etf("HISTORICAL", retired=1)
     _insert_snapshot(PREVIOUS_DATE, "HISTORICAL", shares=100.0)
     _insert_snapshot(TARGET_DATE, "HISTORICAL", shares=110.0)
 
@@ -173,13 +168,14 @@ def test_retired_etf_is_analyzed_through_its_last_active_date():
 
 def test_report_change_diagnostics_use_candidate_date_eligibility():
     db.init_db(":memory:")
-    _seed_etf("HISTORICAL", retired=1, last_active_date=TARGET_DATE)
+    _seed_etf("HISTORICAL", retired=1)
     _seed_etf(
         "OUT_OF_SCOPE",
         retired=1,
-        last_active_date=TARGET_DATE,
         official_logic="trades_offshore_instruments=true",
     )
+    _insert_snapshot(TARGET_DATE, "HISTORICAL")
+    _insert_snapshot(TARGET_DATE, "OUT_OF_SCOPE")
     with db._connect() as conn:
         for code in ("HISTORICAL", "OUT_OF_SCOPE"):
             conn.execute(
@@ -230,55 +226,12 @@ def test_retry_summary_separates_execution_date_from_target_date():
     assert "date" not in summary
 
 
-def test_retirement_confirmation_preserves_the_last_observed_active_date():
+def test_manual_retirement_uses_existing_holdings_as_historical_cutoff():
     db.init_db(":memory:")
-    _seed_etf("A", last_active_date="2026-06-30")
+    _seed_etf("A")
+    _insert_snapshot(TARGET_DATE, "A")
 
-    reconcile_discovered_universe([], seen_date="2026-07-01")
-    reconcile_discovered_universe([], seen_date="2026-07-02")
+    retire_etf("A", reason="confirmed retired")
 
-    config = get_etf_config("A")
-    assert config["retired"] == 1
-    assert config["last_active_date"] == "2026-06-30"
-
-
-def test_manual_retirement_does_not_invent_a_new_last_active_date():
-    db.init_db(":memory:")
-    _seed_etf("A", last_active_date="2026-06-30")
-
-    retire_etf("A")
-
-    config = get_etf_config("A")
-    assert config["retired"] == 1
-    assert config["last_active_date"] == "2026-06-30"
-
-
-def test_init_db_clears_impossible_prelisting_last_active_date(tmp_path):
-    db_path = tmp_path / "holdings.sqlite"
-    db.init_db(db_path)
-    _seed_etf(
-        "FUTURE",
-        listing_date="2026-07-20",
-        last_active_date=TARGET_DATE,
-    )
-
-    db.init_db(db_path)
-
-    assert get_etf_config("FUTURE")["last_active_date"] is None
-
-
-def test_prelisting_discovery_does_not_set_last_active_date():
-    db.init_db(":memory:")
-
-    reconcile_discovered_universe(
-        [
-            {
-                "code": "FUTURE",
-                "name": "Future ETF",
-                "listing_date": "2026-07-20",
-            }
-        ],
-        seen_date=TARGET_DATE,
-    )
-
-    assert get_etf_config("FUTURE")["last_active_date"] is None
+    assert "A" in get_eligible_etf_codes(TARGET_DATE)
+    assert "A" not in get_eligible_etf_codes(EXECUTION_DATE)
