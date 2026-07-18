@@ -1,0 +1,32 @@
+name: PR115 Targeted
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - run: >-
+          PYTHONPATH=. pytest -q
+          tests/test_nightly_persisted_coverage.py
+          tests/test_nightly_existing_snapshot_completeness.py
+          tests/test_pipeline_date_contract.py
+          tests/test_date_semantics_final_review.py
+          tests/test_nightly_pipeline.py
