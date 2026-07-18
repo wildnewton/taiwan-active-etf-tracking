@@ -12,6 +12,18 @@ INCOMPLETE_DISCOVERY = {
     "reactivated": [],
     "updated": [],
     "retired": [],
+    "retirement_candidates": [],
+    "active_total": 19,
+}
+COMPLETE_DISCOVERY_WITH_CANDIDATE = {
+    "discovery_complete": True,
+    "failed_markets": [],
+    "completed_markets": ["TWSE", "TPEx"],
+    "inserted": [],
+    "reactivated": [],
+    "updated": [],
+    "retired": [],
+    "retirement_candidates": ["00980A"],
     "active_total": 19,
 }
 COMPLETE_SCRAPE = {
@@ -34,11 +46,17 @@ NO_SKIP_CHANGES = {
     "rows": 0,
     "skipped_etfs": [],
 }
-MANAGER_INTENT_SUMMARY = {"ok": True, "date": "2026-06-26", "windows": [5, 10], "rows": 0}
+MANAGER_INTENT_SUMMARY = {
+    "ok": True,
+    "date": "2026-06-26",
+    "windows": [5, 10],
+    "rows": 0,
+}
 
 
 def _run_main(db_path, report_dir, extra_args=None):
     import importlib.util
+
     with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
         "db.get_target_snapshot_coverage",
         return_value={
@@ -57,15 +75,40 @@ def _run_main(db_path, report_dir, extra_args=None):
             return mod.main()
 
 
+def _patched_nightly(discovery_summary):
+    return (
+        patch("db.init_db"),
+        patch(
+            "discover_active_etfs.discover_and_reconcile",
+            return_value=discovery_summary,
+        ),
+        patch(
+            "pipeline.run_daily_scrape_with_browser",
+            return_value=COMPLETE_SCRAPE,
+        ),
+        patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES),
+        patch(
+            "manager_intent.generate_manager_intent_rollups",
+            return_value=MANAGER_INTENT_SUMMARY,
+        ),
+        patch("signals.generate_manager_signals", return_value={}),
+        patch("report.generate_signal_report", return_value=""),
+        patch("traction_analysis.generate_traction_report", return_value=""),
+    )
+
+
 def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
-    with patch("db.init_db"), \
-         patch("discover_active_etfs.discover_and_reconcile", return_value=INCOMPLETE_DISCOVERY), \
-         patch("pipeline.run_daily_scrape_with_browser", return_value=COMPLETE_SCRAPE) as scrape, \
-         patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES), \
-         patch("manager_intent.generate_manager_intent_rollups", return_value=MANAGER_INTENT_SUMMARY) as intent, \
-         patch("signals.generate_manager_signals", return_value={}), \
-         patch("report.generate_signal_report", return_value=""), \
-         patch("traction_analysis.generate_traction_report", return_value=""):
+    patches = _patched_nightly(INCOMPLETE_DISCOVERY)
+    with (
+        patches[0],
+        patches[1],
+        patches[2] as scrape,
+        patches[3],
+        patches[4] as intent,
+        patches[5],
+        patches[6],
+        patches[7],
+    ):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
@@ -75,13 +118,39 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
     intent.assert_called_once_with("2026-06-26")
 
 
+def test_nightly_surfaces_retirement_candidates_and_continues(capsys, tmp_path):
+    patches = _patched_nightly(COMPLETE_DISCOVERY_WITH_CANDIDATE)
+    with (
+        patches[0],
+        patches[1],
+        patches[2] as scrape,
+        patches[3],
+        patches[4] as intent,
+        patches[5],
+        patches[6],
+        patches[7],
+    ):
+        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+
+    out = capsys.readouterr().out
+    assert "retirement_candidates" in out
+    assert "00980A" in out
+    scrape.assert_called_once()
+    intent.assert_called_once_with("2026-06-26")
+
+
 def test_nightly_strict_mode_stops_on_incomplete_discovery(tmp_path):
-    with patch("db.init_db"), \
-         patch("discover_active_etfs.discover_and_reconcile", return_value=INCOMPLETE_DISCOVERY), \
-         patch("pipeline.run_daily_scrape_with_browser") as scrape:
+    with patch("db.init_db"), patch(
+        "discover_active_etfs.discover_and_reconcile",
+        return_value=INCOMPLETE_DISCOVERY,
+    ), patch("pipeline.run_daily_scrape_with_browser") as scrape:
         stopped = False
         try:
-            _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"), ["--strict-discovery"])
+            _run_main(
+                str(tmp_path / "t.sqlite3"),
+                str(tmp_path / "r"),
+                ["--strict-discovery"],
+            )
         except RuntimeError as exc:
             stopped = "ETF universe discovery incomplete" in str(exc)
 

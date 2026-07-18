@@ -100,7 +100,6 @@ def test_get_latest_and_previous_valid_dates_use_80_percent_success_threshold():
     assert get_previous_valid_date("2026-06-22") == "2026-06-21"
 
 
-
 def test_detects_new_removed_and_existing_position_changes():
     db.init_db(":memory:")
 
@@ -192,87 +191,45 @@ def test_detects_consecutive_reductions():
     assert row["consecutive_reduce_days"] == 2
 
 
-def _insert_etf_universe_entry(
-    code,
-    name,
-    issuer,
-    retired,
-    last_active_date="2026-06-23",
-):
+def _insert_etf_universe_entry(code, name, issuer, retired):
     with db._connect() as conn:
         conn.execute(
             """
             INSERT INTO etf_universe
                 (code, name, issuer, market, retired,
-                 first_seen_date, last_active_date, created_at, updated_at)
+                 first_seen_date, created_at, updated_at)
             VALUES (?, ?, ?, 'TWSE', ?,
-                    '2026-06-20', ?, datetime('now'), datetime('now'))
+                    '2026-06-20', datetime('now'), datetime('now'))
             """,
-            (code, name, issuer, retired, last_active_date),
+            (code, name, issuer, retired),
         )
 
 
-def test_excludes_etfs_retired_before_the_analyzed_dates():
-    """ETFs outside the candidate-date universe must not produce changes.
-
-    The data pipeline should treat retired ETFs as out-of-scope for all
-    downstream analysis: diagnostics, change detection, and signals.
-    """
+def test_retired_etf_with_holdings_through_analyzed_dates_is_included():
     db.init_db(":memory:")
 
     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-    _insert_etf_universe_entry(
-        "RETIRED",
-        "Retired ETF",
-        None,
-        1,
-        last_active_date="2026-06-19",
-    )
+    _insert_etf_universe_entry("RETIRED", "Retired ETF", "RetiredAM", 1)
 
-    # Both have holdings on both dates
     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
     insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
-
     insert_holding("2026-06-23", "ACTIVE", "2330", "TSMC", 110, 12.0)
     insert_holding("2026-06-23", "RETIRED", "2498", "HTC", 55, 5.5)
 
     summary = detect_holding_changes("2026-06-23", "2026-06-20")
 
     assert summary["ok"] is True
-    assert summary["rows"] > 0
-
-    # Active ETF change MUST exist
-    active_row = fetch_change("2330", etf_code="ACTIVE", date="2026-06-23")
-    assert active_row is not None, "Active ETF should produce change rows"
-    assert active_row["issuer"] == "ActiveAM"
-    assert active_row["weight_delta_1d"] == 2.0
-
-    # Retired ETF MUST NOT appear
+    assert fetch_change("2330", etf_code="ACTIVE", date="2026-06-23") is not None
     retired_row = fetch_change("2498", etf_code="RETIRED", date="2026-06-23")
-    assert retired_row is None, (
-        "Retired ETF must not appear in change detection; "
-        f"found row with issuer={retired_row['issuer'] if retired_row else 'None'}"
-    )
+    assert retired_row is not None
+    assert retired_row["issuer"] == "RetiredAM"
 
 
-def test_retired_etf_with_null_issuer_does_not_crash():
-    """A retired ETF with issuer=NULL must not cause IntegrityError.
-
-    Regression test: the pipeline crashed with
-    'NOT NULL constraint failed: etf_holding_changes.issuer' because
-    retired ETFs with NULL issuer were still processed by
-    _source_pair_diagnostics → _build_change_row → _persist_changes.
-    """
+def test_retired_etf_with_null_issuer_is_processed_without_crashing():
     db.init_db(":memory:")
 
     _insert_etf_universe_entry("ACTIVE", "Active ETF", "ActiveAM", 0)
-    _insert_etf_universe_entry(
-        "RETIRED",
-        "Retired NULL",
-        None,
-        1,
-        last_active_date="2026-06-19",
-    )
+    _insert_etf_universe_entry("RETIRED", "Retired NULL", None, 1)
 
     insert_holding("2026-06-20", "ACTIVE", "2330", "TSMC", 100, 10.0)
     insert_holding("2026-06-20", "RETIRED", "2498", "HTC", 50, 5.0)
@@ -283,4 +240,5 @@ def test_retired_etf_with_null_issuer_does_not_crash():
 
     assert summary["ok"] is True
     retired_row = fetch_change("2498", etf_code="RETIRED", date="2026-06-23")
-    assert retired_row is None
+    assert retired_row is not None
+    assert retired_row["issuer"] == ""

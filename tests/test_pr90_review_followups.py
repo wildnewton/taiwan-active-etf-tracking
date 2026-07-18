@@ -3,7 +3,7 @@ from datetime import datetime
 import db
 import report
 from changes import detect_holding_changes
-from etf_universe import get_etf_config, reconcile_discovered_universe
+from etf_universe import get_eligible_etf_codes, get_etf_config, reconcile_discovered_universe
 from manager_intent import generate_manager_intent_rollups
 
 
@@ -21,7 +21,6 @@ def _seed_etf(
     issuer="TestIssuer",
     listing_date=D1,
     retired=0,
-    last_active_date=D6,
     official_logic=None,
 ):
     now = datetime.now().isoformat()
@@ -30,8 +29,8 @@ def _seed_etf(
             """
             INSERT INTO etf_universe (
                 code, name, issuer, listing_date, retired, first_seen_date,
-                last_active_date, official_logic, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                official_logic, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 code,
@@ -40,7 +39,6 @@ def _seed_etf(
                 listing_date,
                 retired,
                 listing_date,
-                last_active_date,
                 official_logic,
                 now,
                 now,
@@ -163,7 +161,7 @@ def test_one_canonical_source_prefers_complete_snapshot_across_all_consumers():
 def test_ineligible_only_date_does_not_create_false_consecutive_add():
     db.init_db(":memory:")
     _seed_etf("A")
-    _seed_etf("FUTURE", listing_date="2026-07-20", last_active_date=None)
+    _seed_etf("FUTURE", listing_date="2026-07-20")
     _insert_complete_snapshot(D1, "A", stock_weight=2.0, shares=100.0)
     _insert_complete_snapshot(D2, "FUTURE")
     _insert_complete_snapshot(D3, "A", stock_weight=2.0, shares=100.0)
@@ -186,7 +184,7 @@ def test_ineligible_only_date_does_not_create_false_consecutive_add():
 def test_ineligible_only_date_does_not_consume_manager_intent_window():
     db.init_db(":memory:")
     _seed_etf("A", issuer="IssuerA")
-    _seed_etf("FUTURE", listing_date="2026-07-20", last_active_date=None)
+    _seed_etf("FUTURE", listing_date="2026-07-20")
     for data_date in (D1, D2, D3, D4, D6):
         _insert_complete_snapshot(data_date, "A", stock_weight=5.0)
     _insert_complete_snapshot(D5, "FUTURE")
@@ -219,25 +217,24 @@ def test_report_counts_canonical_non_stock_assets():
     }
 
 
-def test_discovery_replay_cannot_move_last_active_date_backwards():
+def test_discovery_replay_does_not_change_manual_retirement_or_holdings_cutoff():
     db.init_db(":memory:")
-    _seed_etf("A", last_active_date="2026-07-17")
+    _seed_etf("A", retired=1)
+    _insert_complete_snapshot(D6, "A")
 
     reconcile_discovered_universe(
         [{"code": "A", "name": "A", "listing_date": D1}],
         seen_date="2026-07-10",
     )
 
-    assert get_etf_config("A")["last_active_date"] == "2026-07-17"
+    assert get_etf_config("A")["retired"] == 1
+    assert "A" in get_eligible_etf_codes(D6)
+    assert "A" not in get_eligible_etf_codes("2026-07-10")
 
 
 def test_latest_available_snapshot_respects_snapshot_date_eligibility():
     db.init_db(":memory:")
-    _seed_etf(
-        "A",
-        listing_date="2026-07-15",
-        last_active_date="2026-07-16",
-    )
+    _seed_etf("A", listing_date="2026-07-15")
     _insert_complete_snapshot(D1, "A")
 
     coverage = db.get_target_snapshot_coverage("2026-07-16")

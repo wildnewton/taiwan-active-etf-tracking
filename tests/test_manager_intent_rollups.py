@@ -13,16 +13,8 @@ ETF_ROWS = {
     "00982A": {"issuer": "統一", "retired": 0},
     "00984A": {"issuer": "台新", "retired": 0},
     "00985A": {"issuer": "群益", "retired": 0},
-    "00998A": {
-        "issuer": "歷史投信",
-        "retired": 1,
-        "last_active_date": "2026-06-26",
-    },
-    "00999A": {
-        "issuer": "退休投信",
-        "retired": 1,
-        "last_active_date": "2026-06-21",
-    },
+    "00998A": {"issuer": "歷史投信", "retired": 1},
+    "00999A": {"issuer": "退休投信", "retired": 1},
 }
 ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
@@ -44,15 +36,14 @@ def seed_universe():
                 """
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
-                    first_seen_date, last_active_date, created_at, updated_at
-                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', ?, ?, ?)
+                    first_seen_date, created_at, updated_at
+                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', ?, ?)
                 """,
                 (
                     etf_code,
                     f"Test {etf_code}",
                     row["issuer"],
                     row["retired"],
-                    row.get("last_active_date", "2026-06-26"),
                     "2026-06-01T00:00:00",
                     "2026-06-01T00:00:00",
                 ),
@@ -327,7 +318,7 @@ def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
     assert rows[2]
 
 
-def test_retired_etf_events_are_included_through_last_active_date():
+def test_retired_etf_events_are_included_through_latest_holdings_date():
     setup_db()
     insert_eligible_history(etfs=("00998A",))
     insert_change("2026-06-26", "00998A", is_active_reduce=1)
@@ -339,9 +330,13 @@ def test_retired_etf_events_are_included_through_last_active_date():
     assert stock_row["sell_etf_count"] == 1
 
 
-def test_retired_etf_events_are_excluded_before_scoring():
+def test_retired_etf_events_after_latest_holdings_date_are_excluded_before_scoring():
     setup_db()
-    insert_eligible_history(etfs=("00980A", "00999A"))
+    insert_eligible_history(etfs=("00980A",))
+    insert_eligible_history(
+        etfs=("00999A",),
+        dates=["2026-06-20", "2026-06-21"],
+    )
     insert_change("2026-06-26", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00999A", is_active_reduce=1)
 

@@ -7,17 +7,17 @@ import retry_stale_scrapes
 from models import HoldingRow
 
 
-def _seed_universe(code, *, listing_date="2026-07-01", retired=0, last_active_date=None):
+def _seed_universe(code, *, listing_date="2026-07-01", retired=0):
     now = datetime.now().isoformat()
     with db._connect() as conn:
         conn.execute(
             """
             INSERT INTO etf_universe (
                 code, name, listing_date, retired, first_seen_date,
-                last_active_date, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (code, code, listing_date, retired, listing_date, last_active_date, now, now),
+            (code, code, listing_date, retired, listing_date, now, now),
         )
 
 
@@ -45,8 +45,9 @@ def test_retry_candidates_are_target_holdings_gaps(tmp_path):
     _seed_universe("A")
     _seed_universe("B")
     _seed_universe("FUTURE", listing_date="2026-07-20")
-    _seed_universe("RETIRED", retired=1, last_active_date="2026-07-14")
+    _seed_universe("RETIRED", retired=1)
     _holding("2026-07-14", "A")
+    _holding("2026-07-14", "RETIRED")
     _holding("2026-07-15", "B")
 
     assert retry_stale_scrapes.get_retry_candidates("2026-07-15") == [
