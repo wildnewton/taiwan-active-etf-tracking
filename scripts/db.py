@@ -40,8 +40,6 @@ _ETF_UNIVERSE_COLUMN_MIGRATIONS = {
     "listing_date": "TEXT",
     "retired": "INTEGER NOT NULL DEFAULT 0",
     "first_seen_date": "TEXT",
-    "last_active_date": "TEXT",
-    "pending_retirement_since": "TEXT",
     "official_url": "TEXT",
     "official_method": "TEXT",
     "official_logic": "TEXT",
@@ -58,8 +56,6 @@ _ETF_UNIVERSE_COLUMNS_SQL = """
     listing_date TEXT,
     retired INTEGER NOT NULL DEFAULT 0,
     first_seen_date TEXT,
-    last_active_date TEXT,
-    pending_retirement_since TEXT,
     official_url TEXT,
     official_method TEXT,
     official_logic TEXT,
@@ -106,7 +102,6 @@ def init_db(db_path):
     with conn:
         _create_etf_universe_table(conn)
         _ensure_etf_universe_columns(conn)
-        _normalize_etf_universe_dates(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_holdings (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, shares REAL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code, source_type))")
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_non_stock_assets (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, asset_name, source_type))")
         # Scrape attempts are operational logs, not canonical business data.
@@ -144,29 +139,8 @@ def _ensure_etf_universe_columns(conn):
             conn.execute(f"ALTER TABLE etf_universe ADD COLUMN {column_name} {column_type}")
 
 
-def _normalize_etf_universe_dates(conn):
-    """Clear impossible pre-listing activity left by older metadata writes."""
-    conn.execute(
-        """
-        UPDATE etf_universe
-        SET last_active_date = NULL
-        WHERE listing_date IS NOT NULL
-          AND last_active_date IS NOT NULL
-          AND last_active_date < listing_date
-        """
-    )
-
-
 def _legacy_expr(existing, column_name, fallback="NULL"):
     return column_name if column_name in existing else fallback
-
-
-def _legacy_last_active_expr(existing):
-    last_active = _legacy_expr(existing, "last_active_date")
-    last_seen = _legacy_expr(existing, "last_seen_date")
-    retired_since = _legacy_expr(existing, "retired_since")
-    first_seen = _legacy_expr(existing, "first_seen_date")
-    return f"COALESCE({last_active}, {last_seen}, {retired_since}, {first_seen})"
 
 
 def _rebuild_legacy_etf_universe(conn, existing):
@@ -178,8 +152,7 @@ def _rebuild_legacy_etf_universe(conn, existing):
         f"""
         INSERT INTO etf_universe (
             code, name, issuer, market, isin, listing_date, retired,
-            first_seen_date, last_active_date, pending_retirement_since,
-            official_url, official_method, official_logic,
+            first_seen_date, official_url, official_method, official_logic,
             created_at, updated_at
         )
         SELECT
@@ -191,8 +164,6 @@ def _rebuild_legacy_etf_universe(conn, existing):
             {_legacy_expr(existing, 'listing_date')},
             COALESCE({_legacy_expr(existing, 'retired')}, 0),
             {_legacy_expr(existing, 'first_seen_date')},
-            {_legacy_last_active_expr(existing)},
-            {_legacy_expr(existing, 'pending_retirement_since')},
             {_legacy_expr(existing, 'official_url')},
             {_legacy_expr(existing, 'official_method')},
             {_legacy_expr(existing, 'official_logic')},
