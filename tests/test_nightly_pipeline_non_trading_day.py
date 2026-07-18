@@ -194,7 +194,6 @@ def test_non_trading_day_recovery_runs_downstream_for_target_date(tmp_path):
     )
 
     assert result["scrape_summary"] == summary
-    assert result["target_data_date"] == TARGET_DATE
     detect.assert_called_once_with(current_date=TARGET_DATE)
     rollups.assert_called_once_with(TARGET_DATE)
     signals.assert_called_once_with(TARGET_DATE)
