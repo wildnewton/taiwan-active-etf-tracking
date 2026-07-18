@@ -75,6 +75,9 @@ def test_daily_scrape_selects_default_universe_for_target_holdings_date():
         return [{"code": "NEW"}] if as_of_date >= listing_date else []
 
     with patch("pipeline.init_db"), patch(
+        "pipeline._current_run_at",
+        return_value=run_at,
+    ), patch(
         "pipeline._expected_data_date_for_run",
         return_value=target_date,
     ), patch(
@@ -86,18 +89,16 @@ def test_daily_scrape_selects_default_universe_for_target_holdings_date():
     ) as active, patch(
         "pipeline.snapshot_exists",
         return_value=False,
-    ):
-        run_date, expected_date, summary, etfs_to_scrape = pipeline._prepare_scrape_run(
-            ":memory:",
-            None,
-            run_at=run_at,
-        )
+    ), patch(
+        "pipeline.scrape_holdings",
+    ) as scrape:
+        summary = pipeline.run_daily_scrape(":memory:")
 
-    assert run_date == listing_date
-    assert expected_date == target_date
     active.assert_called_once_with(target_date)
+    scrape.assert_not_called()
+    assert summary["date"] == LISTING_DATE
+    assert summary["expected_data_date"] == TARGET_DATE
     assert summary["total_etfs"] == 0
-    assert etfs_to_scrape == []
 
 
 def test_manager_intent_uses_only_canonical_complete_holdings_rows():
