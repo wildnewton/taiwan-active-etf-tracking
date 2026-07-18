@@ -1,0 +1,37 @@
+name: Targeted retirement tests
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Run targeted lifecycle tests
+        run: |
+          PYTHONPATH=. pytest -q \
+            tests/test_holdings_derived_retirement.py \
+            tests/test_etf_universe.py \
+            tests/test_etf_universe_scope_exclusions.py \
+            tests/test_historical_universe_and_snapshot_integrity.py \
+            tests/test_holdings_source_of_truth.py \
+            tests/test_change_classification_version.py \
+            tests/test_date_semantics_final_review.py \
+            tests/test_retry_stale_scrapes.py \
+            tests/test_changes.py \
+            tests/test_report_change_diagnostics.py \
+            tests/test_manager_intent_rollups.py \
+            tests/test_nightly_discovery_status.py \
+            tests/test_pr90_review_followups.py
