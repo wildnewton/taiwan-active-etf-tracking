@@ -67,7 +67,7 @@ def retire_test_etf(etf_code):
     from etf_universe import retire_etf, seed_etf_universe_from_file
 
     seed_etf_universe_from_file()
-    retire_etf(etf_code, last_active_date="2026-06-25", reason="test retired")
+    retire_etf(etf_code, reason="test retired")
 
 
 def test_report_shows_skipped_change_diagnostics_in_data_quality():
@@ -105,7 +105,9 @@ def test_skipped_change_diagnostics_degrade_report_trust():
     db.init_db(":memory:")
     insert_full_holdings_day("2026-06-25")
     insert_full_holdings_day("2026-06-26")
-    insert_change_diagnostic("2026-06-26", "2026-06-25", "00980A", "skipped", "missing_current_source")
+    insert_change_diagnostic(
+        "2026-06-26", "2026-06-25", "00980A", "skipped", "missing_current_source"
+    )
 
     report = generate_signal_report("2026-06-26")
 
@@ -116,7 +118,9 @@ def test_report_ignores_included_change_diagnostics():
     db.init_db(":memory:")
     insert_full_holdings_day("2026-06-25")
     insert_full_holdings_day("2026-06-26")
-    insert_change_diagnostic("2026-06-26", "2026-06-25", "00980A", "included", "comparable_source_pair")
+    insert_change_diagnostic(
+        "2026-06-26", "2026-06-25", "00980A", "included", "comparable_source_pair"
+    )
 
     report = generate_signal_report("2026-06-26")
 
@@ -155,10 +159,14 @@ def test_report_uses_latest_diagnostics_run_when_previous_holding_date_differs()
     assert "00980A incompatible_source_pair" in report
 
 
-def test_retired_etf_with_skipped_change_diagnostic_does_not_appear_in_report():
+def test_retired_etf_after_its_latest_holdings_date_does_not_appear_in_report():
     db.init_db(":memory:")
     insert_full_holdings_day("2026-06-25")
     insert_full_holdings_day("2026-06-26")
+    with db._connect() as conn:
+        conn.execute(
+            "DELETE FROM etf_daily_holdings WHERE date = '2026-06-26' AND etf_code = '00980A'"
+        )
     retire_test_etf("00980A")
     insert_change_diagnostic(
         "2026-06-26",
