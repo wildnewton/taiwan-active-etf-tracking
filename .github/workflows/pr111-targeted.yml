@@ -1,0 +1,43 @@
+name: PR 111 targeted tests
+
+on:
+  push:
+    branches:
+      - ci-pr111-targeted
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/73-fresh-eye-defects
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - name: Run targeted tests
+        run: |
+          PYTHONPATH=. pytest -q \
+            tests/test_pr90_fresh_eye_defects.py \
+            tests/test_pr90_fresh_eye_async.py \
+            tests/test_manager_intent_rollups.py \
+            tests/test_expected_data_date_cutoff.py \
+            tests/test_pipeline.py
+      - name: Record success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment 111 --body 'Targeted tests passed on head 4f3e447: PR #90 fresh-eye regressions, manager-intent rollups, cutoff behavior, and pipeline tests.'
+      - name: Remove temporary branch
+        if: always()
+        run: git push origin --delete ci-pr111-targeted || true
