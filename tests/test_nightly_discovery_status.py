@@ -99,7 +99,16 @@ def _patched_nightly(discovery_summary):
 
 def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
     patches = _patched_nightly(INCOMPLETE_DISCOVERY)
-    with patches[0], patches[1], patches[2] as scrape, patches[3], patches[4] as intent, patches[5], patches[6], patches[7]:
+    with (
+        patches[0],
+        patches[1],
+        patches[2] as scrape,
+        patches[3],
+        patches[4] as intent,
+        patches[5],
+        patches[6],
+        patches[7],
+    ):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
@@ -111,11 +120,20 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
 
 def test_nightly_surfaces_retirement_candidates_and_continues(capsys, tmp_path):
     patches = _patched_nightly(COMPLETE_DISCOVERY_WITH_CANDIDATE)
-    with patches[0], patches[1], patches[2] as scrape, patches[3], patches[4] as intent, patches[5], patches[6], patches[7]:
+    with (
+        patches[0],
+        patches[1],
+        patches[2] as scrape,
+        patches[3],
+        patches[4] as intent,
+        patches[5],
+        patches[6],
+        patches[7],
+    ):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
     out = capsys.readouterr().out
-    assert "Retirement confirmation required" in out
+    assert "retirement_candidates" in out
     assert "00980A" in out
     scrape.assert_called_once()
     intent.assert_called_once_with("2026-06-26")
