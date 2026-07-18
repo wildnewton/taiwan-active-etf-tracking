@@ -184,25 +184,24 @@ def _non_trading_day_downstream_outcome(scrape_summary, target_coverage):
     if scrape_summary.get("is_trading_day") is not False:
         return None
 
-    expected_count = target_coverage["expected_count"]
-    actual_count = target_coverage["actual_count"]
-    preexisting_count = scrape_summary.get("preexisting_success", 0)
-
-    if actual_count == expected_count == preexisting_count:
+    attempted_codes = set(scrape_summary.get("attempted_etf_codes") or [])
+    if not attempted_codes:
         return "target_snapshot_already_complete"
 
-    recovered_complete_count = max(0, actual_count - preexisting_count)
-    if recovered_complete_count == 0:
+    persisted_codes = set(target_coverage["actual_etf_codes"])
+    recovered_codes = sorted(attempted_codes & persisted_codes)
+    if not recovered_codes:
         missing = ",".join(target_coverage["missing_etfs"]) or "none"
+        attempted = ",".join(sorted(attempted_codes)) or "none"
         raise RuntimeError(
             "non-trading-day recovery produced no complete target snapshots: "
-            f"expected={expected_count}, preexisting={preexisting_count}, "
-            f"actual={actual_count}, missing={missing}"
+            f"attempted={attempted}, missing={missing}"
         )
 
     print(
         "Non-trading-day recovery persisted "
-        f"{recovered_complete_count} complete target snapshot(s)."
+        f"{len(recovered_codes)} complete target snapshot(s): "
+        f"{', '.join(recovered_codes)}."
     )
     return None
 
