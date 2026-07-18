@@ -7,6 +7,7 @@ from manager_intent import generate_manager_intent_rollups
 
 
 TARGET_DATE = "2026-07-17"
+PREVIOUS_DATE = "2026-07-16"
 LISTING_DATE = "2026-07-20"
 
 
@@ -128,3 +129,32 @@ def test_manager_intent_uses_only_canonical_complete_holdings_rows():
         ).fetchall()
 
     assert rows == [("IssuerA", "2330")]
+
+
+def test_manager_intent_fallback_context_excludes_incomplete_etf_dates():
+    db.init_db(":memory:")
+    _seed_etf("A", "IssuerA")
+    _seed_etf("B", "IssuerB")
+
+    # A makes the older date usable, while B has only an incomplete row there.
+    _insert_stock(PREVIOUS_DATE, "A", "2330", 100.0, "moneydj_primary")
+    _insert_stock(PREVIOUS_DATE, "B", "3711", 10.0, "moneydj_primary")
+
+    # B becomes a valid candidate on the newer date through a complete snapshot.
+    _insert_stock(TARGET_DATE, "B", "3711", 100.0, "moneydj_primary")
+
+    generate_manager_intent_rollups(TARGET_DATE, windows=(5,))
+
+    with db._connect() as conn:
+        row = conn.execute(
+            """
+            SELECT eligible_days
+            FROM manager_intent_rollups
+            WHERE date = ? AND window_days = 5
+              AND entity_level = 'issuer_stock'
+              AND issuer_key = 'IssuerB' AND stock_code = '3711'
+            """,
+            (TARGET_DATE,),
+        ).fetchone()
+
+    assert row == (1,)
