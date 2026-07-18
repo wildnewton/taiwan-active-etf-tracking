@@ -206,19 +206,20 @@ def test_discovery_does_not_reactivate_a_manually_retired_etf():
     assert get_etf_config("RETIRED")["retired"] == 1
 
 
-def test_legacy_lifecycle_columns_do_not_control_historical_eligibility():
+def test_legacy_lifecycle_inputs_do_not_control_historical_eligibility():
     db.init_db(":memory:")
-    _seed_etf("HISTORICAL", retired=1)
+    upsert_etf(
+        {
+            "code": "HISTORICAL",
+            "name": "HISTORICAL",
+            "issuer": "Issuer-HISTORICAL",
+            "listing_date": "2026-07-01",
+            "retired": 1,
+            "last_active_date": DISCOVERY_DATE,
+            "pending_retirement_since": OLDER_DATE,
+        }
+    )
     _insert_stock_holding(OLDER_DATE, "HISTORICAL")
-    with db._connect() as conn:
-        conn.execute(
-            """
-            UPDATE etf_universe
-            SET last_active_date = ?, pending_retirement_since = ?
-            WHERE code = 'HISTORICAL'
-            """,
-            (DISCOVERY_DATE, OLDER_DATE),
-        )
 
     assert "HISTORICAL" not in get_eligible_etf_codes(LATEST_DATE)
 
