@@ -39,4 +39,9 @@ jobs:
           pip install pytest pytest-asyncio
 
       - name: Run tests
-        run: PYTHONPATH=. pytest -q
+        run: >-
+          PYTHONPATH=. pytest -q
+          tests/test_pr90_fresh_eye_defects.py
+          tests/test_pr90_fresh_eye_async.py
+          tests/test_manager_intent_rollups.py
+          tests/test_selected_pipeline_retry.py
