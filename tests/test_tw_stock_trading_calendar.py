@@ -194,10 +194,7 @@ async def test_daily_browser_scrape_recovers_only_missing_snapshot_on_non_tradin
 
 
 @pytest.mark.asyncio
-async def test_daily_browser_scrape_non_trading_day_all_preexisting_is_noop():
-    page = object()
-    scraper = AsyncMock()
-
+async def test_daily_browser_scrape_non_trading_day_all_preexisting_skips_playwright():
     with patch("pipeline.date", NonTradingRunDate), patch(
         "pipeline._current_run_at",
         return_value=datetime.combine(
@@ -213,11 +210,14 @@ async def test_daily_browser_scrape_non_trading_day_all_preexisting_is_noop():
     ), patch(
         "pipeline.snapshot_exists", return_value=True
     ), patch(
-        "pipeline.scrape_holdings_with_browser_async", scraper
-    ), patch("pipeline.init_db"):
-        summary = await run_daily_scrape_with_browser_async(":memory:", page=page)
+        "pipeline.init_db"
+    ), patch(
+        "playwright.async_api.async_playwright",
+        side_effect=AssertionError("Playwright must not start"),
+    ) as async_playwright:
+        summary = await run_daily_scrape_with_browser_async(":memory:")
 
-    scraper.assert_not_awaited()
+    async_playwright.assert_not_called()
     assert summary["preexisting_success"] == 2
     assert summary["data_freshness"] == {"fresh": 2, "stale": 0, "unknown": 0}
 
