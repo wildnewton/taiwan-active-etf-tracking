@@ -129,6 +129,7 @@ def run_try_run(
                 print(f"Disposable DB snapshot: {disposable_db}")
             else:
                 print("Production DB does not exist; try-run will start from an empty disposable DB")
+
             print(f"Disposable report directory: {disposable_reports}")
             result = run_nightly_pipeline(
                 str(disposable_db),
@@ -390,7 +391,6 @@ def run_nightly_pipeline(
 
     return {
         "scrape_summary": scrape_summary,
-        "target_data_date": target_data_date,
         "change_summary": change_summary,
         "manager_intent_summary": manager_intent_summary,
         "signal_summary": signal_summary,
