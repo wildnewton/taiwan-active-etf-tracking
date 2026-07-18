@@ -250,6 +250,7 @@ def _prepare_scrape_run(
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
     if not skip_existing_snapshot:
+        summary["attempted_etf_codes"] = [etf["code"] for etf in etfs]
         return run_date, expected_data_date, summary, etfs
 
     preexisting, etfs_to_scrape = _partition_preexisting_successes(
@@ -257,6 +258,7 @@ def _prepare_scrape_run(
         expected_data_date,
     )
     _record_preexisting_success(summary, len(preexisting), expected_data_date)
+    summary["attempted_etf_codes"] = [etf["code"] for etf in etfs_to_scrape]
     return run_date, expected_data_date, summary, etfs_to_scrape
 
 
@@ -431,12 +433,11 @@ def _new_summary(
         "date": run_date.isoformat(),
         "expected_data_date": expected_data_date.isoformat() if expected_data_date else None,
         "is_trading_day": is_trading_day,
-        "skip_reason": None,
         "total_etfs": total_etfs,
+        "attempted_etf_codes": [],
         "moneydj_success": 0,
         "official_success": 0,
         "failed": 0,
-        "skipped_non_trading_day": 0,
         "preexisting_success": 0,
         "skipped_stale_existing": 0,
         "total_stock_rows": 0,
