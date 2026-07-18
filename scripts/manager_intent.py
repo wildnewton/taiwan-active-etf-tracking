@@ -107,12 +107,23 @@ def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) 
         date_value: set(get_eligible_etf_codes(date_value))
         for date_value in window_dates
     }
+    canonical_sources = _canonical_sources_by_date(
+        window_dates,
+        eligible_codes_by_date,
+    )
     events = _change_events(conn, window_dates, eligible_codes_by_date)
     candidates, stock_names, issuer_by_etf = _candidate_etf_stocks(
-        conn, window_dates, events, eligible_codes_by_date
+        conn,
+        window_dates,
+        events,
+        eligible_codes_by_date,
+        canonical_sources,
     )
     comparable_context = _comparable_context(
-        conn, window_dates, eligible_codes_by_date
+        conn,
+        window_dates,
+        eligible_codes_by_date,
+        canonical_sources,
     )
     if not comparable_context:
         return []
@@ -205,17 +216,36 @@ def _change_events(
     ]
 
 
+def _canonical_sources_by_date(
+    window_dates: list[str],
+    eligible_codes_by_date: dict[str, set[str]],
+) -> dict[tuple[str, str], str]:
+    canonical_sources = {}
+    for date_value in window_dates:
+        for etf_code in eligible_codes_by_date.get(date_value, set()):
+            source_type = db.get_canonical_snapshot_source(date_value, etf_code)
+            if source_type:
+                canonical_sources[(date_value, etf_code)] = source_type
+    return canonical_sources
+
+
 def _candidate_etf_stocks(
     conn,
     window_dates: list[str],
     events: list[dict],
     eligible_codes_by_date: dict[str, set[str]],
+    canonical_sources: dict[tuple[str, str], str],
 ) -> tuple[set[tuple[str, str]], dict[str, str], dict[str, str]]:
     candidates: set[tuple[str, str]] = set()
     stock_names: dict[str, str] = {}
     issuer_by_etf = _issuer_by_etf(conn)
 
-    for row in _holding_rows(conn, window_dates, eligible_codes_by_date):
+    for row in _holding_rows(
+        conn,
+        window_dates,
+        eligible_codes_by_date,
+        canonical_sources,
+    ):
         etf_code = row["etf_code"]
         stock_code = row["stock_code"]
         candidates.add((etf_code, stock_code))
@@ -237,13 +267,14 @@ def _holding_rows(
     conn,
     window_dates: list[str],
     eligible_codes_by_date: dict[str, set[str]],
+    canonical_sources: dict[tuple[str, str], str],
 ) -> list[dict]:
     if not window_dates:
         return []
     rows = _dict_rows(
         conn,
         f"""
-        SELECT date, etf_code, stock_code, stock_name
+        SELECT date, etf_code, stock_code, stock_name, source_type
         FROM etf_daily_holdings
         WHERE date IN ({_placeholders(window_dates)})
           AND asset_type = 'stock'
@@ -254,6 +285,8 @@ def _holding_rows(
         row
         for row in rows
         if row["etf_code"] in eligible_codes_by_date.get(row["date"], set())
+        and row["source_type"]
+        == canonical_sources.get((row["date"], row["etf_code"]))
     ]
 
 
@@ -269,6 +302,7 @@ def _comparable_context(
     conn,
     window_dates: list[str],
     eligible_codes_by_date: dict[str, set[str]],
+    canonical_sources: dict[tuple[str, str], str],
 ) -> set[tuple[str, str]]:
     """Return comparable ``(date, etf_code)`` pairs.
 
@@ -294,22 +328,14 @@ def _comparable_context(
         and row["etf_code"] in eligible_codes_by_date.get(row["date"], set())
     }
     dates_with_diagnostics = {row["date"] for row in diagnostics}
-    fallback_dates = [date for date in window_dates if date not in dates_with_diagnostics]
-    if fallback_dates:
-        holdings = _dict_rows(
-            conn,
-            f"""
-            SELECT DISTINCT date, etf_code
-            FROM etf_daily_holdings
-            WHERE date IN ({_placeholders(fallback_dates)})
-            """,
-            fallback_dates,
-        )
-        context.update(
-            (row["date"], row["etf_code"])
-            for row in holdings
-            if row["etf_code"] in eligible_codes_by_date.get(row["date"], set())
-        )
+    fallback_dates = {
+        date for date in window_dates if date not in dates_with_diagnostics
+    }
+    context.update(
+        (date_value, etf_code)
+        for date_value, etf_code in canonical_sources
+        if date_value in fallback_dates
+    )
     return context
 
 

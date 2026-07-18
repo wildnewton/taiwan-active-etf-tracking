@@ -149,10 +149,9 @@ def _active_etfs_for_run(run_date: date) -> list[dict]:
 def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
     init_db(db_path)
     run_at = _as_taipei_run_at(_current_run_at())
-    active_etfs = _active_etfs_for_run(run_at.date())
     return _run_scrape_sync(
         db_path,
-        active_etfs,
+        None,
         scrape_fn,
         already_initialized=True,
         run_at=run_at,
@@ -161,7 +160,7 @@ def _run_daily_scrape_sync(db_path: str, scrape_fn: ScrapeFn) -> dict:
 
 def _run_scrape_sync(
     db_path: str,
-    etfs: list[dict],
+    etfs: list[dict] | None,
     scrape_fn: ScrapeFn,
     already_initialized: bool = False,
     use_trading_calendar: bool = True,
@@ -238,14 +237,15 @@ def _prepare_scrape_run(
         )
 
     run_date = run_at.date()
-    if etfs is None:
-        etfs = _active_etfs_for_run(run_date)
-    etfs = list(etfs)
-
     if expected_data_date is None:
         expected_data_date = _expected_data_date_for_run(run_at, use_trading_calendar)
     else:
         expected_data_date = _coerce_run_date(expected_data_date)
+
+    if etfs is None:
+        etfs = _active_etfs_for_run(expected_data_date or run_date)
+    etfs = list(etfs)
+
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
