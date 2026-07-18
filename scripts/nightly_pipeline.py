@@ -179,6 +179,40 @@ def _require_successful_change_detection(change_summary, target_data_date):
         )
 
 
+def _non_trading_day_downstream_outcome(scrape_summary, target_coverage):
+    """Return a no-op reason or fail when a non-trading-day recovery made no progress."""
+    if scrape_summary.get("is_trading_day") is not False:
+        return None
+
+    attempted_codes = set(scrape_summary.get("attempted_etf_codes") or [])
+    missing_codes = set(target_coverage["missing_etfs"])
+    if not attempted_codes:
+        if not missing_codes:
+            return "target_snapshot_already_complete"
+        missing = ",".join(sorted(missing_codes))
+        raise RuntimeError(
+            "non-trading-day recovery had no eligible attempts: "
+            f"missing={missing}"
+        )
+
+    persisted_codes = set(target_coverage["actual_etf_codes"])
+    recovered_codes = sorted(attempted_codes & persisted_codes)
+    if not recovered_codes:
+        missing = ",".join(sorted(missing_codes)) or "none"
+        attempted = ",".join(sorted(attempted_codes)) or "none"
+        raise RuntimeError(
+            "non-trading-day recovery produced no complete target snapshots: "
+            f"attempted={attempted}, missing={missing}"
+        )
+
+    print(
+        "Non-trading-day recovery persisted "
+        f"{len(recovered_codes)} complete target snapshot(s): "
+        f"{', '.join(recovered_codes)}."
+    )
+    return None
+
+
 def run_nightly_pipeline(
     db_path,
     report_dir,
@@ -217,20 +251,6 @@ def run_nightly_pipeline(
     scrape_summary = run_daily_scrape_with_browser(db_path)
     print(f"  Scrape summary: {scrape_summary}")
 
-    if scrape_summary.get("skip_reason") == "tw_stock_market_closed":
-        print(
-            "TW stock market closed on "
-            f"{scrape_summary.get('date')}; "
-            f"latest trading data date is "
-            f"{scrape_summary.get('expected_data_date') or 'unknown'}."
-        )
-        print("Skipping downstream steps because no new holdings data is expected.")
-        print("Nightly Taiwan active ETF pipeline complete")
-        return {
-            "scrape_summary": scrape_summary,
-            "skipped_downstream": True,
-        }
-
     total_etfs = scrape_summary.get("total_etfs")
     target_data_date = scrape_summary.get("expected_data_date")
     if not target_data_date:
@@ -240,6 +260,23 @@ def run_nightly_pipeline(
     expected_etfs = target_coverage["expected_count"]
     available_etfs = target_coverage["actual_count"]
     missing_etfs = target_coverage["missing_etfs"]
+
+    downstream_skip_reason = _non_trading_day_downstream_outcome(
+        scrape_summary,
+        target_coverage,
+    )
+    if downstream_skip_reason:
+        print(
+            "Non-trading-day target holdings were already complete; "
+            "skipping downstream regeneration."
+        )
+        print("Nightly Taiwan active ETF pipeline complete")
+        return {
+            "scrape_summary": scrape_summary,
+            "skipped_downstream": True,
+            "downstream_skip_reason": downstream_skip_reason,
+        }
+
     if expected_etfs and available_etfs < expected_etfs:
         print(
             f"⚠️ 資料不完整: 預期 {expected_etfs} 檔 ETF，"

@@ -249,11 +249,8 @@ def _prepare_scrape_run(
     is_trading_day = _is_trading_day_for_run(run_date, use_trading_calendar)
     summary = _new_summary(run_date, len(etfs), expected_data_date, is_trading_day)
 
-    if _should_skip_non_trading_day(is_trading_day, use_trading_calendar):
-        _record_non_trading_day_skip(summary, len(etfs))
-        return run_date, expected_data_date, summary, []
-
     if not skip_existing_snapshot:
+        summary["attempted_etf_codes"] = [etf["code"] for etf in etfs]
         return run_date, expected_data_date, summary, etfs
 
     preexisting, etfs_to_scrape = _partition_preexisting_successes(
@@ -261,6 +258,7 @@ def _prepare_scrape_run(
         expected_data_date,
     )
     _record_preexisting_success(summary, len(preexisting), expected_data_date)
+    summary["attempted_etf_codes"] = [etf["code"] for etf in etfs_to_scrape]
     return run_date, expected_data_date, summary, etfs_to_scrape
 
 
@@ -415,13 +413,6 @@ def _is_trading_day_for_run(
     return is_tw_trading_day(run_date)
 
 
-def _should_skip_non_trading_day(
-    is_trading_day: Optional[bool],
-    use_trading_calendar: bool,
-) -> bool:
-    return use_trading_calendar and is_trading_day is False
-
-
 def _coerce_run_date(value):
     if value is None:
         return None
@@ -442,12 +433,11 @@ def _new_summary(
         "date": run_date.isoformat(),
         "expected_data_date": expected_data_date.isoformat() if expected_data_date else None,
         "is_trading_day": is_trading_day,
-        "skip_reason": None,
         "total_etfs": total_etfs,
+        "attempted_etf_codes": [],
         "moneydj_success": 0,
         "official_success": 0,
         "failed": 0,
-        "skipped_non_trading_day": 0,
         "preexisting_success": 0,
         "skipped_stale_existing": 0,
         "total_stock_rows": 0,
@@ -464,11 +454,6 @@ def _new_summary(
         "data_date_max": None,
         "_known_data_dates": [],
     }
-
-
-def _record_non_trading_day_skip(summary: dict, skipped_count: int) -> None:
-    summary["skipped_non_trading_day"] = skipped_count
-    summary["skip_reason"] = "tw_stock_market_closed"
 
 
 def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str]]:
@@ -490,7 +475,6 @@ def _validate_snapshot_dates(result: dict) -> tuple[Optional[date], Optional[str
     if len(unique_dates) != 1:
         return None, "inconsistent_source_dates"
     return parsed_dates[0], None
-
 
 
 def _classify_scrape_status(
@@ -677,6 +661,7 @@ def _record_freshness(
         })
         return
     raise ValueError(f"Unknown scrape status: {status}")
+
 
 def _finalize_data_date_range(summary: dict) -> None:
     known_dates = summary.pop("_known_data_dates", [])
