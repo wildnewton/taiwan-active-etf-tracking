@@ -24,62 +24,66 @@ jobs:
           from pathlib import Path
 
           path = Path("tests/test_nightly_pipeline.py")
-          text = path.read_text(encoding="utf-8")
+          lines = path.read_text(encoding="utf-8").splitlines()
 
-          old_helper = '''def _run_main(db_path, report_dir):
-              import importlib.util
-              with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
-                  "db.get_target_snapshot_coverage",
-                  return_value={
-                      "actual_count": 19,
-                      "expected_count": 19,
-                      "missing_etfs": [],
-                  },
-              ):
-          '''
-          old_helper = old_helper.replace("              ", "    ")
-          new_helper = '''def _run_main(db_path, report_dir, coverage=None):
-              import importlib.util
-              coverage = coverage or {
-                  "actual_count": 19,
-                  "expected_count": 19,
-                  "missing_etfs": [],
-              }
-              with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
-                  "db.get_target_snapshot_coverage",
-                  return_value=coverage,
-              ):
-          '''
-          new_helper = new_helper.replace("              ", "    ")
-          assert text.count(old_helper) == 1
-          text = text.replace(old_helper, new_helper, 1)
+          helper_index = lines.index("def _run_main(db_path, report_dir):")
+          lines[helper_index] = "def _run_main(db_path, report_dir, coverage=None):"
+          import_index = helper_index + 1
+          assert lines[import_index].strip() == "import importlib.util"
+          lines[import_index + 1:import_index + 1] = [
+              "    coverage = coverage or {",
+              '        "actual_count": 19,',
+              '        "expected_count": 19,',
+              '        "missing_etfs": [],',
+              "    }",
+          ]
 
-          old_call = '''        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+          coverage_patch = next(
+              i for i in range(helper_index, helper_index + 30)
+              if '"db.get_target_snapshot_coverage"' in lines[i]
+          )
+          assert lines[coverage_patch + 1].strip() == "return_value={"
+          end = coverage_patch + 2
+          while lines[end].strip() != "},":
+              end += 1
+          lines[coverage_patch + 1:end + 1] = ["        return_value=coverage,"]
 
-              out = capsys.readouterr().out
-              assert "預期" in out and "19" in out and "13" in out, f"Expected completeness warning in:\n{out}"
-              assert "00401A" in out, f"Expected failing ETF code in output:\n{out}"
-          '''
-          old_call = old_call.replace("              ", "    ")
-          new_call = '''        _run_main(
-                  str(tmp_path / "t.sqlite3"),
-                  str(tmp_path / "r"),
-                  coverage={
-                      "actual_count": 13,
-                      "expected_count": 19,
-                      "missing_etfs": ["00401A"],
-                  },
-              )
+          test_index = lines.index("def test_warns_when_incomplete_scrape(capsys, tmp_path):")
+          next_test = next(
+              i for i in range(test_index + 1, len(lines))
+              if lines[i].startswith("def test_")
+          )
+          call_index = next(
+              i for i in range(test_index, next_test)
+              if '_run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))' in lines[i]
+          )
+          lines[call_index:call_index + 1] = [
+              "        _run_main(",
+              '            str(tmp_path / "t.sqlite3"),',
+              '            str(tmp_path / "r"),',
+              "            coverage={",
+              '                "actual_count": 13,',
+              '                "expected_count": 19,',
+              '                "missing_etfs": ["00401A"],',
+              "            },",
+              "        )",
+          ]
 
-              out = capsys.readouterr().out
-              assert "⚠️ 資料不完整: 預期 19 檔 ETF，實際可用 13 檔" in out
-              assert "缺少目標日持倉: 00401A" in out
-          '''
-          new_call = new_call.replace("              ", "    ")
-          assert text.count(old_call) == 1
-          text = text.replace(old_call, new_call, 1)
+          next_test = next(
+              i for i in range(test_index + 1, len(lines))
+              if lines[i].startswith("def test_")
+          )
+          first_assert = next(
+              i for i in range(test_index, next_test)
+              if lines[i].strip().startswith('assert "預期"')
+          )
+          assert "00401A" in lines[first_assert + 1]
+          lines[first_assert:first_assert + 2] = [
+              '    assert "⚠️ 資料不完整: 預期 19 檔 ETF，實際可用 13 檔" in out',
+              '    assert "缺少目標日持倉: 00401A" in out',
+          ]
 
-          path.write_text(text, encoding="utf-8")
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
           PY
 
       - name: Commit test alignment
