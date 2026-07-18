@@ -78,15 +78,16 @@ def test_script_exists():
     assert SCRIPT.is_file(), f"Missing {SCRIPT}"
 
 
-def _run_main(db_path, report_dir):
+def _run_main(db_path, report_dir, coverage=None):
     import importlib.util
+    coverage = coverage or {
+        "actual_count": 19,
+        "expected_count": 19,
+        "missing_etfs": [],
+    }
     with patch("changes.get_latest_valid_date", return_value="2026-06-26"), patch(
         "db.get_target_snapshot_coverage",
-        return_value={
-            "actual_count": 19,
-            "expected_count": 19,
-            "missing_etfs": [],
-        },
+        return_value=coverage,
     ):
         spec = importlib.util.spec_from_file_location("nightly_pipeline", str(SCRIPT))
         mod = importlib.util.module_from_spec(spec)
@@ -225,11 +226,19 @@ def test_warns_when_incomplete_scrape(capsys, tmp_path):
          patch("signals.generate_manager_signals", return_value={}), \
          patch("report.generate_signal_report", return_value=""), \
          patch("traction_analysis.generate_traction_report", return_value=""):
-        _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
+        _run_main(
+            str(tmp_path / "t.sqlite3"),
+            str(tmp_path / "r"),
+            coverage={
+                "actual_count": 13,
+                "expected_count": 19,
+                "missing_etfs": ["00401A"],
+            },
+        )
 
     out = capsys.readouterr().out
-    assert "預期" in out and "19" in out and "13" in out, f"Expected completeness warning in:\n{out}"
-    assert "00401A" in out, f"Expected failing ETF code in output:\n{out}"
+    assert "⚠️ 資料不完整: 預期 19 檔 ETF，實際可用 13 檔" in out
+    assert "缺少目標日持倉: 00401A" in out
 
 
 def test_stale_summary_is_diagnostic_when_persisted_target_is_complete(capsys, tmp_path):

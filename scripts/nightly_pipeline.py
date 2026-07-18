@@ -149,13 +149,13 @@ def run_try_run(
         )
 
 
-def _resolve_target_data_date(scrape_summary, db_path):
+def _resolve_target_data_date(scrape_summary, db_path, coverage=None):
     """Validate persisted holdings coverage for the expected target date."""
     target_data_date = scrape_summary.get("expected_data_date")
     if not target_data_date:
         raise RuntimeError("nightly scrape did not provide expected_data_date")
 
-    coverage = db.get_target_snapshot_coverage(target_data_date)
+    coverage = coverage or db.get_target_snapshot_coverage(target_data_date)
     persisted_date = get_latest_valid_date()
     if persisted_date != target_data_date:
         resolved_db = ":memory:" if db_path == ":memory:" else str(Path(db_path).resolve())
@@ -232,25 +232,21 @@ def run_nightly_pipeline(
         }
 
     total_etfs = scrape_summary.get("total_etfs")
-    moneydj_success = scrape_summary.get("moneydj_success", 0)
-    official_success = scrape_summary.get("official_success", 0)
-    successful_etfs = moneydj_success + official_success
-    available_etfs = (
-        successful_etfs + scrape_summary.get("preexisting_success", 0)
-    )
-    if total_etfs is not None and available_etfs < total_etfs:
-        failures = scrape_summary.get("failures", [])
-        failed_codes = [
-            failure.get("etf_code")
-            for failure in failures
-            if isinstance(failure, dict) and failure.get("etf_code")
-        ]
-        failure_text = f"（失敗: {', '.join(failed_codes)}）" if failed_codes else ""
-        print(
-            f"⚠️ 資料不完整: 預期 {total_etfs} 檔 ETF，"
-            f"實際可用 {available_etfs} 檔{failure_text}"
-        )
+    target_data_date = scrape_summary.get("expected_data_date")
+    if not target_data_date:
+        raise RuntimeError("nightly scrape did not provide expected_data_date")
 
+    target_coverage = db.get_target_snapshot_coverage(target_data_date)
+    expected_etfs = target_coverage["expected_count"]
+    available_etfs = target_coverage["actual_count"]
+    missing_etfs = target_coverage["missing_etfs"]
+    if expected_etfs and available_etfs < expected_etfs:
+        print(
+            f"⚠️ 資料不完整: 預期 {expected_etfs} 檔 ETF，"
+            f"實際可用 {available_etfs} 檔"
+        )
+        if missing_etfs:
+            print(f"缺少目標日持倉: {', '.join(missing_etfs)}")
     moneydj_warnings = scrape_summary.get("moneydj_warnings", [])
     if moneydj_warnings:
         print(f"\n⚠️ MoneyDJ 驗證失敗 ({len(moneydj_warnings)} ETFs):")
@@ -289,7 +285,11 @@ def run_nightly_pipeline(
             ]
             print(f"Unknown source dates: {', '.join(unknown_codes)}")
 
-    target_data_date = _resolve_target_data_date(scrape_summary, db_path)
+    target_data_date = _resolve_target_data_date(
+        scrape_summary,
+        db_path,
+        coverage=target_coverage,
+    )
 
     print("Step 3/7: Detecting holding changes...")
     change_summary = detect_holding_changes(current_date=target_data_date)
