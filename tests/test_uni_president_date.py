@@ -15,7 +15,10 @@ def _rich_uni_president_rows():
         "4.20", "3.90", "3.60", "3.30", "3.00", "2.70", "2.50", "2.30",
         "2.10", "1.90", "1.70", "1.50", "1.30", "1.10", "0.90", "0.70",
     ]
-    data_rows = [["2330", "台積電", "13,300,000", weight] for weight in weights]
+    data_rows = [
+        [str(2330 + index), f"股票{index}", "13,300,000", weight]
+        for index, weight in enumerate(weights)
+    ]
     return [header] + data_rows
 
 

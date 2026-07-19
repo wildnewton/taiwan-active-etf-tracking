@@ -19,6 +19,7 @@ from config import get_etf_config
 from scrapers.moneydj import scrape_moneydj
 from scrapers.moneydj_browser import scrape_moneydj_browser
 from scrapers.official import scrape_official_static, scrape_official_with_browser
+from snapshot_validation import MIN_TAIWAN_STOCK_ROWS, validate_snapshot_rows
 
 
 FAILED_RESULT = {
@@ -92,9 +93,11 @@ def scrape_holdings(etf_code: str, target_date: date) -> dict:
     target_date = _require_target_date(target_date)
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
-        moneydj_result = _apply_min_weight_gate(
-            _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _normalize_source_result(
+            moneydj_result,
+            "moneydj_primary",
         )
+    if moneydj_result["ok"] is True:
         official_candidate = None
         if _is_stale_result(moneydj_result, target_date):
             official_candidate = _official_fallback_static(etf_code)
@@ -144,9 +147,11 @@ async def scrape_holdings_with_browser_async(
     # 1. MoneyDJ static (fastest) — synchronous request work runs off-loop.
     moneydj_result = await _retry_moneydj_async(etf_code)
     if moneydj_result["ok"] is True:
-        moneydj_result = _apply_min_weight_gate(
-            _with_source_type(moneydj_result, "moneydj_primary")
+        moneydj_result = _normalize_source_result(
+            moneydj_result,
+            "moneydj_primary",
         )
+    if moneydj_result["ok"] is True:
         official_candidate = None
         if _is_stale_result(moneydj_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
@@ -162,9 +167,11 @@ async def scrape_holdings_with_browser_async(
     # 2. MoneyDJ browser
     browser_result = await scrape_moneydj_browser(etf_code, page)
     if browser_result["ok"] is True:
-        browser_result = _apply_min_weight_gate(
-            _with_source_type(browser_result, "moneydj_browser")
+        browser_result = _normalize_source_result(
+            browser_result,
+            "moneydj_browser",
         )
+    if browser_result["ok"] is True:
         official_candidate = None
         if _is_stale_result(browser_result, target_date):
             official_candidate = await _official_fallback_with_browser(etf_code, page)
@@ -190,9 +197,12 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
     if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
         official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
-            return _apply_min_weight_gate(
-                _with_source_type(official_browser, "official_fallback")
+            official_browser = _normalize_source_result(
+                official_browser,
+                "official_fallback",
             )
+            if official_browser["ok"] is True:
+                return official_browser
 
     return await asyncio.to_thread(_official_fallback_static, etf_code)
 
@@ -200,8 +210,9 @@ async def _official_fallback_with_browser(etf_code: str, page) -> dict:
 def _official_fallback_static(etf_code: str) -> dict:
     official_result = scrape_official_static(etf_code)
     if official_result["ok"] is True:
-        return _apply_min_weight_gate(
-            _with_source_type(official_result, "official_fallback")
+        return _normalize_source_result(
+            official_result,
+            "official_fallback",
         )
     return official_result
 
@@ -425,16 +436,21 @@ def _with_source_type(result: dict, source_type: str) -> dict:
     }
 
 
+def _normalize_source_result(result: dict, source_type: str) -> dict:
+    return _apply_min_weight_gate(_with_source_type(result, source_type))
+
+
 def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOLD) -> dict:
-    """Normalize holdings and recompute retained post-filter weight totals.
+    """Normalize holdings and reject snapshots invalidated by the stock filter.
 
     `total_weight_all_rows` and `total_weight_stock_rows` describe only rows kept
     after the stock minimum-weight gate; they are not raw source-extracted totals.
     Non-stock rows remain untouched because derivatives may have zero or negative
     weights.
     """
+    original_stock_rows = list(result.get("stock_rows", []) or [])
     stock_rows = [
-        row for row in result.get("stock_rows", []) or []
+        row for row in original_stock_rows
         if (row.get("weight_pct") or 0.0) >= threshold
     ]
     all_rows = [
@@ -442,8 +458,7 @@ def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOL
         if row.get("asset_type") != "stock" or (row.get("weight_pct") or 0.0) >= threshold
     ]
     non_stock_rows = list(result.get("non_stock_rows", []) or [])
-
-    return {
+    normalized = {
         **result,
         "all_rows": all_rows,
         "stock_rows": stock_rows,
@@ -451,6 +466,19 @@ def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOL
         "total_weight_all_rows": sum(row.get("weight_pct") or 0.0 for row in all_rows),
         "total_weight_stock_rows": sum(row.get("weight_pct") or 0.0 for row in stock_rows),
     }
+    filter_changed_snapshot = (
+        len(original_stock_rows) >= MIN_TAIWAN_STOCK_ROWS
+        and len(stock_rows) < len(original_stock_rows)
+    )
+    if filter_changed_snapshot:
+        valid, reason = validate_snapshot_rows([*stock_rows, *non_stock_rows])
+        if not valid:
+            return {
+                **normalized,
+                "ok": False,
+                "reason": f"post_filter_invalid_snapshot:{reason}",
+            }
+    return normalized
 
 
 def _run_async(coro) -> dict:

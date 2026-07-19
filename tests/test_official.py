@@ -809,7 +809,10 @@ async def test_scrape_uni_president_playwright_extracts_table(mock_config):
         "4.20", "3.90", "3.60", "3.30", "3.00", "2.70", "2.50", "2.30",
         "2.10", "1.90", "1.70", "1.50", "1.30", "1.10", "0.90", "0.70",
     ]
-    data_rows = [["2330", "台積電", "13,300,000", w] for w in weights]
+    data_rows = [
+        [str(2330 + index), f"股票{index}", "13,300,000", weight]
+        for index, weight in enumerate(weights)
+    ]
     rows_data = [header] + data_rows
 
     mock_table = _make_mock_table(rows_data)
@@ -924,7 +927,10 @@ async def test_scrape_official_with_browser_dispatches_uni_president(mock_config
         "4.20", "3.90", "3.60", "3.30", "3.00", "2.70", "2.50", "2.30",
         "2.10", "1.90", "1.70", "1.50", "1.30", "1.10", "0.90", "0.70",
     ]
-    data_rows = [["2330", "台積電", "13,300,000", w] for w in weights]
+    data_rows = [
+        [str(2330 + index), f"股票{index}", "13,300,000", weight]
+        for index, weight in enumerate(weights)
+    ]
     mock_table = _make_mock_table([header] + data_rows)
     page = _make_mock_page(tables=[mock_table], body_text="2026/06/18")
 

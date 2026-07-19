@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, datetime
 from unittest.mock import AsyncMock, patch
 
@@ -132,14 +133,12 @@ def test_duplicate_stock_code_is_rejected_without_replacing_existing_snapshot():
     db.init_db(":memory:")
     assert db.replace_daily_snapshot(_holding_rows(), [])["inserted"] is True
     incoming = _holding_rows()
-    incoming[-1] = HoldingRow(
-        **{
-            **incoming[-1].__dict__,
-            "stock_code": incoming[0].stock_code,
-            "stock_name": incoming[0].stock_name,
-            "asset_name": incoming[0].asset_name,
-            "shares": incoming[0].shares + 1,
-        }
+    incoming[-1] = replace(
+        incoming[-1],
+        stock_code=incoming[0].stock_code,
+        stock_name=incoming[0].stock_name,
+        asset_name=incoming[0].asset_name,
+        shares=incoming[0].shares + 1,
     )
 
     result = db.replace_daily_snapshot(incoming, [])
@@ -156,12 +155,7 @@ def test_invalid_weight_is_rejected_without_replacing_existing_snapshot(invalid_
     db.init_db(":memory:")
     assert db.replace_daily_snapshot(_holding_rows(), [])["inserted"] is True
     incoming = _holding_rows()
-    incoming[0] = HoldingRow(
-        **{
-            **incoming[0].__dict__,
-            "weight_pct": invalid_weight,
-        }
-    )
+    incoming[0] = replace(incoming[0], weight_pct=invalid_weight)
 
     result = db.replace_daily_snapshot(incoming, [])
 

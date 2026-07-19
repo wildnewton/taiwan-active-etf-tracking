@@ -5,6 +5,7 @@ Total-weight ranges are source diagnostics and never determine snapshot validity
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import date, datetime
 from typing import Any, Iterable
@@ -21,6 +22,13 @@ def validate_snapshot_rows(rows: Iterable[Any]) -> tuple[bool, str]:
         return False, "empty_rows"
     if any(_value(row, "weight_pct") is None for row in rows):
         return False, "missing_weight_pct"
+    for row in rows:
+        try:
+            weight = float(_value(row, "weight_pct"))
+        except (TypeError, ValueError):
+            return False, "invalid_weight_pct"
+        if not math.isfinite(weight):
+            return False, "invalid_weight_pct"
 
     parsed_dates = [_parse_date(_value(row, "date")) for row in rows]
     if any(value is None for value in parsed_dates):
@@ -42,11 +50,15 @@ def validate_snapshot_rows(rows: Iterable[Any]) -> tuple[bool, str]:
     stock_rows = [row for row in rows if _value(row, "asset_type") == "stock"]
     if len(stock_rows) < MIN_TAIWAN_STOCK_ROWS:
         return False, "fewer_than_5_taiwan_stock_rows"
+    stock_codes = []
     for row in stock_rows:
         stock_code = str(_value(row, "stock_code") or "")
         stock_name = str(_value(row, "stock_name") or "").strip()
         if not re.fullmatch(r"\d{4}", stock_code) or not stock_name:
             return False, "invalid_taiwan_stock_row"
+        stock_codes.append(stock_code)
+    if len(stock_codes) != len(set(stock_codes)):
+        return False, "duplicate_stock_codes"
 
     return True, "ok"
 
