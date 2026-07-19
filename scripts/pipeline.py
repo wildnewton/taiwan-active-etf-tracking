@@ -3,7 +3,12 @@ from datetime import date, datetime, time, timedelta
 from typing import Awaitable, Callable, Optional
 from zoneinfo import ZoneInfo
 
-from db import init_db, replace_daily_snapshot, snapshot_exists
+from db import (
+    compare_snapshot_to_existing,
+    init_db,
+    replace_daily_snapshot,
+    snapshot_exists,
+)
 from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
 from models import HoldingRow, NonStockAssetRow
 from scraper import (
@@ -11,6 +16,7 @@ from scraper import (
     scrape_holdings,
     scrape_holdings_with_browser_async,
 )
+from snapshot_validation import validate_snapshot_rows
 from trading_calendar import is_tw_trading_day, latest_tw_trading_day_on_or_before
 
 
@@ -37,13 +43,17 @@ def run_selected_scrape_with_browser(
     etf_codes: list[str],
     run_date=None,
     target_date=None,
+    *,
+    force: bool = False,
 ) -> dict:
     if target_date is None:
         target_date = run_date
     return asyncio.run(run_selected_scrape_with_browser_async(
-        db_path, etf_codes,
+        db_path,
+        etf_codes,
         run_date=_coerce_run_date(run_date),
         target_date=_coerce_run_date(target_date),
+        force=force,
     ))
 
 
@@ -92,6 +102,8 @@ async def run_selected_scrape_with_browser_async(
     page=None,
     run_date=None,
     target_date=None,
+    *,
+    force: bool = False,
 ) -> dict:
     selected_etfs = [{"code": code} for code in etf_codes]
     run_date = _coerce_run_date(run_date)
@@ -104,8 +116,20 @@ async def run_selected_scrape_with_browser_async(
             run_date=run_date,
             expected_data_date=target_date,
             use_trading_calendar=False,
-            skip_existing_snapshot=False,
+            skip_existing_snapshot=not force,
         )
+
+    resolved_run_date, expected_data_date, summary, etfs_to_scrape = _prepare_scrape_run(
+        db_path,
+        selected_etfs,
+        run_date=run_date,
+        expected_data_date=target_date,
+        use_trading_calendar=False,
+        skip_existing_snapshot=not force,
+    )
+    if not etfs_to_scrape:
+        _finalize_data_date_range(summary)
+        return summary
 
     from playwright.async_api import async_playwright
 
@@ -115,14 +139,12 @@ async def run_selected_scrape_with_browser_async(
             context = await browser.new_context(locale="zh-TW")
             try:
                 browser_page = await context.new_page()
-                return await _run_scrape_async(
-                    db_path,
-                    selected_etfs,
+                return await _execute_scrape_async(
+                    etfs_to_scrape,
                     _browser_scrape_fn(browser_page),
-                    run_date=run_date,
-                    expected_data_date=target_date,
-                    use_trading_calendar=False,
-                    skip_existing_snapshot=False,
+                    resolved_run_date,
+                    expected_data_date,
+                    summary,
                 )
             finally:
                 await context.close()
@@ -449,6 +471,7 @@ def _new_summary(
         "data_freshness": {"fresh": 0, "stale": 0, "unknown": 0},
         "stale_etfs": [],
         "stale_existing_etfs": [],
+        "stale_existing_comparisons": [],
         "unknown_date_etfs": [],
         "data_date_min": None,
         "data_date_max": None,
@@ -514,6 +537,30 @@ def _record_result(
         _record_failure(summary, etf_code, reason)
         return
 
+    normalized_rows = [
+        *(result.get("stock_rows") or []),
+        *(result.get("non_stock_rows") or []),
+    ]
+    valid, validation_reason = validate_snapshot_rows(normalized_rows)
+    if not valid:
+        reason = f"invalid_snapshot:{validation_reason}"
+        _record_freshness(
+            summary,
+            etf_code,
+            "failed",
+            None,
+            result,
+            unknown_reason=reason,
+        )
+        _record_failure(
+            summary,
+            etf_code,
+            reason,
+            run_moneydj_diagnostic=result.get("source_type")
+            not in {"moneydj_primary", "moneydj_browser"},
+        )
+        return
+
     data_date, date_error = _validate_snapshot_dates(result)
     if date_error is not None:
         _record_freshness(
@@ -559,6 +606,11 @@ def _record_result(
         )
         return
 
+    stock_rows = [_to_holding_row(row) for row in result["stock_rows"]]
+    non_stock_rows = [
+        _to_non_stock_asset_row(row) for row in result["non_stock_rows"]
+    ]
+
     summary["total_stock_rows"] += len(result["stock_rows"])
     summary["total_non_stock_rows"] += len(result["non_stock_rows"])
     if result["source_type"] in {"moneydj_primary", "moneydj_browser"}:
@@ -569,17 +621,20 @@ def _record_result(
     _record_freshness(summary, etf_code, final_status, data_date, result)
     _record_row_count_warning(summary, etf_code, result)
 
-    if final_status == "stale" and _should_skip_stale_existing_snapshot(
-        data_date,
-        etf_code,
-    ):
-        _record_stale_existing(summary, etf_code, data_date, result)
-        return
+    if final_status == "stale":
+        decision = compare_snapshot_to_existing(stock_rows, non_stock_rows)
+        if decision.get("existing_snapshot_found"):
+            _record_stale_existing_comparison(
+                summary,
+                etf_code,
+                freshness_target_date,
+                data_date,
+                decision,
+            )
+            if decision.get("equivalent"):
+                _record_stale_existing(summary, etf_code, data_date, result)
+                return
 
-    stock_rows = [_to_holding_row(row) for row in result["stock_rows"]]
-    non_stock_rows = [
-        _to_non_stock_asset_row(row) for row in result["non_stock_rows"]
-    ]
     replace_daily_snapshot(stock_rows, non_stock_rows)
 
 
@@ -595,11 +650,33 @@ def _record_failure(
         _check_moneydj_warning(summary, etf_code)
 
 
-def _should_skip_stale_existing_snapshot(
-    data_date: Optional[date],
+def _record_stale_existing_comparison(
+    summary: dict,
     etf_code: str,
-) -> bool:
-    return data_date is not None and snapshot_exists(data_date, etf_code)
+    target_date: date,
+    data_date: date,
+    decision: dict,
+) -> None:
+    equivalent = bool(decision.get("equivalent"))
+    summary["stale_existing_comparisons"].append({
+        "etf_code": etf_code,
+        "target_date": target_date.isoformat(),
+        "data_date": data_date.isoformat(),
+        "incoming_source_type": decision["incoming_source_type"],
+        "existing_source_type": decision["existing_source_type"],
+        "incoming_stock_count": decision["incoming_stock_count"],
+        "existing_stock_count": decision["existing_stock_count"],
+        "incoming_total_weight": decision["incoming_total_weight"],
+        "existing_total_weight": decision["existing_total_weight"],
+        "weight_delta_pct_points": decision["weight_delta_pct_points"],
+        "equivalent": equivalent,
+        "action": "skip_rewrite" if equivalent else "run_replacement_arbitration",
+        "reason": (
+            "same_stock_count_and_weight_delta_lt_1"
+            if equivalent
+            else "stock_count_or_weight_delta_mismatch"
+        ),
+    })
 
 
 def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result: dict) -> None:
@@ -608,7 +685,7 @@ def _record_stale_existing(summary: dict, etf_code: str, data_date: date, result
         "etf_code": etf_code,
         "data_date": data_date.isoformat(),
         "source_type": result.get("source_type") or "unknown",
-        "reason": "stale_snapshot_already_exists",
+        "reason": "stale_snapshot_equivalent",
     })
 
 

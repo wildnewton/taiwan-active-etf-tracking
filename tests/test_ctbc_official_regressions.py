@@ -291,7 +291,7 @@ async def test_ctbc_empty_stock_group_preserves_empty_rows_reason(mock_config):
     result = await scrape_ctbc_playwright(ETF_CODE, page)
 
     assert result["ok"] is False
-    assert result["reason"] == "empty rows"
+    assert result["reason"] == "empty_rows"
 
 
 @pytest.mark.asyncio

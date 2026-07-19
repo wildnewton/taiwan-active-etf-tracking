@@ -111,7 +111,7 @@ def test_structural_validation_failure_remains_failure():
     result = scrape_moneydj_with_rows(rows)
 
     assert result["ok"] is False
-    assert result["reason"] == "missing date"
+    assert result["reason"] == "missing_or_unparseable_date"
     assert "weight_warning" not in result
 
 

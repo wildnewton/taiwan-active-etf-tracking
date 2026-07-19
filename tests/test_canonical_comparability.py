@@ -4,6 +4,15 @@ import db
 from changes import detect_holding_changes
 
 
+_FILLER_STOCKS = [
+    ("9001", "Fixture 9001"),
+    ("9002", "Fixture 9002"),
+    ("9003", "Fixture 9003"),
+    ("9004", "Fixture 9004"),
+    ("9005", "Fixture 9005"),
+]
+
+
 def insert_holding(
     date,
     etf_code,
@@ -36,25 +45,41 @@ def insert_holding(
             ),
         )
         if complete:
-            stock_total = conn.execute(
-                """
-                SELECT COALESCE(SUM(weight_pct), 0.0)
-                FROM etf_daily_holdings
-                WHERE date = ? AND etf_code = ? AND source_type = ?
-                """,
-                (date, etf_code, source_type),
-            ).fetchone()[0]
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO etf_daily_non_stock_assets (
-                    date, etf_code, asset_name, asset_type, weight_pct,
-                    source_url, source_type, extraction_method, scraped_at
-                ) VALUES (?, ?, 'Cash', 'cash', ?, 'https://example.test',
-                          ?, 'test', '2026-06-24T00:00:00')
-                """,
-                (date, etf_code, 100.0 - stock_total, source_type),
-            )
-
+            existing_codes = {
+                row[0]
+                for row in conn.execute(
+                    """
+                    SELECT stock_code FROM etf_daily_holdings
+                    WHERE date = ? AND etf_code = ? AND source_type = ?
+                    """,
+                    (date, etf_code, source_type),
+                ).fetchall()
+            }
+            for filler_code, filler_name in _FILLER_STOCKS:
+                if len(existing_codes) >= 5:
+                    break
+                if filler_code in existing_codes:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO etf_daily_holdings (
+                        date, etf_code, asset_name, asset_type, stock_code,
+                        stock_name, shares, weight_pct, source_url, source_type,
+                        extraction_method, scraped_at
+                    ) VALUES (?, ?, ?, 'stock', ?, ?, 0, 0,
+                              'https://example.test', ?, 'test',
+                              '2026-06-24T00:00:00')
+                    """,
+                    (
+                        date,
+                        etf_code,
+                        f"{filler_name}({filler_code}.TW)",
+                        filler_code,
+                        filler_name,
+                        source_type,
+                    ),
+                )
+                existing_codes.add(filler_code)
 
 
 def fetch_changes(etf_code="00980A", date="2026-06-24"):
@@ -86,8 +111,8 @@ def fetch_change(stock_code, etf_code="00980A", date="2026-06-24"):
 def test_change_detection_uses_one_canonical_source_per_etf_date():
     db.init_db(":memory:")
 
-    # MoneyDJ has the complete source. Official is a lower-quality duplicate for
-    # the same ETF/date/stock and must not affect ranking or deltas.
+    # MoneyDJ is valid and higher priority. Official is a valid lower-priority
+    # duplicate and must not affect ranking or deltas.
     insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0, "moneydj_primary")
     insert_holding("2026-06-23", "00980A", "2308", "台達電", 200, 5.0, "moneydj_primary")
     insert_holding("2026-06-23", "00980A", "2330", "台積電", None, 8.0, "official_static")
@@ -100,7 +125,7 @@ def test_change_detection_uses_one_canonical_source_per_etf_date():
 
     assert summary["ok"] is True
     assert summary["skipped_etfs"] == []
-    assert summary["rows"] == 2
+    assert summary["rows"] == 6
 
     tsmc = fetch_change("2330")
     assert tsmc["source_type"] == "moneydj_primary"
@@ -115,14 +140,14 @@ def test_change_detection_uses_one_canonical_source_per_etf_date():
 def test_partial_current_source_is_not_comparable_and_does_not_create_removed_positions():
     db.init_db(":memory:")
 
-    # Previous day is a full holdings source with 4 stocks.
+    # Previous day is a structurally valid holdings source.
     insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0, "moneydj_primary")
     insert_holding("2026-06-23", "00980A", "2308", "台達電", 100, 8.0, "moneydj_primary")
     insert_holding("2026-06-23", "00980A", "2454", "聯發科", 100, 6.0, "moneydj_primary")
     insert_holding("2026-06-23", "00980A", "2383", "台光電", 100, 4.0, "moneydj_primary")
 
-    # Current day only has a partial fallback source. This should be skipped,
-    # not treated as three removed core positions.
+    # Current day only has one fallback stock and is structurally invalid. It
+    # must be skipped, not treated as removed positions.
     insert_holding(
         "2026-06-24",
         "00980A",
@@ -159,6 +184,6 @@ def test_high_overlap_source_switch_is_comparable():
     summary = detect_holding_changes("2026-06-24", "2026-06-23")
 
     assert summary["ok"] is True
-    assert summary["rows"] == 3
+    assert summary["rows"] == 7
     assert summary["skipped_etfs"] == []
     assert fetch_change("2330")["position_change_type"] == "confirmed_active_add"

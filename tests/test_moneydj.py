@@ -163,9 +163,12 @@ def test_validate_rows_accepts_low_weight_when_structure_is_valid():
 
 def test_validate_rows_accepts_overcounted_weight_when_structure_is_valid():
     rows = make_complete_rows()
-    duplicated_rows = rows + rows + rows
+    overweight_rows = [
+        {**row, "weight_pct": row["weight_pct"] * 3}
+        for row in rows
+    ]
 
-    ok, reason = validate_rows(duplicated_rows)
+    ok, reason = validate_rows(overweight_rows)
 
     assert ok is True
     assert reason == "ok"

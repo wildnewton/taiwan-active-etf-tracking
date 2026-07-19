@@ -93,7 +93,7 @@ def test_scrape_moneydj_browser_integration():
     result = run(scrape_moneydj_browser(ETF_CODE, page))
 
     assert result["ok"] is False
-    assert result["reason"] == "fewer than 5 rows"
+    assert result["reason"] == "fewer_than_5_rows"
     assert len(result["all_rows"]) == 3
     assert len(result["stock_rows"]) == 3
     assert result["non_stock_rows"] == []
