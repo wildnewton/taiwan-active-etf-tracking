@@ -1,9 +1,7 @@
 """Official ETF issuer fallback scrapers.
 
-Official issuer pages are fallback sources. They are not always guaranteed to
-expose the same complete all-asset table as MoneyDJ Basic0007B, so this module
-uses issuer-specific validation instead of the strict MoneyDJ ~100% full-weight
-validation.
+Official sources share the same structural snapshot validation as MoneyDJ.
+Total weight remains a diagnostic warning and never determines validity.
 """
 
 import json
@@ -18,9 +16,12 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from config import get_etf_config
 from scrapers.moneydj import classify_asset, dedupe_rows, split_rows
+from snapshot_validation import validate_snapshot_rows
 
 
 SOURCE_TYPE = "official_fallback"
+OFFICIAL_WARNING_MIN_TOTAL_WEIGHT = 20.0
+OFFICIAL_WARNING_MAX_TOTAL_WEIGHT = 110.0
 EXTRACTION_METHOD_STATIC = "requests_bs4"
 EXTRACTION_METHOD_API = "playwright_api_intercept"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
@@ -987,43 +988,23 @@ def _sum_weights(rows: list) -> float:
 
 
 def _validate_official_rows(rows: list) -> tuple[bool, str]:
-    if not rows:
-        return False, "empty rows"
-    if len(rows) < 5:
-        return False, "fewer than 5 rows"
-    if any(row.get("weight_pct") is None for row in rows):
-        return False, "missing weight_pct"
-
-    total_weight = _sum_weights(rows)
-    if total_weight < 20.0 or total_weight > 110.0:
-        return False, f"official weight out of range: {total_weight:.2f}"
-
-    stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
-    if len(stock_rows) < 5:
-        return False, "fewer than 5 Taiwan stock rows"
-    for row in stock_rows:
-        stock_code = row.get("stock_code")
-        stock_name = row.get("stock_name")
-        if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
-            return False, "invalid Taiwan stock row"
-    if _single_source_date(rows) is None:
-        return False, "missing or inconsistent source date"
-    return True, "ok"
+    return validate_snapshot_rows(rows)
 
 
-def _single_source_date(rows: list):
-    parsed_dates = set()
-    for row in rows:
-        value = row.get("date")
-        if not value:
-            return None
-        try:
-            parsed_dates.add(datetime.strptime(str(value), "%Y/%m/%d").date())
-        except ValueError:
-            return None
-    if len(parsed_dates) != 1:
+def _official_weight_warning(total_weight: float) -> dict | None:
+    if total_weight < OFFICIAL_WARNING_MIN_TOTAL_WEIGHT:
+        reason = "total_weight_below_expected_range"
+    elif total_weight > OFFICIAL_WARNING_MAX_TOTAL_WEIGHT:
+        reason = "total_weight_above_expected_range"
+    else:
         return None
-    return next(iter(parsed_dates))
+    return {
+        "reason": reason,
+        "source_total_weight_all_rows": total_weight,
+        "minimum_expected_weight": OFFICIAL_WARNING_MIN_TOTAL_WEIGHT,
+        "maximum_expected_weight": OFFICIAL_WARNING_MAX_TOTAL_WEIGHT,
+    }
+
 
 
 def _failed_result(source_url: str, reason: str) -> dict:
@@ -1043,7 +1024,8 @@ def _failed_result(source_url: str, reason: str) -> dict:
 def _build_result(all_rows: list, source_url: str, extraction_method: str) -> dict:
     ok, reason = _validate_official_rows(all_rows)
     stock_rows, non_stock_rows = split_rows(all_rows)
-    return {
+    total_weight_all_rows = _sum_weights(all_rows)
+    result = {
         "ok": ok,
         "reason": reason,
         "all_rows": all_rows,
@@ -1051,6 +1033,11 @@ def _build_result(all_rows: list, source_url: str, extraction_method: str) -> di
         "non_stock_rows": non_stock_rows,
         "source_url": source_url,
         "source_type": SOURCE_TYPE,
-        "total_weight_all_rows": _sum_weights(all_rows),
+        "total_weight_all_rows": total_weight_all_rows,
         "total_weight_stock_rows": _sum_weights(stock_rows),
     }
+    if ok:
+        warning = _official_weight_warning(total_weight_all_rows)
+        if warning is not None:
+            result["weight_warning"] = warning
+    return result

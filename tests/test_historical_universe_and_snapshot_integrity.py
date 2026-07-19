@@ -1,16 +1,28 @@
 from datetime import datetime
 from unittest.mock import patch
 
+import pytest
+
 import db
 import report
 from changes import detect_holding_changes, get_latest_valid_date
 from etf_universe import get_eligible_etf_codes, retire_etf
 from retry_stale_scrapes import retry_missing_holdings
+from snapshot_validation import validate_snapshot_rows as real_validate_snapshot_rows
 
+
+pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
 
 TARGET_DATE = "2026-07-15"
 PREVIOUS_DATE = "2026-07-14"
 EXECUTION_DATE = "2026-07-17"
+VALID_STOCKS = [
+    ("2301", "光寶科"),
+    ("2303", "聯電"),
+    ("2308", "台達電"),
+    ("2317", "鴻海"),
+    ("2330", "台積電"),
+]
 
 
 def _seed_etf(
@@ -79,45 +91,106 @@ def _insert_snapshot(
             )
 
 
-def test_snapshot_exists_requires_rows_and_total_weight_within_strict_one_percent():
+def _insert_valid_snapshot(
+    data_date: str,
+    etf_code: str,
+    *,
+    total_stock_weight: float,
+    non_stock_weight: float = 0.0,
+) -> None:
+    now = datetime.now().isoformat()
+    per_stock_weight = total_stock_weight / len(VALID_STOCKS)
+    with db._connect() as conn:
+        conn.executemany(
+            """
+            INSERT INTO etf_daily_holdings (
+                date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                shares, weight_pct, source_url, source_type,
+                extraction_method, scraped_at
+            ) VALUES (?, ?, ?, 'stock', ?, ?, 100, ?,
+                      'https://example.test', 'moneydj_primary', 'test', ?)
+            """,
+            [
+                (
+                    data_date,
+                    etf_code,
+                    f"{name}({code}.TW)",
+                    code,
+                    name,
+                    per_stock_weight,
+                    now,
+                )
+                for code, name in VALID_STOCKS
+            ],
+        )
+        if non_stock_weight:
+            conn.execute(
+                """
+                INSERT INTO etf_daily_non_stock_assets (
+                    date, etf_code, asset_name, asset_type, weight_pct,
+                    source_url, source_type, extraction_method, scraped_at
+                ) VALUES (?, ?, '現金', 'cash', ?, 'https://example.test',
+                          'moneydj_primary', 'test', ?)
+                """,
+                (data_date, etf_code, non_stock_weight, now),
+            )
+
+
+def test_snapshot_exists_uses_structural_validity_not_total_weight(
+    monkeypatch, strict_snapshot_validation
+):
+    monkeypatch.setattr(db, "validate_snapshot_rows", real_validate_snapshot_rows)
     db.init_db(":memory:")
     _seed_etf("A")
 
     assert db.snapshot_exists(TARGET_DATE, "A") is False
 
-    _insert_snapshot(TARGET_DATE, "A", stock_weight=99.0)
-    assert db.snapshot_exists(TARGET_DATE, "A") is False
-
-    with db._connect() as conn:
-        conn.execute("DELETE FROM etf_daily_holdings")
-    _insert_snapshot(TARGET_DATE, "A", stock_weight=99.01)
+    _insert_valid_snapshot(TARGET_DATE, "A", total_stock_weight=90.0)
     assert db.snapshot_exists(TARGET_DATE, "A") is True
 
     with db._connect() as conn:
         conn.execute("DELETE FROM etf_daily_holdings")
-    _insert_snapshot(TARGET_DATE, "A", stock_weight=100.99)
+    _insert_valid_snapshot(TARGET_DATE, "A", total_stock_weight=500.0)
     assert db.snapshot_exists(TARGET_DATE, "A") is True
 
     with db._connect() as conn:
         conn.execute("DELETE FROM etf_daily_holdings")
-    _insert_snapshot(TARGET_DATE, "A", stock_weight=101.0)
+    for code, name in VALID_STOCKS[:4]:
+        with db._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO etf_daily_holdings (
+                    date, etf_code, asset_name, asset_type, stock_code, stock_name,
+                    shares, weight_pct, source_url, source_type,
+                    extraction_method, scraped_at
+                ) VALUES (?, 'A', ?, 'stock', ?, ?, 100, 25,
+                          'https://example.test', 'moneydj_primary', 'test', ?)
+                """,
+                (TARGET_DATE, f"{name}({code}.TW)", code, name, datetime.now().isoformat()),
+            )
     assert db.snapshot_exists(TARGET_DATE, "A") is False
 
 
-def test_snapshot_integrity_counts_stock_and_non_stock_rows_together():
+def test_snapshot_integrity_counts_stock_and_non_stock_rows_together(
+    monkeypatch, strict_snapshot_validation
+):
+    monkeypatch.setattr(db, "validate_snapshot_rows", real_validate_snapshot_rows)
     db.init_db(":memory:")
     _seed_etf("A")
-    _insert_snapshot(
+    _insert_valid_snapshot(
         TARGET_DATE,
         "A",
-        stock_weight=85.0,
+        total_stock_weight=85.0,
         non_stock_weight=15.0,
     )
 
     assert db.snapshot_exists(TARGET_DATE, "A") is True
 
 
-def test_non_stock_only_rows_do_not_form_a_holdings_snapshot():
+def test_non_stock_only_rows_do_not_form_a_holdings_snapshot(
+    monkeypatch, strict_snapshot_validation
+):
+    monkeypatch.setattr(db, "validate_snapshot_rows", real_validate_snapshot_rows)
     db.init_db(":memory:")
     _seed_etf("A")
     _insert_snapshot(TARGET_DATE, "A", stock_weight=0.0, non_stock_weight=100.0)

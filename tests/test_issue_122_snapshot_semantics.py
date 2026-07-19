@@ -6,7 +6,7 @@ import pytest
 import db
 import pipeline
 from models import HoldingRow
-from scrapers.official import _validate_official_rows
+from scrapers.official import _build_result, _validate_official_rows
 
 
 TARGET_DATE = date(2026, 7, 17)
@@ -19,6 +19,7 @@ STOCKS = [
     ("2308", "台達電"),
     ("2317", "鴻海"),
     ("2330", "台積電"),
+    ("2382", "廣達"),
 ]
 
 
@@ -49,7 +50,7 @@ def _holding_rows(
     ]
 
 
-def _result(data_date=TARGET_DATE, *, total_weight=90.0):
+def _result(data_date=TARGET_DATE, *, total_weight=90.0, count=5):
     rows = [
         {
             "date": data_date.isoformat(),
@@ -64,7 +65,7 @@ def _result(data_date=TARGET_DATE, *, total_weight=90.0):
             "source_type": row.source_type,
             "extraction_method": row.extraction_method,
         }
-        for row in _holding_rows(data_date, total_weight=total_weight)
+        for row in _holding_rows(data_date, total_weight=total_weight, count=count)
     ]
     return {
         "ok": True,
@@ -106,6 +107,42 @@ def test_official_total_weight_is_not_a_validity_gate():
     rows = _result(total_weight=10.0)["all_rows"]
 
     assert _validate_official_rows(rows) == (True, "ok")
+    result = _build_result(rows, "https://example.test", "test")
+    assert result["ok"] is True
+    assert result["weight_warning"]["reason"] == "total_weight_below_expected_range"
+
+
+@pytest.mark.parametrize(
+    ("incoming_total", "expected_equivalent"),
+    [(90.99, True), (91.0, False)],
+)
+def test_stale_weight_delta_boundary(tmp_path, incoming_total, expected_equivalent):
+    db_path = tmp_path / f"boundary-{incoming_total}.sqlite"
+    db.init_db(str(db_path))
+    db.replace_daily_snapshot(_holding_rows(STALE_DATE, total_weight=90.0), [])
+
+    decision = db.compare_snapshot_to_existing(
+        _holding_rows(STALE_DATE, total_weight=incoming_total),
+        [],
+    )
+
+    assert decision["weight_delta_pct_points"] == pytest.approx(incoming_total - 90.0)
+    assert decision["equivalent"] is expected_equivalent
+
+
+def test_stale_stock_count_mismatch_is_not_equivalent(tmp_path):
+    db_path = tmp_path / "count-mismatch.sqlite"
+    db.init_db(str(db_path))
+    db.replace_daily_snapshot(_holding_rows(STALE_DATE, count=5), [])
+
+    decision = db.compare_snapshot_to_existing(
+        _holding_rows(STALE_DATE, count=6),
+        [],
+    )
+
+    assert decision["incoming_stock_count"] == 6
+    assert decision["existing_stock_count"] == 5
+    assert decision["equivalent"] is False
 
 
 def test_stale_equivalent_snapshot_is_skipped_with_comparison_evidence(tmp_path):
@@ -142,6 +179,38 @@ def test_stale_equivalent_snapshot_is_skipped_with_comparison_evidence(tmp_path)
     ]
 
 
+def test_stale_mismatch_runs_replacement_arbitration(tmp_path):
+    db_path = tmp_path / "stale-mismatch.sqlite"
+    db.init_db(str(db_path))
+    db.replace_daily_snapshot(_holding_rows(STALE_DATE, total_weight=90.0), [])
+    summary = pipeline._new_summary(TARGET_DATE, 1, TARGET_DATE, True)
+
+    pipeline._record_result(
+        summary,
+        ETF_CODE,
+        TARGET_DATE,
+        TARGET_DATE,
+        _result(STALE_DATE, total_weight=91.0),
+    )
+
+    assert summary["skipped_stale_existing"] == 0
+    assert summary["stale_existing_comparisons"][0]["equivalent"] is False
+    assert (
+        summary["stale_existing_comparisons"][0]["action"]
+        == "run_replacement_arbitration"
+    )
+    with db._connect() as conn:
+        total_weight = conn.execute(
+            """
+            SELECT SUM(weight_pct)
+            FROM etf_daily_holdings
+            WHERE date = ? AND etf_code = ?
+            """,
+            (STALE_DATE.isoformat(), ETF_CODE),
+        ).fetchone()[0]
+    assert total_weight == pytest.approx(91.0)
+
+
 @pytest.mark.asyncio
 async def test_selected_scrape_skips_existing_snapshot_by_default(tmp_path):
     db_path = tmp_path / "selected.sqlite"
@@ -159,6 +228,28 @@ async def test_selected_scrape_skips_existing_snapshot_by_default(tmp_path):
         )
 
     scraper.assert_not_awaited()
+    assert summary["preexisting_success"] == 1
+    assert summary["attempted_etf_codes"] == []
+
+
+@pytest.mark.asyncio
+async def test_selected_scrape_with_no_missing_etfs_does_not_start_playwright(tmp_path):
+    db_path = tmp_path / "selected-no-browser.sqlite"
+    db.init_db(str(db_path))
+    db.replace_daily_snapshot(_holding_rows(), [])
+
+    with patch(
+        "playwright.async_api.async_playwright",
+        side_effect=AssertionError("Playwright must not start"),
+    ) as async_playwright:
+        summary = await pipeline.run_selected_scrape_with_browser_async(
+            str(db_path),
+            [ETF_CODE],
+            run_date=TARGET_DATE,
+            target_date=TARGET_DATE,
+        )
+
+    async_playwright.assert_not_called()
     assert summary["preexisting_success"] == 1
     assert summary["attempted_etf_codes"] == []
 

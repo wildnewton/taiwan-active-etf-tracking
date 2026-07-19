@@ -3,6 +3,8 @@ import re
 import requests
 from bs4 import BeautifulSoup
 
+from snapshot_validation import validate_snapshot_rows as validate_rows
+
 
 MONEYDJ_URL_TEMPLATE = (
     "https://www.moneydj.com/ETF/X/Basic/Basic0007B.xdjhtm?etfid={code}.TW"
@@ -11,7 +13,7 @@ SOURCE_TYPE = "moneydj_primary"
 EXTRACTION_METHOD = "requests_bs4"
 
 # Basic0007B is the full-holdings page. Weight-quality warnings must use all
-# parsed rows, including non-stock assets, because the total should be near 100%.
+# parsed rows, including non-stock assets. Weight is diagnostic, not validity.
 WARNING_MIN_TOTAL_WEIGHT = 70.0
 WARNING_MAX_TOTAL_WEIGHT = 140.0
 
@@ -36,7 +38,7 @@ def fetch_html(url: str, timeout: int = 30) -> str:
     response = requests.get(url, headers=headers, timeout=timeout)
     response.raise_for_status()
     # MoneyDJ returns Content-Type without charset; requests defaults to
-    # ISO-8859-1 which garbles Chinese characters.  Force UTF-8.
+    # ISO-8859-1 which garbles Chinese characters. Force UTF-8.
     response.encoding = "utf-8"
     return response.text
 
@@ -138,32 +140,6 @@ def dedupe_rows(rows: list) -> list:
         deduped.append(row)
 
     return deduped
-
-
-def validate_rows(rows: list) -> tuple[bool, str]:
-    if not rows:
-        return False, "empty rows"
-
-    if len(rows) < 5:
-        return False, "fewer than 5 rows"
-
-    if any(not row.get("date") for row in rows):
-        return False, "missing date"
-
-    if any(row.get("weight_pct") is None for row in rows):
-        return False, "missing weight_pct"
-
-    stock_rows = [row for row in rows if row.get("asset_type") == "stock"]
-    if len(stock_rows) < 5:
-        return False, "fewer than 5 Taiwan stock rows"
-
-    for row in stock_rows:
-        stock_code = row.get("stock_code")
-        stock_name = row.get("stock_name")
-        if not stock_name or not re.fullmatch(r"\d{4}", str(stock_code or "")):
-            return False, "invalid Taiwan stock row"
-
-    return True, "ok"
 
 
 def _weight_warning(total_weight: float) -> dict | None:

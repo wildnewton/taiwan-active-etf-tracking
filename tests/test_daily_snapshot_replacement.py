@@ -5,6 +5,10 @@ import db
 import pipeline
 from models import HoldingRow, NonStockAssetRow
 from pipeline import run_daily_scrape
+import pytest
+
+pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
+
 
 
 RUN_DATE = date(2026, 7, 8)
@@ -155,34 +159,35 @@ def test_lower_priority_incoming_source_does_not_overwrite_higher_priority_exist
     assert rows_for() == [("2026-07-08", "00981A", "2330", "moneydj_primary")]
 
 
-def test_complete_lower_priority_snapshot_replaces_incomplete_higher_priority_snapshot():
+def test_valid_lower_priority_snapshot_replaces_invalid_higher_priority_snapshot(
+    monkeypatch, strict_snapshot_validation
+):
+    from snapshot_validation import validate_snapshot_rows
+
+    monkeypatch.setattr(db, "validate_snapshot_rows", validate_snapshot_rows)
     db.init_db(":memory:")
     db.insert_holdings([
-        holding(
-            stock_code="2330",
-            source_type="moneydj_primary",
-            weight_pct=50.0,
-        )
+        holding(stock_code=code, source_type="moneydj_primary", weight_pct=20.0)
+        for code in ("2301", "2303", "2308", "2317")
     ])
 
+    incoming_codes = ("2301", "2303", "2308", "2317", "2330")
     result = db.replace_daily_snapshot(
         [
-            holding(
-                stock_code="2330",
-                source_type="official_fallback",
-                weight_pct=100.0,
-            )
+            holding(stock_code=code, source_type="official_fallback", weight_pct=18.0)
+            for code in incoming_codes
         ],
         [],
     )
 
     assert result == {"inserted": True, "source_type": "official_fallback"}
     assert rows_for() == [
-        ("2026-07-08", "00981A", "2330", "official_fallback")
+        ("2026-07-08", "00981A", code, "official_fallback")
+        for code in incoming_codes
     ]
 
 
-def test_complete_higher_priority_snapshot_still_beats_complete_lower_priority_snapshot():
+def test_valid_higher_priority_snapshot_still_beats_valid_lower_priority_snapshot():
     db.init_db(":memory:")
     db.insert_holdings([
         holding(

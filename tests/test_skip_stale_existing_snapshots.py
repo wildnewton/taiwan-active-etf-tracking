@@ -5,6 +5,9 @@ import db
 import pipeline
 from models import HoldingRow
 from pipeline import run_daily_scrape
+import pytest
+
+pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
 
 
 RUN_DATE = date(2026, 6, 23)
@@ -55,20 +58,35 @@ def _base_patches(result):
     )
 
 
-def test_stale_result_with_existing_snapshot_skips_holding_replacement():
+def test_stale_result_with_equivalent_existing_snapshot_skips_replacement():
     patches = _base_patches(make_success())
+    decision = {
+        "existing_snapshot_found": True,
+        "incoming_valid": True,
+        "incoming_source_type": "moneydj_primary",
+        "existing_source_type": "moneydj_primary",
+        "incoming_stock_count": 1,
+        "existing_stock_count": 1,
+        "incoming_total_weight": 10.0,
+        "existing_total_weight": 10.0,
+        "weight_delta_pct_points": 0.0,
+        "equivalent": True,
+    }
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patch(
-        "pipeline.snapshot_exists",
-        side_effect=lambda data_date, _: data_date == STALE_DATA_DATE,
+        "pipeline.snapshot_exists", return_value=False
     ) as snapshot_exists, patch(
+        "pipeline.compare_snapshot_to_existing", return_value=decision
+    ) as compare_snapshot, patch(
         "pipeline.replace_daily_snapshot"
     ) as replace_snapshot:
         summary = run_daily_scrape(":memory:")
 
-    assert snapshot_exists.call_args_list[-1].args == (STALE_DATA_DATE, "00980A")
+    snapshot_exists.assert_called_once_with(RUN_DATE, "00980A")
+    compare_snapshot.assert_called_once()
     replace_snapshot.assert_not_called()
     assert summary["skipped_stale_existing"] == 1
     assert summary["stale_existing_etfs"][0]["data_date"] == "2026-06-22"
+    assert summary["stale_existing_comparisons"][0]["action"] == "skip_rewrite"
     assert summary["data_freshness"] == {"fresh": 0, "stale": 1, "unknown": 0}
 
 
@@ -76,6 +94,9 @@ def test_stale_result_without_existing_snapshot_writes_once():
     patches = _base_patches(make_success())
     with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patch(
         "pipeline.snapshot_exists", return_value=False
+    ), patch(
+        "pipeline.compare_snapshot_to_existing",
+        return_value={"existing_snapshot_found": False, "incoming_valid": True},
     ), patch(
         "pipeline.replace_daily_snapshot", return_value={"inserted": True}
     ) as replace_snapshot:

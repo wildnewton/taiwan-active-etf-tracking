@@ -212,3 +212,22 @@ Source-specific implementations live under `scripts/scrapers/`.
 - `scripts/traction_analysis.py`: generates nightly traction analysis output.
 
 Use maintenance scripts with care against a backed-up database when changing historical data.
+
+## Forced selected scrape
+
+`run_selected_scrape_with_browser()` limits a run to explicitly selected ETF codes. By default it still skips any ETF that already has a valid snapshot for the target date. Use `force=True` only for an intentional maintenance re-fetch, such as verifying a repaired parser or re-checking a specific historical date. Forced fetch does not bypass snapshot validation or replacement arbitration.
+
+```bash
+PYTHONPATH=scripts python - <<'PY'
+import json
+from pipeline import run_selected_scrape_with_browser
+
+summary = run_selected_scrape_with_browser(
+    "data/active_etf_holdings.sqlite",
+    ["00980A"],
+    target_date="2026-07-17",
+    force=True,
+)
+print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+PY
+```

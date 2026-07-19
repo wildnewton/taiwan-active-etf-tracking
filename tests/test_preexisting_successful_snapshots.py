@@ -7,6 +7,9 @@ import db
 import pipeline
 from models import HoldingRow
 
+pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
+
+
 
 RUN_DATE = date(2026, 7, 14)
 RUN_AT = datetime(
@@ -179,7 +182,7 @@ async def test_mixed_daily_browser_run_scrapes_only_missing_etfs(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_selected_internal_browser_still_forces_scrape(tmp_path):
+async def test_selected_internal_browser_force_true_scrapes_existing_snapshot(tmp_path):
     db_path = tmp_path / "selected.sqlite"
     _seed_snapshot(db_path, "00980A")
     browser_stack = _FakeBrowserStack()
@@ -196,6 +199,7 @@ async def test_selected_internal_browser_still_forces_scrape(tmp_path):
             str(db_path),
             ["00980A"],
             run_date=RUN_DATE,
+            force=True,
         )
 
     scraper.assert_awaited_once_with(

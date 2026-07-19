@@ -1,11 +1,16 @@
 from datetime import datetime
 
+import pytest
+
 import db
 import report
 from changes import detect_holding_changes
 from etf_universe import get_eligible_etf_codes, get_etf_config, reconcile_discovered_universe
 from manager_intent import generate_manager_intent_rollups
+from snapshot_validation import validate_snapshot_rows as real_validate_snapshot_rows
 
+
+pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
 
 D1 = "2026-07-01"
 D2 = "2026-07-02"
@@ -13,6 +18,7 @@ D3 = "2026-07-03"
 D4 = "2026-07-04"
 D5 = "2026-07-05"
 D6 = "2026-07-06"
+_FILLERS = ["9001", "9002", "9003", "9004"]
 
 
 def _seed_etf(
@@ -68,7 +74,7 @@ def _insert_stock(
             (
                 data_date,
                 etf_code,
-                f"Stock {stock_code}",
+                f"Stock {stock_code}({stock_code}.TW)",
                 stock_code,
                 f"Stock {stock_code}",
                 shares,
@@ -115,6 +121,7 @@ def _insert_complete_snapshot(
     source_type="moneydj_primary",
     shares=100.0,
 ):
+    """Compact fixture for tests that are not exercising snapshot validity."""
     _insert_stock(
         data_date,
         etf_code,
@@ -132,9 +139,40 @@ def _insert_complete_snapshot(
         )
 
 
-def test_one_canonical_source_prefers_complete_snapshot_across_all_consumers():
+def _insert_structurally_valid_snapshot(
+    data_date,
+    etf_code,
+    *,
+    stock_code,
+    source_type,
+    weight,
+):
+    _insert_stock(
+        data_date,
+        etf_code,
+        stock_code=stock_code,
+        weight=weight,
+        source_type=source_type,
+    )
+    for filler_code in _FILLERS:
+        _insert_stock(
+            data_date,
+            etf_code,
+            stock_code=filler_code,
+            weight=0.0,
+            shares=0.0,
+            source_type=source_type,
+        )
+
+
+def test_one_canonical_source_prefers_valid_snapshot_across_all_consumers(
+    monkeypatch, strict_snapshot_validation
+):
+    monkeypatch.setattr(db, "validate_snapshot_rows", real_validate_snapshot_rows)
     db.init_db(":memory:")
     _seed_etf("A")
+
+    # Higher-priority MoneyDJ is structurally invalid (one row).
     _insert_stock(
         D6,
         "A",
@@ -142,12 +180,13 @@ def test_one_canonical_source_prefers_complete_snapshot_across_all_consumers():
         weight=99.0,
         source_type="moneydj_primary",
     )
-    _insert_complete_snapshot(
+    # Lower-priority official source is structurally valid and becomes canonical.
+    _insert_structurally_valid_snapshot(
         D6,
         "A",
-        stock_weight=50.0,
         stock_code="2454",
         source_type="official_fallback",
+        weight=50.0,
     )
 
     assert db.get_canonical_snapshot_source(D6, "A") == "official_fallback"
@@ -155,7 +194,12 @@ def test_one_canonical_source_prefers_complete_snapshot_across_all_consumers():
     from changes import _select_canonical_sources
 
     assert _select_canonical_sources(D6)["A"]["source_type"] == "official_fallback"
-    assert [row["stock_code"] for row in report._canonical_stock_rows(D6)] == ["2454"]
+    relevant_codes = [
+        row["stock_code"]
+        for row in report._canonical_stock_rows(D6)
+        if row["stock_code"] in {"2330", "2454"}
+    ]
+    assert relevant_codes == ["2454"]
 
 
 def test_ineligible_only_date_does_not_create_false_consecutive_add():
