@@ -5,17 +5,46 @@ on:
     branches:
       - feature/jpmorgan-00401a-scraper
 
+permissions:
+  contents: write
+
 jobs:
-  red:
+  green:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refactor/jpmorgan-excel-endpoint
+          path: repo
+          fetch-depth: 1
+          show-progress: false
+      - uses: actions/checkout@v4
+        with:
+          ref: probe/jpmorgan-excel-endpoint
+          path: helper
           fetch-depth: 1
           show-progress: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -q -r requirements.txt
-      - run: PYTHONPATH=scripts pytest -q tests/test_jpmorgan_excel.py
+      - name: Apply direct refactor
+        working-directory: repo
+        run: python ../helper/tools/jpmorgan_excel_refactor.py
+      - name: Install dependencies
+        working-directory: repo
+        run: python -m pip install -q -r requirements.txt
+      - name: Run targeted tests
+        working-directory: repo
+        run: PYTHONPATH=scripts pytest -q tests/test_jpmorgan_excel.py
+      - name: Compile
+        working-directory: repo
+        run: python -m compileall -q scripts tests
+      - name: Commit GREEN
+        working-directory: repo
+        run: |
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(green): replace JPMorgan browser scraper with Excel endpoint'
+          git push origin HEAD:refactor/jpmorgan-excel-endpoint
