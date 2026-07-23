@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  diagnose-full-suite:
+  fix-contract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,26 +20,33 @@ jobs:
           show-progress: false
       - uses: actions/checkout@v4
         with:
-          ref: probe/jpmorgan-excel-endpoint-run
-          path: output
+          ref: probe/jpmorgan-excel-endpoint
+          path: helper
           fetch-depth: 1
           show-progress: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Capture exact CI failures
+      - name: Apply contract fix
         working-directory: repo
-        shell: bash
+        run: python ../helper/tools/fix_jpmorgan_target_date_contract.py
+      - name: Install CI dependencies
+        working-directory: repo
+        run: python -m pip install -q -r requirements.txt pytest pytest-asyncio
+      - name: Run regression tests
+        working-directory: repo
         run: |
-          python -m pip install -q -r requirements.txt pytest pytest-asyncio
-          set +e
-          PYTHONPATH=. pytest -q --tb=short > /tmp/full-suite-ci.log 2>&1
-          status=$?
-          cp /tmp/full-suite-ci.log ../output/full-suite-ci-error.txt
-          cd ../output
+          PYTHONPATH=. pytest -q \
+            tests/test_jpmorgan_excel.py \
+            tests/test_ctbc_official_regressions.py::test_browser_method_reaches_official_browser_scraper \
+            tests/test_row_count_validation.py::test_low_moneydj_row_count_uses_browser_official_fallback_when_available \
+            tests/test_scraper.py::test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser
+      - name: Commit contract fix
+        working-directory: repo
+        run: |
+          git diff --check
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add full-suite-ci-error.txt
-          git commit -m 'chore: capture exact JPMorgan CI failures' || true
-          git push origin HEAD:probe/jpmorgan-excel-endpoint-run
-          exit $status
+          git add scripts/scraper.py
+          git commit -m 'fix: preserve non-JPMorgan browser call contract'
+          git push origin HEAD:refactor/jpmorgan-excel-endpoint
