@@ -187,14 +187,14 @@ def test_jpmorgan_dispatcher_uses_excel_without_page(monkeypatch):
     handler.assert_called_once_with("00401A", target)
 
 
-def test_official_fallback_forwards_target_date(monkeypatch):
+def test_official_fallback_forwards_target_date_for_jpmorgan(monkeypatch):
     target = date(2026, 7, 22)
     page = object()
     browser = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(
         scraper,
         "get_etf_config",
-        lambda code: {"official_method": "api"},
+        lambda code: {"official_method": "api", "issuer": "JPMorgan"},
     )
     monkeypatch.setattr(scraper, "scrape_official_with_browser", browser)
     monkeypatch.setattr(scraper, "_normalize_source_result", lambda result, source: result)
@@ -209,3 +209,27 @@ def test_official_fallback_forwards_target_date(monkeypatch):
 
     assert result == {"ok": True}
     browser.assert_awaited_once_with("00401A", page, target_date=target)
+
+
+def test_official_fallback_preserves_existing_contract_for_other_issuers(monkeypatch):
+    target = date(2026, 7, 22)
+    page = object()
+    browser = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(
+        scraper,
+        "get_etf_config",
+        lambda code: {"official_method": "api", "issuer": "Capital"},
+    )
+    monkeypatch.setattr(scraper, "scrape_official_with_browser", browser)
+    monkeypatch.setattr(scraper, "_normalize_source_result", lambda result, source: result)
+
+    result = asyncio.run(
+        scraper._official_fallback_with_browser(
+            "00980A",
+            page,
+            target_date=target,
+        )
+    )
+
+    assert result == {"ok": True}
+    browser.assert_awaited_once_with("00980A", page)
