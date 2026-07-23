@@ -1,0 +1,57 @@
+name: JPMorgan DB config PR GREEN
+
+on:
+  pull_request:
+    types: [ready_for_review]
+    branches:
+      - feature/jpmorgan-00401a-scraper
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    if: github.head_ref == 'fix/jpmorgan-db-config-deployment'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/jpmorgan-db-config-deployment
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-asyncio
+      - name: Apply GREEN implementation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/jpmorgan-db-config-green.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("          PY\n", start)
+          script = workflow[start:end]
+          script = '\n'.join(
+              line[10:] if line.startswith('          ') else line
+              for line in script.splitlines()
+          )
+          exec(compile(script, '<green-implementation>', 'exec'))
+          PY
+      - name: Targeted tests
+        run: PYTHONPATH=. pytest -q tests/test_jpmorgan_db_config_deployment.py tests/test_jpmorgan_excel.py
+      - name: Full test suite
+        run: PYTHONPATH=. pytest -q
+      - name: Commit GREEN implementation
+        run: |
+          rm -f .github/jpmorgan-green-trigger
+          rm -f .github/workflows/jpmorgan-db-config-green.yml
+          rm -f .github/workflows/jpmorgan-db-config-pr-green.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "fix: deploy JPMorgan DB config and close XLSX workbooks (GREEN)"
+          git push origin HEAD:fix/jpmorgan-db-config-deployment
