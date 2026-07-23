@@ -5,48 +5,55 @@ on:
     branches:
       - feature/jpmorgan-00401a-scraper
 
-permissions:
-  contents: write
-
 jobs:
-  fix-contract:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: refactor/jpmorgan-excel-endpoint
-          path: repo
-          fetch-depth: 1
-          show-progress: false
-      - uses: actions/checkout@v4
-        with:
-          ref: probe/jpmorgan-excel-endpoint
-          path: helper
           fetch-depth: 1
           show-progress: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Apply contract fix
-        working-directory: repo
-        run: python ../helper/tools/fix_jpmorgan_target_date_contract.py
       - name: Install CI dependencies
-        working-directory: repo
-        run: python -m pip install -q -r requirements.txt pytest pytest-asyncio
-      - name: Run regression tests
-        working-directory: repo
         run: |
-          PYTHONPATH=. pytest -q \
-            tests/test_jpmorgan_excel.py \
-            tests/test_ctbc_official_regressions.py::test_browser_method_reaches_official_browser_scraper \
-            tests/test_row_count_validation.py::test_low_moneydj_row_count_uses_browser_official_fallback_when_available \
-            tests/test_scraper.py::test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser
-      - name: Commit contract fix
-        working-directory: repo
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest pytest-asyncio
+      - name: Compile
+        run: python -m compileall -q scripts tests
+      - name: Targeted tests
+        run: PYTHONPATH=scripts pytest -q tests/test_jpmorgan_excel.py
+      - name: Full CI suite
+        run: PYTHONPATH=. pytest -q
+      - name: Live JPMorgan Excel smoke
         run: |
-          git diff --check
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add scripts/scraper.py
-          git commit -m 'fix: preserve non-JPMorgan browser call contract'
-          git push origin HEAD:refactor/jpmorgan-excel-endpoint
+          PYTHONPATH=scripts python - <<'PY'
+          from datetime import date
+          from scrapers.official import scrape_jpmorgan_excel
+
+          result = scrape_jpmorgan_excel("00401A", date(2026, 7, 22))
+          summary = {
+              "ok": result["ok"],
+              "reason": result["reason"],
+              "stock_rows": len(result["stock_rows"]),
+              "non_stock_rows": len(result["non_stock_rows"]),
+              "total_weight": result["total_weight_all_rows"],
+              "first_stock": result["stock_rows"][0]["stock_code"] if result["stock_rows"] else None,
+              "last_stock": result["stock_rows"][-1]["stock_code"] if result["stock_rows"] else None,
+              "date": result["all_rows"][0]["date"] if result["all_rows"] else None,
+          }
+          print(summary)
+          assert summary == {
+              "ok": True,
+              "reason": "ok",
+              "stock_rows": 64,
+              "non_stock_rows": 3,
+              "total_weight": 99.99,
+              "first_stock": "2330",
+              "last_stock": "2615",
+              "date": "2026/07/22",
+          }
+          PY
