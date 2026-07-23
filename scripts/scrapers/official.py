@@ -4,12 +4,15 @@ Official sources share the same structural snapshot validation as MoneyDJ.
 Total weight remains a diagnostic warning and never determines validity.
 """
 
+import asyncio
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
+from io import BytesIO
 from urllib.parse import urlparse
 
 import requests
+from openpyxl import load_workbook
 from bs4 import BeautifulSoup
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -24,6 +27,7 @@ OFFICIAL_WARNING_MIN_TOTAL_WEIGHT = 20.0
 OFFICIAL_WARNING_MAX_TOTAL_WEIGHT = 110.0
 EXTRACTION_METHOD_STATIC = "requests_bs4"
 EXTRACTION_METHOD_API = "playwright_api_intercept"
+EXTRACTION_METHOD_EXCEL = "requests_xlsx"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
 EXTRACTION_METHOD_STEALTH = "stealth_playwright_api"
 _API_RESPONSE_TIMEOUT_MS = 10_000
@@ -681,11 +685,20 @@ def scrape_official_static(etf_code: str) -> dict:
         return _failed_result(source_url, str(exc))
 
 
-async def scrape_official_with_browser(etf_code: str, page) -> dict:
+async def scrape_official_with_browser(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     method = config["method"]
     issuer = config["issuer"]
+
+    if method == "api" and issuer == "JPMorgan":
+        if target_date is None:
+            return _failed_result(config["url"], "target_date is required for JPMorgan")
+        return await asyncio.to_thread(scrape_jpmorgan_excel, etf_code, target_date)
 
     if method == "api" and issuer == "Capital":
         return await scrape_capital_playwright(etf_code, page)
@@ -701,8 +714,6 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
         return await scrape_uni_president_playwright(etf_code, page)
 
 
-    if method == "playwright" and issuer == "JPMorgan":
-        return await scrape_jpmorgan_playwright(etf_code, page)
     return _failed_result(config["url"], f"No browser official scraper for {issuer} (method={method})")
 
 
@@ -950,460 +961,148 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
 
 
 
-async def _parse_jpmorgan_stock_rows(table, etf_code, source_url, date_str) -> list[dict]:
-    """Parse a stock holdings table into row dicts."""
-    rows = await table.query_selector_all('tr')
-    if len(rows) < 2:
-        return []
 
-    parsed = []
-    method = EXTRACTION_METHOD_PLAYWRIGHT
-
-    for row in rows[1:]:
-        cells = await row.query_selector_all('td')
-        if len(cells) < 3:  # Minimum: code + name + weight
-            continue
-
-        cell_texts = []
-        for c in cells:
-            cell_texts.append((await c.inner_text()).strip())
-
-        code_raw = cell_texts[0]
-        name = cell_texts[1]
-
-        code_match = re.search(r'\b(\d{4})\b', code_raw)
-        if not code_match:
-            continue  # Stock table, skip non-4-digit codes
-
-        stock_code = code_match.group(1)
-        asset_name = f"{name}({stock_code}.TW)"
-        classification = classify_asset(asset_name)
-
-        # classify_asset may return stock_name=None; fall back to raw name
-        final_stock_name = classification.get("stock_name") or name
-        final_asset_name = classification.get("asset_name") or asset_name
-
-        shares = None
-        amount = None
-        weight = None
-
-        if len(cell_texts) >= 5:
-            shares = _parse_number(cell_texts[2]) if cell_texts[2] else None
-            amount = _parse_number(cell_texts[3]) if cell_texts[3] else None
-            weight = _parse_float(cell_texts[4]) if cell_texts[4] else None
-        elif len(cell_texts) == 3:
-            weight = _parse_float(cell_texts[2]) if cell_texts[2] else None
-        elif len(cell_texts) == 4:
-            shares = _parse_number(cell_texts[2]) if cell_texts[2] else None
-            weight = _parse_float(cell_texts[3]) if cell_texts[3] else None
-
-        parsed.append({
-            "date": date_str,
-            "etf_code": etf_code.upper(),
-            "asset_name": final_asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": classification["stock_code"],
-            "stock_name": final_stock_name,
-            "shares": shares,
-            "market_value": amount,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": method,
-        })
-
-    return parsed
+_JPMORGAN_SHEETS = {
+    "基金資產 - 股票": "stock",
+    "基金資產 - 期貨": "futures",
+    "基金資產 - 選擇權": "options",
+    "現金與約當現金": "cash",
+}
 
 
-async def _parse_jpmorgan_derivative_rows(table, etf_code, source_url, date_str) -> list[dict]:
-    """Parse a futures/options table into row dicts."""
-    rows = await table.query_selector_all('tr')
-    if len(rows) < 2:
-        return []
+def _jpmorgan_sheet_rows(sheet, expected_date: date) -> list[tuple[str, ...]]:
+    rows = [
+        tuple("" if value is None else str(value).strip() for value in row)
+        for row in sheet.iter_rows(values_only=True)
+    ]
+    title = rows[0][0] if rows and rows[0] else ""
+    match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", title)
+    actual_date = match.group(1) if match else "missing"
+    if actual_date != expected_date.isoformat():
+        raise ValueError(
+            f"JPMorgan date mismatch: expected {expected_date.isoformat()}, "
+            f"got {actual_date}"
+        )
 
-    parsed = []
-    method = EXTRACTION_METHOD_PLAYWRIGHT
-
-    for row in rows[1:]:
-        cells = await row.query_selector_all('td')
-        if len(cells) < 4:
-            continue
-
-        cell_texts = []
-        for c in cells:
-            cell_texts.append((await c.inner_text()).strip())
-
-        while len(cell_texts) < 4:
-            cell_texts.append('')
-
-        code_raw = cell_texts[0]
-        name = cell_texts[1]
-
-        if code_raw.upper() in {"N/A", "-", ""}:
-            continue
-
-        stock_code = code_raw.strip().replace(' ', '')
-        asset_name = f"{name}({code_raw.strip()})"
-        classification = classify_asset(asset_name)
-
-        final_stock_code = stock_code
-        if classification["stock_code"]:
-            final_stock_code = classification["stock_code"]
-
-        final_stock_name = classification["stock_name"] or name
-        final_asset_name = classification.get("asset_name") or asset_name
-
-        if classification["asset_type"] == "unknown" and not final_stock_code:
-            continue
-
-        shares = _parse_number(cell_texts[2]) if cell_texts[2] else None
-        amount = None
-        weight = _parse_float(cell_texts[3]) if cell_texts[3] else None
-
-        parsed.append({
-            "date": date_str,
-            "etf_code": etf_code.upper(),
-            "asset_name": final_asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": final_stock_code,
-            "stock_name": final_stock_name,
-            "shares": shares,
-            "market_value": amount,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": method,
-        })
-
-    return parsed
+    for index, row in enumerate(rows):
+        if row and row[0] in {"股票代碼", "商品代碼", "名稱"}:
+            return [item for item in rows[index + 1 :] if item and item[0]]
+    raise ValueError(f"JPMorgan table header not found: {title}")
 
 
-async def _parse_jpmorgan_cash_rows(table, etf_code, source_url, date_str) -> list[dict]:
-    """Parse a cash holdings table into row dicts."""
-    rows = await table.query_selector_all('tr')
-    if len(rows) < 2:
-        return []
+def _jpmorgan_non_stock_row(
+    raw: tuple[str, ...],
+    asset_type: str,
+    etf_code: str,
+    source_url: str,
+    date_str: str,
+) -> dict | None:
+    if asset_type == "cash":
+        if len(raw) < 3:
+            return None
+        code, name, shares, amount, weight = None, raw[0], None, raw[1], raw[2]
+        asset_name = name
+    else:
+        if len(raw) < 4 or raw[0].upper() in {"", "-", "N/A"}:
+            return None
+        code, name, shares, amount, weight = raw[0], raw[1], raw[2], None, raw[3]
+        asset_name = f"{name}({code})"
 
-    parsed = []
-    method = EXTRACTION_METHOD_PLAYWRIGHT
-
-    cash_row = rows[1]
-    cells = await cash_row.query_selector_all('td')
-    if len(cells) < 3:
-        return []
-
-    cell_texts = []
-    for c in cells:
-        cell_texts.append((await c.inner_text()).strip())
-
-    while len(cell_texts) < 3:
-        cell_texts.append('')
-
-    name = cell_texts[0]
-    amount = _parse_number(cell_texts[1].replace(',', '')) if cell_texts[1] else None
-    weight = _parse_float(cell_texts[2]) if cell_texts[2] else None
-
-    asset_name = f"{name}"
-    classification = classify_asset(asset_name)
-    if "cash" not in classification["asset_type"].lower():
-        classification["asset_type"] = "cash"
-
-    if name and (weight is not None or amount is not None):
-        parsed.append({
-            "date": date_str,
-            "etf_code": etf_code.upper(),
-            "asset_name": asset_name,
-            "asset_type": classification["asset_type"],
-            "stock_code": None,
-            "stock_name": name,
-            "shares": None,
-            "market_value": amount,
-            "weight_pct": weight,
-            "source_url": source_url,
-            "source_type": SOURCE_TYPE,
-            "extraction_method": method,
-        })
-
-    return parsed
+    parsed_weight = _parse_float(weight)
+    if not name or parsed_weight is None:
+        return None
+    return {
+        "date": date_str,
+        "etf_code": etf_code,
+        "asset_name": asset_name,
+        "asset_type": asset_type,
+        "stock_code": code,
+        "stock_name": name,
+        "shares": _parse_number(shares) if shares else None,
+        "market_value": _parse_number(amount) if amount else None,
+        "weight_pct": parsed_weight,
+        "source_url": source_url,
+        "source_type": SOURCE_TYPE,
+        "extraction_method": EXTRACTION_METHOD_EXCEL,
+    }
 
 
-def _parse_jpmorgan_holdings_date(body_text: str) -> str | None:
-    """Extract the holdings date from the JPMorgan portfolio section."""
-    portfolio_match = re.search(
-        r"基金資產\s*-?\s*股票.*?截至\s*(\d{4}/\d{2}/\d{2})",
-        body_text,
-        re.DOTALL,
-    )
-    if portfolio_match:
-        return portfolio_match.group(1)
+def parse_jpmorgan_excel(
+    content: bytes,
+    etf_code: str,
+    source_url: str,
+    target_date: date,
+) -> list[dict]:
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    missing = [name for name in _JPMORGAN_SHEETS if name not in workbook.sheetnames]
+    if missing:
+        raise ValueError(f"JPMorgan sheets missing: {', '.join(missing)}")
 
-    matches = re.findall(r"截至\s*(\d{4}/\d{2}/\d{2})", body_text)
-    return matches[-1] if matches else None
+    etf_code = etf_code.upper()
+    date_str = target_date.strftime("%Y/%m/%d")
+    rows = []
+    for sheet_name, asset_type in _JPMORGAN_SHEETS.items():
+        for raw in _jpmorgan_sheet_rows(workbook[sheet_name], target_date):
+            if asset_type == "stock":
+                if len(raw) < 5 or not re.fullmatch(r"\d{4}", raw[0]):
+                    continue
+                weight = _parse_float(raw[4])
+                if not raw[1] or weight is None:
+                    continue
+                row = _row(
+                    etf_code,
+                    raw[0],
+                    raw[1],
+                    _parse_number(raw[2]),
+                    weight,
+                    source_url,
+                    date_str,
+                    EXTRACTION_METHOD_EXCEL,
+                )
+                row["market_value"] = _parse_number(raw[3])
+            else:
+                row = _jpmorgan_non_stock_row(
+                    raw,
+                    asset_type,
+                    etf_code,
+                    source_url,
+                    date_str,
+                )
+            if row:
+                rows.append(row)
+
+    rows = dedupe_rows(rows)
+    if len([row for row in rows if row["asset_type"] == "stock"]) < 5:
+        raise ValueError("JPMorgan stock rows not found")
+    return rows
 
 
-def _parse_jpmorgan_expected_stock_count(body_text: str) -> int | None:
-    """Return the stock-row count advertised by the portfolio section."""
-    patterns = (
-        r"基金資產\s*-?\s*股票.*?(?:共|總計)\s*(\d+)\s*筆",
-        r"(?:共|總計)\s*(\d+)\s*筆.*?基金資產\s*-?\s*股票",
-    )
-    for pattern in patterns:
-        match = re.search(pattern, body_text, re.DOTALL)
-        if match:
-            return int(match.group(1))
-    return None
-
-
-async def scrape_jpmorgan_playwright(etf_code: str, page) -> dict:
-    """Scrape one complete JPMorgan ETF holdings snapshot."""
+def scrape_jpmorgan_excel(etf_code: str, target_date: date) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
-
     try:
-        await page.goto(source_url, wait_until="load", timeout=60000)
-    except Exception as exc:
-        return _failed_result(source_url, f"navigation failed: {exc}")
-
-    try:
-        await page.wait_for_selector("table tr", state="attached", timeout=15000)
-        body_text = await page.locator("body").inner_text()
-        date_str = _parse_jpmorgan_holdings_date(body_text)
-        expected_stock_count = _parse_jpmorgan_expected_stock_count(body_text)
-        all_rows = dedupe_rows(
-            await _parse_jpmorgan_tables(
-                page,
-                etf_code,
-                source_url,
-                date_str,
-            )
-        )
-        result = _build_result(
-            all_rows,
+        params = {**config["internal_ids"], "date": target_date.isoformat()}
+        response = requests.get(
             source_url,
-            EXTRACTION_METHOD_PLAYWRIGHT,
+            params=params,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            },
+            timeout=30,
         )
-        actual_stock_count = len(result["stock_rows"])
-        if (
-            expected_stock_count is not None
-            and actual_stock_count < expected_stock_count
-        ):
-            return _failed_result(
-                source_url,
-                "incomplete_jpmorgan_stock_rows:"
-                f"{actual_stock_count}/{expected_stock_count}",
-            )
-        return result
-    except Exception as exc:
-        return _failed_result(
+        response.raise_for_status()
+        source_url = response.url
+        rows = parse_jpmorgan_excel(
+            response.content,
+            etf_code,
             source_url,
-            f"JPMorgan scrape failed: {exc}",
+            target_date,
         )
-
-
-async def _extract_jpmorgan_holdings_date(page) -> str | None:
-    """Extract the portfolio holdings date from the rendered page."""
-    body_text = await page.locator("body").inner_text()
-    return _parse_jpmorgan_holdings_date(body_text)
-
-
-async def _find_jpmorgan_visible_stock_table(page):
-    """Return the visible JPMorgan stock table."""
-    tables = await page.query_selector_all("table")
-    for table in tables:
-        if not await table.is_visible():
-            continue
-        header_row = await table.query_selector("tr:first-child")
-        if not header_row:
-            continue
-        header_text = re.sub(r"\s+", "", await header_row.inner_text())
-        if "股票代碼" in header_text:
-            return table
-    raise ValueError("stock table not found")
-
-
-async def _jpmorgan_stock_pagination_info(table) -> dict | None:
-    return await table.evaluate(
-        """
-        table => {
-          let node = table;
-          while (node && !node.querySelector('[data-testid="holdings-security-pagination"]')) {
-            node = node.parentElement;
-          }
-          if (!node) return null;
-          const input = node.querySelector('[data-testid="pagination-input"]');
-          const total = node.querySelector('[data-testid="holdings-security-total-pages"]');
-          const totalMatch = total && (total.textContent || '').match(/(\d+)/);
-          if (!input || !totalMatch) return null;
-          return {
-            current_page: Number(input.value),
-            total_pages: Number(totalMatch[1]),
-          };
-        }
-        """
-    )
-
-
-async def _select_jpmorgan_stock_page_size_50(table) -> bool:
-    return await table.evaluate(
-        """
-        table => {
-          let node = table;
-          while (node && !node.querySelector('[data-testid="display-row-selector"]')) {
-            node = node.parentElement;
-          }
-          const option = node && node.querySelector(
-            '[data-testid="display-row-selector"] [data-option-value="view-50"]'
-          );
-          if (!option) return false;
-          option.click();
-          return true;
-        }
-        """
-    )
-
-
-async def _advance_jpmorgan_stock_page(table) -> bool:
-    return await table.evaluate(
-        """
-        table => {
-          let node = table;
-          while (node && !node.querySelector('[data-testid="holdings-security-pagination"]')) {
-            node = node.parentElement;
-          }
-          const next = node && node.querySelector(
-            '[data-testid="holdings-security-right-chevron"]'
-          );
-          if (!next || next.classList.contains('display-none')) return false;
-          next.click();
-          return true;
-        }
-        """
-    )
-
-
-async def _wait_for_jpmorgan_page_change(
-    page,
-    table,
-    previous_page: int,
-) -> dict:
-    for _ in range(100):
-        info = await _jpmorgan_stock_pagination_info(table)
-        if info and info["current_page"] > previous_page:
-            return info
-        await page.wait_for_timeout(100)
-    raise ValueError("stock pagination did not advance")
-
-
-async def _parse_jpmorgan_all_stock_rows(
-    page,
-    etf_code,
-    source_url,
-    date_str,
-) -> list[dict]:
-    """Expand JPMorgan's stock table and collect every page."""
-    table = await _find_jpmorgan_visible_stock_table(page)
-    info = await _jpmorgan_stock_pagination_info(table)
-    if not info:
-        raise ValueError("stock pagination metadata not found")
-
-    if info["total_pages"] > 1:
-        before_total_pages = info["total_pages"]
-        before_row_count = len(await table.query_selector_all("tr"))
-        if not await _select_jpmorgan_stock_page_size_50(table):
-            raise ValueError("stock page-size control not found")
-
-        for _ in range(100):
-            info = await _jpmorgan_stock_pagination_info(table)
-            row_count = len(await table.query_selector_all("tr"))
-            if info and (
-                info["total_pages"] < before_total_pages
-                or row_count > before_row_count
-            ):
-                break
-            await page.wait_for_timeout(100)
-        else:
-            raise ValueError("stock page-size selection did not apply")
-
-    all_rows = []
-    seen_pages = set()
-    while True:
-        info = await _jpmorgan_stock_pagination_info(table)
-        if not info:
-            raise ValueError("stock pagination metadata not found")
-        current_page = info["current_page"]
-        total_pages = info["total_pages"]
-        if current_page in seen_pages:
-            raise ValueError("stock pagination repeated a page")
-        seen_pages.add(current_page)
-
-        all_rows.extend(
-            await _parse_jpmorgan_stock_rows(
-                table,
-                etf_code,
-                source_url,
-                date_str,
-            )
-        )
-        if current_page >= total_pages:
-            break
-        if not await _advance_jpmorgan_stock_page(table):
-            raise ValueError("stock pagination did not advance")
-        await _wait_for_jpmorgan_page_change(
-            page,
-            table,
-            current_page,
-        )
-
-    return dedupe_rows(all_rows)
-
-
-async def _parse_jpmorgan_tables(
-    page,
-    etf_code,
-    source_url,
-    date_str,
-) -> list[dict]:
-    """Parse complete stock pages plus non-stock portfolio tables."""
-    all_rows = await _parse_jpmorgan_all_stock_rows(
-        page,
-        etf_code,
-        source_url,
-        date_str,
-    )
-    tables = await page.query_selector_all("table")
-
-    for table in tables:
-        header_row = await table.query_selector("tr:first-child")
-        if not header_row:
-            continue
-
-        header_text = (await header_row.inner_text()).strip()
-        header_clean = re.sub(r"\s+", "", header_text)
-
-        if "股票代碼" in header_clean:
-            continue
-        if "商品代碼" in header_clean:
-            rows = await _parse_jpmorgan_derivative_rows(
-                table,
-                etf_code,
-                source_url,
-                date_str,
-            )
-        elif "名稱" in header_clean and (
-            "TWD" in header_text or "NEW TAIWAN" in header_text
-        ):
-            rows = await _parse_jpmorgan_cash_rows(
-                table,
-                etf_code,
-                source_url,
-                date_str,
-            )
-        else:
-            continue
-        all_rows.extend(rows)
-
-    return dedupe_rows(all_rows)
+        return _build_result(rows, source_url, EXTRACTION_METHOD_EXCEL)
+    except Exception as exc:
+        return _failed_result(source_url, f"JPMorgan Excel failed: {exc}")
 
 
 def _parse_float(value: str) -> float | None:

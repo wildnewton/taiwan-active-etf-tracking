@@ -154,7 +154,7 @@ async def scrape_holdings_with_browser_async(
     if moneydj_result["ok"] is True:
         official_candidate = None
         if _is_stale_result(moneydj_result, target_date):
-            official_candidate = await _official_fallback_with_browser(etf_code, page)
+            official_candidate = await _official_fallback_with_browser(etf_code, page, target_date=target_date)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
         return await _maybe_replace_low_row_count_async(
@@ -162,6 +162,7 @@ async def scrape_holdings_with_browser_async(
             moneydj_result,
             page,
             official_candidate,
+            target_date=target_date,
         )
 
     # 2. MoneyDJ browser
@@ -174,7 +175,7 @@ async def scrape_holdings_with_browser_async(
     if browser_result["ok"] is True:
         official_candidate = None
         if _is_stale_result(browser_result, target_date):
-            official_candidate = await _official_fallback_with_browser(etf_code, page)
+            official_candidate = await _official_fallback_with_browser(etf_code, page, target_date=target_date)
             if official_candidate["ok"] is True and _is_fresh_result(official_candidate, target_date):
                 return official_candidate
         return await _maybe_replace_low_row_count_async(
@@ -182,20 +183,29 @@ async def scrape_holdings_with_browser_async(
             browser_result,
             page,
             official_candidate,
+            target_date=target_date,
         )
 
     # 3-4. Official fallbacks after MoneyDJ failure.
-    official_result = await _official_fallback_with_browser(etf_code, page)
+    official_result = await _official_fallback_with_browser(etf_code, page, target_date=target_date)
     if official_result["ok"] is True:
         return official_result
 
     return FAILED_RESULT.copy()
 
 
-async def _official_fallback_with_browser(etf_code: str, page) -> dict:
+async def _official_fallback_with_browser(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     config = get_etf_config(etf_code)
     if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
-        official_browser = await scrape_official_with_browser(etf_code, page)
+        official_browser = await scrape_official_with_browser(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
         if official_browser["ok"] is True:
             official_browser = _normalize_source_result(
                 official_browser,
@@ -261,12 +271,18 @@ def _maybe_replace_low_row_count_sync(etf_code: str, moneydj_result: dict, offic
     return _select_low_row_count_result(moneydj_result, official_result, validation)
 
 
-async def _maybe_replace_low_row_count_async(etf_code: str, moneydj_result: dict, page, official_candidate: dict | None = None) -> dict:
+async def _maybe_replace_low_row_count_async(
+    etf_code: str,
+    moneydj_result: dict,
+    page,
+    official_candidate: dict | None = None,
+    target_date: date | None = None,
+) -> dict:
     validation = _row_count_validation(etf_code, moneydj_result)
     if not validation["low_confidence"]:
         return moneydj_result
 
-    official_result = official_candidate or await _official_fallback_with_browser(etf_code, page)
+    official_result = official_candidate or await _official_fallback_with_browser(etf_code, page, target_date=target_date)
     return _select_low_row_count_result(moneydj_result, official_result, validation)
 
 
