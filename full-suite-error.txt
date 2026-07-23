@@ -1,0 +1,1746 @@
+..................FFFFFFFFFF............FFFFFFFFFFF..................... [ 14%]
+.....FFF.FFFFFF................................................F........ [ 28%]
+.......................................FFF............................F. [ 42%]
+........................................................................ [ 56%]
+.....FFFFFFFFFFFFFFFFFFFFFF.FFFF..FFFF.F.FFFFF.......F.F..............F. [ 70%]
+...F..........FFF.....F...................................F.........F... [ 84%]
+......F....FFF...FF.....................................FF.FFF........F. [ 98%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+__________ test_scrape_allianz_uses_matching_initial_default_response __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______ test_scrape_allianz_switches_by_exact_code_and_intercepts_response ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____ test_scrape_allianz_fails_when_exact_option_is_missing_or_ambiguous[0] ____
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____ test_scrape_allianz_fails_when_exact_option_is_missing_or_ambiguous[2] ____
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_scrape_allianz_rejects_mismatched_switched_response ___________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____ test_scrape_allianz_fails_closed_on_intercepted_http_error[options] ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__ test_scrape_allianz_fails_closed_on_intercepted_http_error[initial_trade] ___
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__ test_scrape_allianz_fails_closed_on_intercepted_http_error[switched_trade] __
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_dispatcher_routes_allianz_codes_to_handler[00984A] ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_dispatcher_routes_allianz_codes_to_handler[00993A] ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_async_retry_offloads_all_attempts_and_uses_async_backoff _________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_async_retry_stops_immediately_for_warned_valid_result __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_browser_decision_tree_uses_async_moneydj_retry ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___ test_production_browser_run_limits_concurrency_and_owns_pages_per_worker ___
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___ test_worker_exception_becomes_one_failure_without_cancelling_other_etfs ____
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_returned_failure_still_closes_worker_page ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__ test_page_close_exception_becomes_one_failure_without_aborting_other_etfs ___
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________________ test_injected_page_path_remains_sequential __________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_async_official_static_fallback_runs_off_event_loop ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_page_creation_exception_isolated_without_attempting_missing_page_cleanup _
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______ test_page_close_failure_preserves_existing_scrape_failure_reason _______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_browser_method_reaches_official_browser_scraper _____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______________ test_undated_ctbc_result_falls_through_to_static _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________ test_unsupported_browser_dispatcher_does_not_navigate _____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________ test_ctbc_scraper_registers_response_wait_before_navigation __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_ctbc_scraper_rejects_missing_source_date _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_ctbc_empty_stock_group_preserves_empty_rows_reason ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_ctbc_timeout_does_not_add_fixed_polling_delay ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________ test_ctbc_navigation_error_still_propagates __________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_ctbc_navigation_timeout_still_propagates _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______ test_async_browser_scraper_rejects_none_target_before_network_work ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_selected_scrape_skips_existing_snapshot_by_default ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____ test_selected_scrape_with_no_missing_etfs_does_not_start_playwright ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_selected_scrape_force_true_fetches_existing_snapshot ___________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_min_weight_gate_applied_to_async_browser_path ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_scrape_capital_playwright_intercepts_api _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_scrape_capital_playwright_no_api_intercepted _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____ test_scrape_capital_playwright_uses_domcontentloaded_not_networkidle _____
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________________ test_scrape_nomura_stealth_intercepts_api ___________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_scrape_nomura_stealth_no_api_intercepted _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________________ test_scrape_mega_playwright_extracts_text ___________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________________ test_scrape_mega_playwright_empty_page ____________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_scrape_uni_president_playwright_extracts_table ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_scrape_uni_president_playwright_no_table_found ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________ test_scrape_uni_president_skips_small_tables _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_scrape_official_with_browser_dispatches_capital _____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_scrape_official_with_browser_dispatches_nomura ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_scrape_official_with_browser_dispatches_mega _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_scrape_official_with_browser_dispatches_uni_president __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_scrape_official_with_browser_unsupported_issuer _____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_capital_registers_bounded_response_wait_before_navigation ________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_capital_navigation_error_still_propagates ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______________ test_capital_navigation_timeout_still_propagates _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_capital_response_timeout_returns_clean_failure ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_nomura_registers_bounded_response_wait_before_navigation _________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_nomura_navigation_error_still_propagates _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______________ test_nomura_navigation_timeout_still_propagates ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_mega_playwright_does_not_use_networkidle _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________ test_uni_president_playwright_does_not_use_networkidle ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_uni_president_waits_for_table_after_load _________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________ test_uni_president_table_wait_timeout_returns_clean_failure __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_capital_ignores_document_response_before_api _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_capital_rejects_structurally_valid_undated_rows _____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____________ test_nomura_rejects_structurally_valid_undated_rows ______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______________ test_mega_rejects_structurally_valid_undated_rows _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___________ test_undated_capital_result_continues_to_static_fallback ___________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_response_wait_playwright_error_after_navigation_returns_failure[scrape_capital_playwright-00982A-config0-response0] _
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_response_wait_playwright_error_after_navigation_returns_failure[scrape_nomura_stealth-00980A-config1-response1] _
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_response_wait_playwright_error_after_navigation_returns_failure[scrape_ctbc_playwright-00406A-config2-response2] _
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______ test_response_wait_playwright_error_continues_to_static_fallback _______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________ test_ctbc_browser_dispatch_uses_real_dispatcher_branch ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________________ test_nomura_rejects_payload_for_different_fund ________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____ test_run_daily_scrape_with_browser_async_uses_browser_decision_tree ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_async_scraper_continues_after_post_filter_invalid_moneydj ________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______ test_daily_browser_scrape_uses_target_date_for_default_universe ________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_all_complete_daily_browser_run_returns_before_playwright _________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____________ test_mixed_daily_browser_run_scrapes_only_missing_etfs ____________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_____ test_selected_internal_browser_force_true_scrapes_existing_snapshot ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_async_pipeline_uses_same_taipei_run_date_for_universe __________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+______ test_selected_retry_keeps_execution_date_separate_from_target_date ______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___ test_low_moneydj_row_count_uses_browser_official_fallback_when_available ___
+tests/test_row_count_validation.py:158: in test_low_moneydj_row_count_uses_browser_official_fallback_when_available
+    official_browser.assert_awaited_once_with("00984A", page)
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:2363: in assert_awaited_once_with
+    return self.assert_awaited_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:2352: in assert_awaited_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected await not found.
+E   Expected: mock('00984A', <AsyncMock id='140527932039216'>)
+E     Actual: mock('00984A', <AsyncMock id='140527932039216'>, target_date=FixedDate(2026, 7, 8))
+______ test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser ______
+tests/test_scraper.py:211: in test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser
+    official_browser.assert_awaited_once_with("00980A", page)
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:2363: in assert_awaited_once_with
+    return self.assert_awaited_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:2352: in assert_awaited_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected await not found.
+E   Expected: mock('00980A', <AsyncMock id='140527948378240'>)
+E     Actual: mock('00980A', <AsyncMock id='140527948378240'>, target_date=FixedDate(2026, 7, 7))
+________ test_browser_scraper_uses_caller_target_for_official_fallback _________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______ test_daily_pipeline_passes_expected_data_date_to_browser_scraper _______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_selected_pipeline_passes_explicit_run_date_as_target ___________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+___ test_run_selected_scrape_with_browser_async_retries_only_requested_codes ___
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+____ test_run_selected_scrape_with_browser_async_can_use_explicit_run_date _____
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_daily_browser_scrape_recovers_only_missing_snapshot_on_non_trading_day __
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__ test_daily_browser_scrape_non_trading_day_all_preexisting_skips_playwright __
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_______ test_uni_president_reads_hidden_pane_date_instead_of_global_date _______
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+________ test_uni_president_ignores_labeled_date_outside_holdings_pane _________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+__________ test_uni_president_requires_labeled_date_in_holdings_pane ___________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_ test_async_scraper_accepts_warned_moneydj_without_browser_or_official_fallback _
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+=============================== warnings summary ===============================
+tests/test_allianz_official.py:330
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:330: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_allianz_official.py:358
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:358: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_allianz_official.py:388
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:388: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_allianz_official.py:412
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:412: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_allianz_official.py:431
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:431: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_allianz_official.py:459
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_allianz_official.py:459: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:92
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:92: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:117
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:117: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:143
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:143: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:167
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:167: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:219
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:219: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:261
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:261: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:292
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:292: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:331
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:331: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:363
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:363: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:384
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:384: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_bounded_async_scraping.py:435
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_bounded_async_scraping.py:435: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:158
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:158: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:181
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:181: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:209
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:209: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:245
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:245: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:265
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:265: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:281
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:281: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:297
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:297: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:318
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:318: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_ctbc_official_regressions.py:336
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_ctbc_official_regressions.py:336: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_expected_data_date_cutoff.py:140
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_expected_data_date_cutoff.py:140: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_issue_122_snapshot_semantics.py:214
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_issue_122_snapshot_semantics.py:214: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_issue_122_snapshot_semantics.py:235
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_issue_122_snapshot_semantics.py:235: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_issue_122_snapshot_semantics.py:257
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_issue_122_snapshot_semantics.py:257: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_min_weight_gate.py:157
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_min_weight_gate.py:157: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:634
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:634: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:654
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:654: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:669
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:669: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:698
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:698: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:718
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:718: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:735
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:735: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:752
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:752: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:795
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:795: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:829
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:829: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:845
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:845: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:865
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:865: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:883
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:883: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:901
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:901: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:916
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:916: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official.py:943
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official.py:943: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:170
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:170: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:195
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:195: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:218
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:218: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:238
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:238: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:257
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:257: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:282
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:282: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:305
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:305: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:331
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:331: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:354
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:354: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:377
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:377: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_playwright_waits.py:393
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_playwright_waits.py:393: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_contracts.py:217
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_contracts.py:217: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_contracts.py:239
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_contracts.py:239: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_contracts.py:255
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_contracts.py:255: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_contracts.py:271
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_contracts.py:271: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_contracts.py:303
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_contracts.py:303: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_safety.py:163
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_safety.py:163: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_safety.py:204
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_safety.py:204: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_safety.py:232
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_safety.py:232: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_official_response_safety.py:333
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_official_response_safety.py:333: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_pipeline.py:112
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_pipeline.py:112: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_pr124_review_fixes.py:109
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_pr124_review_fixes.py:109: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_pr90_fresh_eye_async.py:9
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_pr90_fresh_eye_async.py:9: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_preexisting_successful_snapshots.py:123
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_preexisting_successful_snapshots.py:123: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_preexisting_successful_snapshots.py:145
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_preexisting_successful_snapshots.py:145: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_preexisting_successful_snapshots.py:184
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_preexisting_successful_snapshots.py:184: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_prelisting_etfs.py:127
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_prelisting_etfs.py:127: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_retry_execution_date_contract.py:43
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_retry_execution_date_contract.py:43: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:74
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_scraper_freshness_target.py:74: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:93
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_scraper_freshness_target.py:93: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_scraper_freshness_target.py:110
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_scraper_freshness_target.py:110: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_selected_pipeline_retry.py:46
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_selected_pipeline_retry.py:46: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_selected_pipeline_retry.py:74
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_selected_pipeline_retry.py:74: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_tw_stock_trading_calendar.py:156
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_tw_stock_trading_calendar.py:156: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_tw_stock_trading_calendar.py:196
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_tw_stock_trading_calendar.py:196: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:68
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_uni_president_date.py:68: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:85
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_uni_president_date.py:85: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_uni_president_date.py:101
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_uni_president_date.py:101: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_weight_validation_warnings.py:147
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_weight_validation_warnings.py:147: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_allianz_official.py::test_scrape_allianz_uses_matching_initial_default_response - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_switches_by_exact_code_and_intercepts_response - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_fails_when_exact_option_is_missing_or_ambiguous[0] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_fails_when_exact_option_is_missing_or_ambiguous[2] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_rejects_mismatched_switched_response - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_fails_closed_on_intercepted_http_error[options] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_fails_closed_on_intercepted_http_error[initial_trade] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_scrape_allianz_fails_closed_on_intercepted_http_error[switched_trade] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_dispatcher_routes_allianz_codes_to_handler[00984A] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_allianz_official.py::test_dispatcher_routes_allianz_codes_to_handler[00993A] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_async_retry_offloads_all_attempts_and_uses_async_backoff - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_async_retry_stops_immediately_for_warned_valid_result - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_browser_decision_tree_uses_async_moneydj_retry - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_production_browser_run_limits_concurrency_and_owns_pages_per_worker - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_worker_exception_becomes_one_failure_without_cancelling_other_etfs - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_returned_failure_still_closes_worker_page - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_page_close_exception_becomes_one_failure_without_aborting_other_etfs - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_injected_page_path_remains_sequential - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_async_official_static_fallback_runs_off_event_loop - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_page_creation_exception_isolated_without_attempting_missing_page_cleanup - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_bounded_async_scraping.py::test_page_close_failure_preserves_existing_scrape_failure_reason - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_browser_method_reaches_official_browser_scraper - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_undated_ctbc_result_falls_through_to_static - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_unsupported_browser_dispatcher_does_not_navigate - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_scraper_registers_response_wait_before_navigation - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_scraper_rejects_missing_source_date - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_empty_stock_group_preserves_empty_rows_reason - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_timeout_does_not_add_fixed_polling_delay - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_navigation_error_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_ctbc_official_regressions.py::test_ctbc_navigation_timeout_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_expected_data_date_cutoff.py::test_async_browser_scraper_rejects_none_target_before_network_work - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_issue_122_snapshot_semantics.py::test_selected_scrape_skips_existing_snapshot_by_default - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_issue_122_snapshot_semantics.py::test_selected_scrape_with_no_missing_etfs_does_not_start_playwright - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_issue_122_snapshot_semantics.py::test_selected_scrape_force_true_fetches_existing_snapshot - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_min_weight_gate.py::test_min_weight_gate_applied_to_async_browser_path - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_capital_playwright_intercepts_api - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_capital_playwright_no_api_intercepted - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_capital_playwright_uses_domcontentloaded_not_networkidle - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_nomura_stealth_intercepts_api - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_nomura_stealth_no_api_intercepted - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_mega_playwright_extracts_text - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_mega_playwright_empty_page - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_uni_president_playwright_extracts_table - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_uni_president_playwright_no_table_found - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_uni_president_skips_small_tables - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_official_with_browser_dispatches_capital - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_official_with_browser_dispatches_nomura - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_official_with_browser_dispatches_mega - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_official_with_browser_dispatches_uni_president - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official.py::test_scrape_official_with_browser_unsupported_issuer - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_capital_registers_bounded_response_wait_before_navigation - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_capital_navigation_error_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_capital_navigation_timeout_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_capital_response_timeout_returns_clean_failure - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_nomura_registers_bounded_response_wait_before_navigation - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_nomura_navigation_error_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_nomura_navigation_timeout_still_propagates - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_mega_playwright_does_not_use_networkidle - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_uni_president_playwright_does_not_use_networkidle - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_uni_president_waits_for_table_after_load - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_playwright_waits.py::test_uni_president_table_wait_timeout_returns_clean_failure - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_contracts.py::test_capital_ignores_document_response_before_api - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_contracts.py::test_capital_rejects_structurally_valid_undated_rows - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_contracts.py::test_nomura_rejects_structurally_valid_undated_rows - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_contracts.py::test_mega_rejects_structurally_valid_undated_rows - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_contracts.py::test_undated_capital_result_continues_to_static_fallback - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_response_wait_playwright_error_after_navigation_returns_failure[scrape_capital_playwright-00982A-config0-response0] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_response_wait_playwright_error_after_navigation_returns_failure[scrape_nomura_stealth-00980A-config1-response1] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_response_wait_playwright_error_after_navigation_returns_failure[scrape_ctbc_playwright-00406A-config2-response2] - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_response_wait_playwright_error_continues_to_static_fallback - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_ctbc_browser_dispatch_uses_real_dispatcher_branch - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_official_response_safety.py::test_nomura_rejects_payload_for_different_fund - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_pipeline.py::test_run_daily_scrape_with_browser_async_uses_browser_decision_tree - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_pr124_review_fixes.py::test_async_scraper_continues_after_post_filter_invalid_moneydj - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_pr90_fresh_eye_async.py::test_daily_browser_scrape_uses_target_date_for_default_universe - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_preexisting_successful_snapshots.py::test_all_complete_daily_browser_run_returns_before_playwright - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_preexisting_successful_snapshots.py::test_mixed_daily_browser_run_scrapes_only_missing_etfs - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_preexisting_successful_snapshots.py::test_selected_internal_browser_force_true_scrapes_existing_snapshot - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_prelisting_etfs.py::test_async_pipeline_uses_same_taipei_run_date_for_universe - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_retry_execution_date_contract.py::test_selected_retry_keeps_execution_date_separate_from_target_date - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_row_count_validation.py::test_low_moneydj_row_count_uses_browser_official_fallback_when_available - AssertionError: expected await not found.
+Expected: mock('00984A', <AsyncMock id='140527932039216'>)
+  Actual: mock('00984A', <AsyncMock id='140527932039216'>, target_date=FixedDate(2026, 7, 8))
+FAILED tests/test_scraper.py::test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser - AssertionError: expected await not found.
+Expected: mock('00980A', <AsyncMock id='140527948378240'>)
+  Actual: mock('00980A', <AsyncMock id='140527948378240'>, target_date=FixedDate(2026, 7, 7))
+FAILED tests/test_scraper_freshness_target.py::test_browser_scraper_uses_caller_target_for_official_fallback - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_scraper_freshness_target.py::test_daily_pipeline_passes_expected_data_date_to_browser_scraper - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_scraper_freshness_target.py::test_selected_pipeline_passes_explicit_run_date_as_target - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_selected_pipeline_retry.py::test_run_selected_scrape_with_browser_async_retries_only_requested_codes - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_selected_pipeline_retry.py::test_run_selected_scrape_with_browser_async_can_use_explicit_run_date - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_tw_stock_trading_calendar.py::test_daily_browser_scrape_recovers_only_missing_snapshot_on_non_trading_day - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_tw_stock_trading_calendar.py::test_daily_browser_scrape_non_trading_day_all_preexisting_skips_playwright - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_uni_president_date.py::test_uni_president_reads_hidden_pane_date_instead_of_global_date - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_uni_president_date.py::test_uni_president_ignores_labeled_date_outside_holdings_pane - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_uni_president_date.py::test_uni_president_requires_labeled_date_in_holdings_pane - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_weight_validation_warnings.py::test_async_scraper_accepts_warned_moneydj_without_browser_or_official_fallback - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+93 failed, 417 passed, 85 warnings in 18.83s
