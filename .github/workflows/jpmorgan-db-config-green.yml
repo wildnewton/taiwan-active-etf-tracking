@@ -1,0 +1,265 @@
+name: JPMorgan DB config GREEN
+
+on:
+  push:
+    branches:
+      - fix/jpmorgan-db-config-deployment
+
+permissions:
+  contents: write
+
+jobs:
+  green:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/jpmorgan-db-config-deployment
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest pytest-asyncio
+      - name: Apply GREEN implementation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          updater = '''#!/usr/bin/env python3
+          """One-time deployment helper for JPMorgan 00401A official scraper config."""
+
+          from __future__ import annotations
+
+          import argparse
+          import json
+          import sqlite3
+          from datetime import date, datetime, timezone
+          from pathlib import Path
+
+
+          ETF_CODE = "00401A"
+          ETF_NAME = "主動摩根台灣鑫收"
+          EXPECTED_CONFIG = {
+              "issuer": "JPMorgan",
+              "official_url": "https://am.jpmorgan.com/FundsMarketingHandler/excel",
+              "official_method": "api",
+              "official_logic": (
+                  "type=holding_pcf;cusip=TW00000401A1;country=tw;"
+                  "role=twetf;locale=zh-TW"
+              ),
+          }
+          _SELECT_SQL = "SELECT * FROM etf_universe WHERE code = ?"
+
+
+          def _fetch_row(conn: sqlite3.Connection) -> dict | None:
+              row = conn.execute(_SELECT_SQL, (ETF_CODE,)).fetchone()
+              return dict(row) if row else None
+
+
+          def _snapshot(row: dict | None) -> dict | None:
+              if row is None:
+                  return None
+              keys = (
+                  "code",
+                  "name",
+                  "issuer",
+                  "market",
+                  "isin",
+                  "listing_date",
+                  "retired",
+                  "first_seen_date",
+                  "official_url",
+                  "official_method",
+                  "official_logic",
+                  "created_at",
+                  "updated_at",
+              )
+              return {key: row.get(key) for key in keys}
+
+
+          def _has_expected_config(row: dict | None) -> bool:
+              return row is not None and all(
+                  row.get(key) == value for key, value in EXPECTED_CONFIG.items()
+              )
+
+
+          def update_00401a_config(
+              db_path: str | Path,
+              *,
+              dry_run: bool = False,
+          ) -> dict:
+              """Ensure the deployed DB routes 00401A to the JPMorgan XLSX endpoint."""
+              path = Path(db_path)
+              if not path.exists():
+                  raise FileNotFoundError(f"Database does not exist: {path}")
+
+              conn = sqlite3.connect(path)
+              conn.row_factory = sqlite3.Row
+              try:
+                  conn.execute("BEGIN IMMEDIATE")
+                  before = _fetch_row(conn)
+                  inserted = before is None
+                  changed = inserted or not _has_expected_config(before)
+
+                  if changed:
+                      now = datetime.now(timezone.utc).isoformat()
+                      if inserted:
+                          conn.execute(
+                              """
+                              INSERT INTO etf_universe (
+                                  code, name, issuer, market, isin, listing_date,
+                                  retired, first_seen_date, official_url,
+                                  official_method, official_logic, created_at, updated_at
+                              ) VALUES (?, ?, ?, ?, NULL, NULL, 0, ?, ?, ?, ?, ?, ?)
+                              """,
+                              (
+                                  ETF_CODE,
+                                  ETF_NAME,
+                                  EXPECTED_CONFIG["issuer"],
+                                  "TWSE",
+                                  date.today().isoformat(),
+                                  EXPECTED_CONFIG["official_url"],
+                                  EXPECTED_CONFIG["official_method"],
+                                  EXPECTED_CONFIG["official_logic"],
+                                  now,
+                                  now,
+                              ),
+                          )
+                      else:
+                          conn.execute(
+                              """
+                              UPDATE etf_universe
+                              SET issuer = ?,
+                                  official_url = ?,
+                                  official_method = ?,
+                                  official_logic = ?,
+                                  updated_at = ?
+                              WHERE code = ?
+                              """,
+                              (
+                                  EXPECTED_CONFIG["issuer"],
+                                  EXPECTED_CONFIG["official_url"],
+                                  EXPECTED_CONFIG["official_method"],
+                                  EXPECTED_CONFIG["official_logic"],
+                                  now,
+                                  ETF_CODE,
+                              ),
+                          )
+
+                  after = _fetch_row(conn)
+                  if not _has_expected_config(after):
+                      raise RuntimeError("00401A config verification failed")
+
+                  result = {
+                      "db_path": str(path),
+                      "before": _snapshot(before),
+                      "after": _snapshot(after),
+                      "changed": changed,
+                      "inserted": inserted,
+                      "dry_run": dry_run,
+                  }
+                  if dry_run:
+                      conn.rollback()
+                  else:
+                      conn.commit()
+                  return result
+              except Exception:
+                  conn.rollback()
+                  raise
+              finally:
+                  conn.close()
+
+
+          def main(argv: list[str] | None = None) -> int:
+              parser = argparse.ArgumentParser(
+                  description="Upsert the canonical JPMorgan 00401A scraper config.",
+              )
+              parser.add_argument("--db", required=True, type=Path)
+              parser.add_argument("--dry-run", action="store_true")
+              args = parser.parse_args(argv)
+              result = update_00401a_config(args.db, dry_run=args.dry_run)
+              print(json.dumps(result, ensure_ascii=False, indent=2))
+              return 0
+
+
+          if __name__ == "__main__":
+              raise SystemExit(main())
+          '''
+          updater = '\n'.join(line[10:] if line.startswith('          ') else line for line in updater.splitlines()) + '\n'
+          Path('scripts/update_00401a_official_config.py').write_text(updater, encoding='utf-8')
+
+          official_path = Path('scripts/scrapers/official.py')
+          text = official_path.read_text(encoding='utf-8')
+          start = text.index('def parse_jpmorgan_excel(')
+          end = text.index('\n\ndef scrape_jpmorgan_excel(', start)
+          replacement = '''def parse_jpmorgan_excel(
+              content: bytes,
+              etf_code: str,
+              source_url: str,
+              target_date: date,
+          ) -> list[dict]:
+              workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+              try:
+                  missing = [name for name in _JPMORGAN_SHEETS if name not in workbook.sheetnames]
+                  if missing:
+                      raise ValueError(f"JPMorgan sheets missing: {', '.join(missing)}")
+
+                  etf_code = etf_code.upper()
+                  date_str = target_date.strftime("%Y/%m/%d")
+                  rows = []
+                  for sheet_name, asset_type in _JPMORGAN_SHEETS.items():
+                      for raw in _jpmorgan_sheet_rows(workbook[sheet_name], target_date):
+                          if asset_type == "stock":
+                              if len(raw) < 5 or not re.fullmatch(r"\\d{4}", raw[0]):
+                                  continue
+                              weight = _parse_float(raw[4])
+                              if not raw[1] or weight is None:
+                                  continue
+                              row = _row(
+                                  etf_code,
+                                  raw[0],
+                                  raw[1],
+                                  _parse_number(raw[2]),
+                                  weight,
+                                  source_url,
+                                  date_str,
+                                  EXTRACTION_METHOD_EXCEL,
+                              )
+                              row["market_value"] = _parse_number(raw[3])
+                          else:
+                              row = _jpmorgan_non_stock_row(
+                                  raw,
+                                  asset_type,
+                                  etf_code,
+                                  source_url,
+                                  date_str,
+                              )
+                          if row:
+                              rows.append(row)
+
+                  rows = dedupe_rows(rows)
+                  if len([row for row in rows if row["asset_type"] == "stock"]) < 5:
+                      raise ValueError("JPMorgan stock rows not found")
+                  return rows
+              finally:
+                  workbook.close()
+          '''
+          replacement = '\n'.join(line[10:] if line.startswith('          ') else line for line in replacement.splitlines())
+          official_path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          PY
+      - name: Targeted tests
+        run: PYTHONPATH=. pytest -q tests/test_jpmorgan_db_config_deployment.py tests/test_jpmorgan_excel.py
+      - name: Full test suite
+        run: PYTHONPATH=. pytest -q
+      - name: Commit GREEN implementation
+        run: |
+          rm .github/workflows/jpmorgan-db-config-green.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/update_00401a_official_config.py scripts/scrapers/official.py .github/workflows/jpmorgan-db-config-green.yml
+          git commit -m "fix: deploy JPMorgan DB config and close XLSX workbooks (GREEN)"
+          git push origin HEAD:fix/jpmorgan-db-config-deployment
