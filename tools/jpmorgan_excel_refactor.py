@@ -205,7 +205,7 @@ def patch_official():
         r"\nasync def _parse_jpmorgan_stock_rows\(.*?(?=def _parse_float\()",
         re.DOTALL,
     )
-    text, count = pattern.subn("\n" + JPMORGAN_BLOCK, text, count=1)
+    text, count = pattern.subn(lambda _: "\n" + JPMORGAN_BLOCK, text, count=1)
     if count != 1:
         raise RuntimeError(f"expected one JPMorgan block, replaced {count}")
     OFFICIAL.write_text(text)
