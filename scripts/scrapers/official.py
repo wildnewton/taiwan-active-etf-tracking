@@ -1034,47 +1034,50 @@ def parse_jpmorgan_excel(
     target_date: date,
 ) -> list[dict]:
     workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
-    missing = [name for name in _JPMORGAN_SHEETS if name not in workbook.sheetnames]
-    if missing:
-        raise ValueError(f"JPMorgan sheets missing: {', '.join(missing)}")
+    try:
+        missing = [name for name in _JPMORGAN_SHEETS if name not in workbook.sheetnames]
+        if missing:
+            raise ValueError(f"JPMorgan sheets missing: {', '.join(missing)}")
 
-    etf_code = etf_code.upper()
-    date_str = target_date.strftime("%Y/%m/%d")
-    rows = []
-    for sheet_name, asset_type in _JPMORGAN_SHEETS.items():
-        for raw in _jpmorgan_sheet_rows(workbook[sheet_name], target_date):
-            if asset_type == "stock":
-                if len(raw) < 5 or not re.fullmatch(r"\d{4}", raw[0]):
-                    continue
-                weight = _parse_float(raw[4])
-                if not raw[1] or weight is None:
-                    continue
-                row = _row(
-                    etf_code,
-                    raw[0],
-                    raw[1],
-                    _parse_number(raw[2]),
-                    weight,
-                    source_url,
-                    date_str,
-                    EXTRACTION_METHOD_EXCEL,
-                )
-                row["market_value"] = _parse_number(raw[3])
-            else:
-                row = _jpmorgan_non_stock_row(
-                    raw,
-                    asset_type,
-                    etf_code,
-                    source_url,
-                    date_str,
-                )
-            if row:
-                rows.append(row)
+        etf_code = etf_code.upper()
+        date_str = target_date.strftime("%Y/%m/%d")
+        rows = []
+        for sheet_name, asset_type in _JPMORGAN_SHEETS.items():
+            for raw in _jpmorgan_sheet_rows(workbook[sheet_name], target_date):
+                if asset_type == "stock":
+                    if len(raw) < 5 or not re.fullmatch(r"\d{4}", raw[0]):
+                        continue
+                    weight = _parse_float(raw[4])
+                    if not raw[1] or weight is None:
+                        continue
+                    row = _row(
+                        etf_code,
+                        raw[0],
+                        raw[1],
+                        _parse_number(raw[2]),
+                        weight,
+                        source_url,
+                        date_str,
+                        EXTRACTION_METHOD_EXCEL,
+                    )
+                    row["market_value"] = _parse_number(raw[3])
+                else:
+                    row = _jpmorgan_non_stock_row(
+                        raw,
+                        asset_type,
+                        etf_code,
+                        source_url,
+                        date_str,
+                    )
+                if row:
+                    rows.append(row)
 
-    rows = dedupe_rows(rows)
-    if len([row for row in rows if row["asset_type"] == "stock"]) < 5:
-        raise ValueError("JPMorgan stock rows not found")
-    return rows
+        rows = dedupe_rows(rows)
+        if len([row for row in rows if row["asset_type"] == "stock"]) < 5:
+            raise ValueError("JPMorgan stock rows not found")
+        return rows
+    finally:
+        workbook.close()
 
 
 def scrape_jpmorgan_excel(etf_code: str, target_date: date) -> dict:
