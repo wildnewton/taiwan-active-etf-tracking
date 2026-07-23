@@ -9,26 +9,21 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Download workbook
+      - name: Download and summarize workbook
         shell: bash
         run: |
           set -euxo pipefail
           url='https://am.jpmorgan.com/FundsMarketingHandler/excel?type=holding_pcf&cusip=TW00000401A1&country=tw&role=twetf&locale=zh-TW&date=2026-07-22'
           curl -fsSL --retry 3 --retry-all-errors -D headers.txt "$url" -o holding.xlsx
-          cat headers.txt
-          file holding.xlsx
-          wc -c holding.xlsx
-          xxd -l 32 holding.xlsx
-      - name: Inspect workbook
-        shell: bash
-        run: |
-          python -m pip install openpyxl
+          grep -Ei 'HTTP/|Content-Type|content-disposition|Content-Length' headers.txt
+          python -m pip install -q openpyxl
           python - <<'PY'
           from openpyxl import load_workbook
           wb = load_workbook('holding.xlsx', read_only=True, data_only=True)
           print('sheets=', wb.sheetnames)
           for ws in wb.worksheets:
-              print('SHEET', ws.title, ws.max_row, ws.max_column)
-              for row in ws.iter_rows(values_only=True):
-                  print(repr(row))
+              rows = [tuple(v for v in row) for row in ws.iter_rows(values_only=True)]
+              print('SHEET', repr(ws.title), 'rows=', len(rows), 'cols=', ws.max_column)
+              print('HEAD', rows[:4])
+              print('TAIL', rows[-3:])
           PY
