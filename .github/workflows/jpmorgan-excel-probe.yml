@@ -6,7 +6,7 @@ on:
       - feature/jpmorgan-00401a-scraper
 
 jobs:
-  verify:
+  final-verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
