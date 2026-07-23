@@ -24,13 +24,24 @@ jobs:
           path: helper
           fetch-depth: 1
           show-progress: false
-          sparse-checkout: tools/jpmorgan_excel_refactor.py
-      - name: Apply direct refactor
+      - uses: actions/checkout@v4
+        with:
+          ref: probe/jpmorgan-excel-endpoint-run
+          path: output
+          fetch-depth: 1
+          show-progress: false
+      - name: Capture direct refactor result
         working-directory: repo
         shell: bash
         run: |
           set +e
           python ../helper/tools/jpmorgan_excel_refactor.py > /tmp/refactor.log 2>&1
           status=$?
-          cat /tmp/refactor.log
+          cp /tmp/refactor.log ../output/refactor-error.txt
+          cd ../output
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add refactor-error.txt
+          git commit -m 'chore: capture JPMorgan refactor diagnostic' || true
+          git push origin HEAD:probe/jpmorgan-excel-endpoint-run
           exit $status
