@@ -201,11 +201,14 @@ async def _official_fallback_with_browser(
 ) -> dict:
     config = get_etf_config(etf_code)
     if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
-        official_browser = await scrape_official_with_browser(
-            etf_code,
-            page,
-            target_date=target_date,
-        )
+        if config.get("issuer") == "JPMorgan":
+            official_browser = await scrape_official_with_browser(
+                etf_code,
+                page,
+                target_date=target_date,
+            )
+        else:
+            official_browser = await scrape_official_with_browser(etf_code, page)
         if official_browser["ok"] is True:
             official_browser = _normalize_source_result(
                 official_browser,
