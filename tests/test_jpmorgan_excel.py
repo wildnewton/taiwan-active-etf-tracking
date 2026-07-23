@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -55,30 +55,34 @@ class _Response:
 
 
 def _workbook(data_date="2026-07-22"):
-    prefix = {
-        "基金資產 - 股票": [
-            (f"基金資產 - 股票 ({data_date})", None, None, None, None),
-            ("股票代碼", "股票名稱", "股數", "金額", "權重 (%)"),
-            ("2330", "台灣積體電路製造", "110,000", "264,000,000", "8.66%"),
-            ("2454", "聯發科技", "57,600", "221,760,000", "7.27%"),
-        ],
-        "基金資產 - 期貨": [
-            (f"基金資產 - 期貨 ({data_date})", None, None, None),
-            ("商品代碼", "商品名稱", "商品數量 (口數)", "權重 (%)"),
-            ("FTQ6", "臺股期貨08/26", "24", "-0.18%"),
-        ],
-        "基金資產 - 選擇權": [
-            (f"基金資產 - 選擇權 ({data_date})", None, None, None),
-            ("商品代碼", "商品名稱", "商品數量 (口數)", "權重 (%)"),
-            ("TWSE 08/19/26 C45600", "臺指選擇權08/26 45600 買權", "-310", "-0.61%"),
-        ],
-        "現金與約當現金": [
-            (f"現金與約當現金 ({data_date})", None, None),
-            ("名稱", "金額 (TWD)", "權重 (%)"),
-            ("NEW TAIWAN DOLLAR", "283,733,974", "9.30%"),
-        ],
-    }
-    return _Workbook(prefix)
+    return _Workbook(
+        {
+            "基金資產 - 股票": [
+                (f"基金資產 - 股票 ({data_date})", None, None, None, None),
+                ("股票代碼", "股票名稱", "股數", "金額", "權重 (%)"),
+                ("2330", "台灣積體電路製造", "110,000", "264,000,000", "8.66%"),
+                ("2454", "聯發科技", "57,600", "221,760,000", "7.27%"),
+                ("2308", "台達電子工業", "68,000", "127,840,000", "4.19%"),
+                ("2345", "智邦科技", "36,053", "82,381,105", "2.70%"),
+                ("2382", "廣達電腦", "193,000", "63,497,000", "2.08%"),
+            ],
+            "基金資產 - 期貨": [
+                (f"基金資產 - 期貨 ({data_date})", None, None, None),
+                ("商品代碼", "商品名稱", "商品數量 (口數)", "權重 (%)"),
+                ("FTQ6", "臺股期貨08/26", "24", "-0.18%"),
+            ],
+            "基金資產 - 選擇權": [
+                (f"基金資產 - 選擇權 ({data_date})", None, None, None),
+                ("商品代碼", "商品名稱", "商品數量 (口數)", "權重 (%)"),
+                ("TWSE 08/19/26 C45600", "臺指選擇權08/26 45600 買權", "-310", "-0.61%"),
+            ],
+            "現金與約當現金": [
+                (f"現金與約當現金 ({data_date})", None, None),
+                ("名稱", "金額 (TWD)", "權重 (%)"),
+                ("NEW TAIWAN DOLLAR", "283,733,974", "9.30%"),
+            ],
+        }
+    )
 
 
 def _patch_workbook(monkeypatch, data_date="2026-07-22"):
@@ -100,8 +104,14 @@ def test_parse_jpmorgan_excel_reads_all_asset_sheets(monkeypatch):
         date(2026, 7, 22),
     )
 
-    assert [row["stock_code"] for row in rows[:2]] == ["2330", "2454"]
-    assert [row["asset_type"] for row in rows[2:]] == ["futures", "options", "cash"]
+    assert [row["stock_code"] for row in rows[:5]] == [
+        "2330",
+        "2454",
+        "2308",
+        "2345",
+        "2382",
+    ]
+    assert [row["asset_type"] for row in rows[5:]] == ["futures", "options", "cash"]
     assert rows[0]["shares"] == 110000
     assert rows[0]["market_value"] == 264000000
     assert rows[-1]["market_value"] == 283733974
@@ -134,7 +144,7 @@ def test_scrape_jpmorgan_excel_downloads_requested_date(monkeypatch):
     result = official.scrape_jpmorgan_excel("00401A", date(2026, 7, 22))
 
     assert result["ok"] is True
-    assert len(result["stock_rows"]) == 2
+    assert len(result["stock_rows"]) == 5
     assert len(result["non_stock_rows"]) == 3
     assert calls["url"] == _CONFIG["url"]
     assert calls["params"]["date"] == "2026-07-22"
@@ -160,7 +170,7 @@ def test_scrape_jpmorgan_excel_fails_closed_on_download_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_jpmorgan_dispatcher_uses_excel_without_page(monkeypatch):
     expected = {"ok": True}
-    handler = AsyncMock(return_value=expected)
+    handler = Mock(return_value=expected)
     monkeypatch.setattr(official, "get_official_config", lambda code: _CONFIG)
     monkeypatch.setattr(official, "scrape_jpmorgan_excel", handler, raising=False)
     target = date(2026, 7, 22)
@@ -172,7 +182,7 @@ async def test_jpmorgan_dispatcher_uses_excel_without_page(monkeypatch):
     )
 
     assert result == expected
-    handler.assert_awaited_once_with("00401A", target)
+    handler.assert_called_once_with("00401A", target)
 
 
 @pytest.mark.asyncio
