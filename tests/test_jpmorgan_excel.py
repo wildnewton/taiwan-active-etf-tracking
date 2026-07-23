@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date
 from unittest.mock import AsyncMock, Mock
 
@@ -167,26 +168,26 @@ def test_scrape_jpmorgan_excel_fails_closed_on_download_error(monkeypatch):
     assert result["all_rows"] == []
 
 
-@pytest.mark.asyncio
-async def test_jpmorgan_dispatcher_uses_excel_without_page(monkeypatch):
+def test_jpmorgan_dispatcher_uses_excel_without_page(monkeypatch):
     expected = {"ok": True}
     handler = Mock(return_value=expected)
     monkeypatch.setattr(official, "get_official_config", lambda code: _CONFIG)
     monkeypatch.setattr(official, "scrape_jpmorgan_excel", handler, raising=False)
     target = date(2026, 7, 22)
 
-    result = await official.scrape_official_with_browser(
-        "00401a",
-        object(),
-        target_date=target,
+    result = asyncio.run(
+        official.scrape_official_with_browser(
+            "00401a",
+            object(),
+            target_date=target,
+        )
     )
 
     assert result == expected
     handler.assert_called_once_with("00401A", target)
 
 
-@pytest.mark.asyncio
-async def test_official_fallback_forwards_target_date(monkeypatch):
+def test_official_fallback_forwards_target_date(monkeypatch):
     target = date(2026, 7, 22)
     page = object()
     browser = AsyncMock(return_value={"ok": True})
@@ -198,10 +199,12 @@ async def test_official_fallback_forwards_target_date(monkeypatch):
     monkeypatch.setattr(scraper, "scrape_official_with_browser", browser)
     monkeypatch.setattr(scraper, "_normalize_source_result", lambda result, source: result)
 
-    result = await scraper._official_fallback_with_browser(
-        "00401A",
-        page,
-        target_date=target,
+    result = asyncio.run(
+        scraper._official_fallback_with_browser(
+            "00401A",
+            page,
+            target_date=target,
+        )
     )
 
     assert result == {"ok": True}
