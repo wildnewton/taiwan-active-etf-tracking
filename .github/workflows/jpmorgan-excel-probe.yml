@@ -1,9 +1,9 @@
 name: JPMorgan Excel probe
 
 on:
-  push:
+  pull_request:
     branches:
-      - probe/jpmorgan-excel-endpoint
+      - feature/jpmorgan-00401a-scraper
 
 jobs:
   probe:
@@ -29,6 +29,6 @@ jobs:
           print('sheets=', wb.sheetnames)
           for ws in wb.worksheets:
               print('SHEET', ws.title, ws.max_row, ws.max_column)
-              for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 30), values_only=True):
+              for row in ws.iter_rows(min_row=1, max_row=min(ws.max_row, 60), values_only=True):
                   print(repr(row))
           PY
