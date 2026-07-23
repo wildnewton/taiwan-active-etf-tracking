@@ -1,0 +1,53 @@
+........................................................................ [ 14%]
+.....F.................................................................. [ 28%]
+........................................................................ [ 42%]
+........................................................................ [ 56%]
+........................................................................ [ 70%]
+....................................................................F... [ 84%]
+......F................................................................. [ 98%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+_____________ test_browser_method_reaches_official_browser_scraper _____________
+tests/test_ctbc_official_regressions.py:176: in test_browser_method_reaches_official_browser_scraper
+    browser_scraper.assert_awaited_once_with(ETF_CODE, page)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2312: in assert_awaited_once_with
+    return self.assert_awaited_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2301: in assert_awaited_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected await not found.
+E   Expected: mock('00406A', <object object at 0x7f2254b87280>)
+E     Actual: mock('00406A', <object object at 0x7f2254b87280>, target_date=None)
+___ test_low_moneydj_row_count_uses_browser_official_fallback_when_available ___
+tests/test_row_count_validation.py:158: in test_low_moneydj_row_count_uses_browser_official_fallback_when_available
+    official_browser.assert_awaited_once_with("00984A", page)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2312: in assert_awaited_once_with
+    return self.assert_awaited_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2301: in assert_awaited_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected await not found.
+E   Expected: mock('00984A', <AsyncMock id='139785316984144'>)
+E     Actual: mock('00984A', <AsyncMock id='139785316984144'>, target_date=FixedDate(2026, 7, 8))
+______ test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser ______
+tests/test_scraper.py:211: in test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser
+    official_browser.assert_awaited_once_with("00980A", page)
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2312: in assert_awaited_once_with
+    return self.assert_awaited_with(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/hostedtoolcache/Python/3.11.15/x64/lib/python3.11/unittest/mock.py:2301: in assert_awaited_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected await not found.
+E   Expected: mock('00980A', <AsyncMock id='139785320071440'>)
+E     Actual: mock('00980A', <AsyncMock id='139785320071440'>, target_date=FixedDate(2026, 7, 7))
+=========================== short test summary info ============================
+FAILED tests/test_ctbc_official_regressions.py::test_browser_method_reaches_official_browser_scraper - AssertionError: expected await not found.
+Expected: mock('00406A', <object object at 0x7f2254b87280>)
+  Actual: mock('00406A', <object object at 0x7f2254b87280>, target_date=None)
+FAILED tests/test_row_count_validation.py::test_low_moneydj_row_count_uses_browser_official_fallback_when_available - AssertionError: expected await not found.
+Expected: mock('00984A', <AsyncMock id='139785316984144'>)
+  Actual: mock('00984A', <AsyncMock id='139785316984144'>, target_date=FixedDate(2026, 7, 8))
+FAILED tests/test_scraper.py::test_scrape_with_browser_stale_moneydj_uses_fresh_official_browser - AssertionError: expected await not found.
+Expected: mock('00980A', <AsyncMock id='139785320071440'>)
+  Actual: mock('00980A', <AsyncMock id='139785320071440'>, target_date=FixedDate(2026, 7, 7))
+3 failed, 507 passed in 18.69s
