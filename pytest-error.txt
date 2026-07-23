@@ -1,0 +1,44 @@
+....FF                                                                   [100%]
+=================================== FAILURES ===================================
+_______________ test_jpmorgan_dispatcher_uses_excel_without_page _______________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+_________________ test_official_fallback_forwards_target_date __________________
+async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+=============================== warnings summary ===============================
+tests/test_jpmorgan_excel.py:170
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_jpmorgan_excel.py:170: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+tests/test_jpmorgan_excel.py:188
+  /home/runner/work/taiwan-active-etf-tracking/taiwan-active-etf-tracking/repo/tests/test_jpmorgan_excel.py:188: PytestUnknownMarkWarning: Unknown pytest.mark.asyncio - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.asyncio
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_jpmorgan_excel.py::test_jpmorgan_dispatcher_uses_excel_without_page - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+FAILED tests/test_jpmorgan_excel.py::test_official_fallback_forwards_target_date - Failed: async def functions are not natively supported.
+You need to install a suitable plugin for your async framework, for example:
+  - anyio
+  - pytest-asyncio
+  - pytest-tornasync
+  - pytest-trio
+  - pytest-twisted
+2 failed, 4 passed, 2 warnings in 0.35s
