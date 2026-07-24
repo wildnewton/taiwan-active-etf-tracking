@@ -8,27 +8,38 @@ import pytest
 import db
 
 
-EXPECTED_CODES = {
-    "00400A",
-    "00401A",
-    "00403A",
-    "00404A",
-    "00405A",
-    "00406A",
-    "00980A",
-    "00981A",
-    "00982A",
-    "00984A",
-    "00985A",
-    "00987A",
-    "00991A",
-    "00992A",
-    "00993A",
-    "00994A",
-    "00995A",
-    "00996A",
-    "00999A",
+EXPECTED_CODES = {"00980A", "00981A"}
+
+KNOWN_ETFS = {
+    "00980A": {
+        "name": "主動野村臺灣優選",
+        "issuer": "Nomura",
+        "official_url": "https://example.test/00980A",
+        "official_method": "stealth_api",
+        "official_logic": "fundNo=00980A",
+    },
+    "00981A": {
+        "name": "主動統一台股增長",
+        "issuer": "Uni-President",
+        "official_url": "https://example.test/00981A",
+        "official_method": "playwright",
+        "official_logic": "fundCode=49YTW",
+    },
 }
+
+
+def _insert_known_etfs(seen_date="2026-06-30"):
+    from etf_universe import upsert_etf
+
+    for code, metadata in KNOWN_ETFS.items():
+        upsert_etf(
+            {
+                "code": code,
+                "market": "TWSE",
+                "first_seen_date": seen_date,
+                **metadata,
+            }
+        )
 
 
 def _discovered_without(*missing_codes):
@@ -188,51 +199,24 @@ def test_init_db_does_not_rebuild_deployed_current_schema_just_to_drop_columns(t
     assert row == ("ACTIVE", "2026-07-03", "2026-07-04")
 
 
-def test_seed_etf_universe_from_seed_file_populates_known_etfs():
-    db.init_db(":memory:")
-    from etf_universe import get_active_etfs, seed_etf_universe_from_file
-
-    inserted = seed_etf_universe_from_file()
-    rows = get_active_etfs()
-
-    assert inserted == 19
-    assert len(rows) == 19
-    assert {row["code"] for row in rows} == EXPECTED_CODES
-    assert next(row for row in rows if row["code"] == "00980A")["issuer"] == "Nomura"
-
-
-def test_seed_is_idempotent_and_preserves_existing_db_metadata():
-    db.init_db(":memory:")
-    from etf_universe import get_etf_config, seed_etf_universe_from_file, upsert_etf
-
-    seed_etf_universe_from_file(seen_date="2026-06-30")
-    upsert_etf({"code": "00980A", "name": "手動名稱", "issuer": "ManualIssuer"})
-    inserted_again = seed_etf_universe_from_file()
-    config = get_etf_config("00980A")
-
-    assert inserted_again == 0
-    assert config["name"] == "手動名稱"
-    assert config["issuer"] == "ManualIssuer"
-
-
 def test_get_active_etfs_excludes_retired_rows():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, retire_etf, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, retire_etf
 
-    seed_etf_universe_from_file()
+    _insert_known_etfs()
     retire_etf("00980A", reason="not listed")
 
     active_codes = {row["code"] for row in get_active_etfs()}
 
     assert "00980A" not in active_codes
-    assert len(active_codes) == 18
+    assert len(active_codes) == 1
 
 
 def test_get_etf_config_can_return_retired_for_historical_lookup():
     db.init_db(":memory:")
-    from etf_universe import get_etf_config, retire_etf, seed_etf_universe_from_file
+    from etf_universe import get_etf_config, retire_etf
 
-    seed_etf_universe_from_file()
+    _insert_known_etfs()
     retire_etf("00980A", reason="not listed")
 
     assert get_etf_config("00980A")["code"] == "00980A"
@@ -242,9 +226,9 @@ def test_get_etf_config_can_return_retired_for_historical_lookup():
 
 def test_reconcile_discovery_inserts_new_without_persisting_missing_state():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe
 
-    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_known_etfs(seen_date="2026-06-30")
     discovered = _discovered_without("00980A")
     discovered.append({"code": "01000A", "name": "主動測試新ETF", "market": "TWSE", "isin": "TW00001000A"})
 
@@ -263,9 +247,9 @@ def test_reconcile_discovery_inserts_new_without_persisting_missing_state():
 
 def test_complete_discovery_reports_candidate_but_never_retires_it():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe
 
-    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_known_etfs(seen_date="2026-06-30")
     _insert_usable_holdings_date("2026-06-29")
     _insert_usable_holdings_date("2026-06-30")
 
@@ -284,9 +268,9 @@ def test_complete_discovery_reports_candidate_but_never_retires_it():
 
 def test_incomplete_discovery_does_not_report_or_retire_missing_etfs():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe
 
-    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_known_etfs(seen_date="2026-06-30")
     _insert_usable_holdings_date("2026-06-29")
     _insert_usable_holdings_date("2026-06-30")
 
@@ -306,9 +290,9 @@ def test_incomplete_discovery_does_not_report_or_retire_missing_etfs():
 
 def test_reappearance_needs_no_pending_state_cleanup():
     db.init_db(":memory:")
-    from etf_universe import get_etf_config, reconcile_discovered_universe, seed_etf_universe_from_file
+    from etf_universe import get_etf_config, reconcile_discovered_universe
 
-    seed_etf_universe_from_file(seen_date="2026-06-30")
+    _insert_known_etfs(seen_date="2026-06-30")
     summary = reconcile_discovered_universe(_discovered_without(), seen_date="2026-07-02")
 
     config = get_etf_config("00980A")
@@ -320,9 +304,9 @@ def test_reappearance_needs_no_pending_state_cleanup():
 
 def test_reconcile_discovery_does_not_change_manual_retired_state():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf
 
-    seed_etf_universe_from_file()
+    _insert_known_etfs()
     retire_etf("00980A", reason="not listed")
 
     summary = reconcile_discovered_universe(
@@ -340,10 +324,10 @@ def test_reconcile_discovery_does_not_change_manual_retired_state():
 def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
     db_path = str(tmp_path / "universe.sqlite")
     db.init_db(db_path)
-    from etf_universe import retire_etf, seed_etf_universe_from_file
+    from etf_universe import retire_etf
     from pipeline import run_daily_scrape
 
-    seed_etf_universe_from_file()
+    _insert_known_etfs()
     retire_etf("00980A", reason="not listed")
     seen_codes = []
 
@@ -366,5 +350,5 @@ def test_pipeline_fetches_only_not_retired_etfs_from_db(tmp_path):
         summary = run_daily_scrape(db_path)
 
     assert "00980A" not in seen_codes
-    assert len(seen_codes) == 18
-    assert summary["total_etfs"] == 18
+    assert len(seen_codes) == 1
+    assert summary["total_etfs"] == 1

@@ -6,6 +6,21 @@ from config import get_etf_config, get_moneydj_url
 
 def test_get_etf_config_returns_matching_config_by_code():
     db.init_db(":memory:")
+    from etf_universe import upsert_etf
+
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "issuer": "Nomura",
+            "official_method": "stealth_api",
+            "official_url": (
+                "https://www.nomurafunds.com.tw/ETFWEB/product-description"
+                "?fundNo=00980A&tab=Shareholding"
+            ),
+            "official_logic": "fundNo=00980A;api=GetFundAssets",
+        }
+    )
     config = get_etf_config("00980A")
 
     assert config["code"] == "00980A"
