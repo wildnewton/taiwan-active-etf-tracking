@@ -38,6 +38,21 @@ def test_empty_db_reads_do_not_seed_or_insert_rows():
     assert count == 0
 
 
+def test_get_etf_config_read_does_not_run_schema_ensure(monkeypatch):
+    db.init_db(":memory:")
+    import etf_universe
+    from etf_universe import get_etf_config, upsert_etf
+
+    upsert_etf({"code": "01000A", "name": "主動測試ETF"})
+
+    def fail_on_schema_ensure():
+        raise AssertionError("read path must not create or migrate schema")
+
+    monkeypatch.setattr(etf_universe, "_ensure_table", fail_on_schema_ensure)
+
+    assert get_etf_config("01000A")["name"] == "主動測試ETF"
+
+
 def test_pipeline_uses_only_explicit_db_universe(tmp_path):
     db_path = str(tmp_path / "universe.sqlite")
     db.init_db(db_path)
