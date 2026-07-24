@@ -1,4 +1,6 @@
 import json
+
+import db
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -382,9 +384,33 @@ def assert_stock_row(row, etf_code, stock_code, stock_name, shares, weight_pct):
     assert row["source_type"] == "official_fallback"
 
 
+def insert_official_config(code, *, name, issuer, url, method, logic):
+    db.init_db(":memory:")
+    from etf_universe import upsert_etf
+
+    upsert_etf(
+        {
+            "code": code,
+            "name": name,
+            "issuer": issuer,
+            "official_url": url,
+            "official_method": method,
+            "official_logic": logic,
+        }
+    )
+
+
 # ── Config tests ──
 
 def test_get_official_config_returns_config():
+    insert_official_config(
+        "00405A",
+        name="主動富邦台灣龍耀",
+        issuer="Fubon",
+        url=FUBON_URL,
+        method="static",
+        logic="stkId=00405A",
+    )
     config = get_official_config("00405A")
 
     assert config["url"] == FUBON_URL
@@ -395,6 +421,14 @@ def test_get_official_config_returns_config():
 
 
 def test_get_official_config_capital_is_api():
+    insert_official_config(
+        "00982A",
+        name="主動群益台灣強棒",
+        issuer="Capital",
+        url=CAPITAL_URL,
+        method="api",
+        logic="product_id=399",
+    )
     config = get_official_config("00982A")
 
     assert config["method"] == "api"
@@ -403,6 +437,14 @@ def test_get_official_config_capital_is_api():
 
 
 def test_get_official_config_nomura_is_stealth_api():
+    insert_official_config(
+        "00980A",
+        name="主動野村臺灣優選",
+        issuer="Nomura",
+        url=NOMURA_URL,
+        method="stealth_api",
+        logic="fundNo=00980A",
+    )
     config = get_official_config("00980A")
 
     assert config["method"] == "stealth_api"
@@ -529,6 +571,14 @@ def test_parse_uni_president_skips_non_stock_rows():
 # ── Integration tests ──
 
 def test_scrape_official_static_fubon():
+    insert_official_config(
+        "00405A",
+        name="主動富邦台灣龍耀",
+        issuer="Fubon",
+        url=FUBON_URL,
+        method="static",
+        logic="stkId=00405A",
+    )
     response = Mock()
     response.text = VALID_FUBON_HTML
     response.raise_for_status.return_value = None
@@ -544,6 +594,14 @@ def test_scrape_official_static_fubon():
 
 
 def test_scrape_official_static_falls_back_to_twse():
+    insert_official_config(
+        "00980A",
+        name="主動野村臺灣優選",
+        issuer="Nomura",
+        url=NOMURA_URL,
+        method="stealth_api",
+        logic="fundNo=00980A",
+    )
     response = Mock()
     response.text = TWSE_HTML
     response.raise_for_status.return_value = None

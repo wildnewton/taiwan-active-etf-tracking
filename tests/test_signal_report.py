@@ -93,6 +93,9 @@ def insert_signal(
 
 
 def insert_holding(date, etf_code, stock_code, stock_name, weight_pct=5.0):
+    from etf_universe import upsert_etf
+
+    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
     with db._connect() as conn:
         conn.execute(
             """
@@ -209,6 +212,13 @@ def test_report_warns_when_etfs_missing():
     """⚠️ Report should warn when holdings have < 19 ETFs for latest date."""
     db.init_db(":memory:")
     ensure_signal_table()
+    seed_universe([
+        ("00400A", 0), ("00401A", 0), ("00403A", 0), ("00404A", 0),
+        ("00405A", 0), ("00406A", 0), ("00980A", 0), ("00981A", 0),
+        ("00982A", 0), ("00984A", 0), ("00985A", 0), ("00987A", 0),
+        ("00991A", 0), ("00992A", 0), ("00993A", 0), ("00994A", 0),
+        ("00995A", 0), ("00996A", 0), ("00999A", 0),
+    ])
 
     # Insert holdings for only 13 ETFs (simulating incomplete scrape)
     for i in range(400, 413):
