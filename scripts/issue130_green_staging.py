@@ -1,0 +1,331 @@
+from pathlib import Path
+import re
+
+
+def read(path):
+    return Path(path).read_text(encoding="utf-8")
+
+
+def write(path, text):
+    Path(path).write_text(text, encoding="utf-8")
+
+
+def replace_once(text, old, new, label):
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: expected one match, found {count}")
+    return text.replace(old, new, 1)
+
+
+path = "scripts/pipeline.py"
+text = read(path)
+text = replace_once(
+    text,
+    "from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file\n",
+    "from etf_universe import get_active_etfs, get_etf_config\n",
+    "remove pipeline seed import",
+)
+text = replace_once(
+    text,
+    "def _active_etfs_for_run(run_date: date) -> list[dict]:\n    seed_etf_universe_from_file()\n    return get_active_etfs(as_of_date=run_date)\n",
+    "def _active_etfs_for_run(run_date: date) -> list[dict]:\n    return get_active_etfs(as_of_date=run_date)\n",
+    "remove pipeline runtime seed",
+)
+write(path, text)
+
+path = "tests/test_config.py"
+text = read(path)
+old = '''def test_get_etf_config_returns_matching_config_by_code():
+    db.init_db(":memory:")
+    config = get_etf_config("00980A")
+
+    assert config["code"] == "00980A"
+    assert config["issuer"] == "Nomura"
+    assert config["name"] == "主動野村臺灣優選"
+    assert config["official_method"] == "stealth_api"
+    assert config["official_url"] == (
+        "https://www.nomurafunds.com.tw/ETFWEB/product-description"
+        "?fundNo=00980A&tab=Shareholding"
+    )
+    assert config["official_logic"] == "fundNo=00980A;api=GetFundAssets"
+'''
+new = '''def test_get_etf_config_returns_matching_config_by_code():
+    db.init_db(":memory:")
+    from etf_universe import upsert_etf
+
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "issuer": "Nomura",
+            "official_method": "stealth_api",
+            "official_url": (
+                "https://www.nomurafunds.com.tw/ETFWEB/product-description"
+                "?fundNo=00980A&tab=Shareholding"
+            ),
+            "official_logic": "fundNo=00980A;api=GetFundAssets",
+        }
+    )
+    config = get_etf_config("00980A")
+
+    assert config["code"] == "00980A"
+    assert config["issuer"] == "Nomura"
+    assert config["name"] == "主動野村臺灣優選"
+    assert config["official_method"] == "stealth_api"
+    assert config["official_url"] == (
+        "https://www.nomurafunds.com.tw/ETFWEB/product-description"
+        "?fundNo=00980A&tab=Shareholding"
+    )
+    assert config["official_logic"] == "fundNo=00980A;api=GetFundAssets"
+'''
+text = replace_once(text, old, new, "make config test explicit")
+write(path, text)
+
+path = "tests/test_etf_universe.py"
+text = read(path)
+replacement = '''EXPECTED_CODES = {"00980A", "00981A"}
+
+KNOWN_ETFS = {
+    "00980A": {
+        "name": "主動野村臺灣優選",
+        "issuer": "Nomura",
+        "official_url": "https://example.test/00980A",
+        "official_method": "stealth_api",
+        "official_logic": "fundNo=00980A",
+    },
+    "00981A": {
+        "name": "主動統一台股增長",
+        "issuer": "Uni-President",
+        "official_url": "https://example.test/00981A",
+        "official_method": "playwright",
+        "official_logic": "fundCode=49YTW",
+    },
+}
+
+
+def _insert_known_etfs(seen_date="2026-06-30"):
+    from etf_universe import upsert_etf
+
+    for code, metadata in KNOWN_ETFS.items():
+        upsert_etf(
+            {
+                "code": code,
+                "market": "TWSE",
+                "first_seen_date": seen_date,
+                **metadata,
+            }
+        )
+
+
+def _discovered_without'''
+text, count = re.subn(
+    r"EXPECTED_CODES = \{.*?\}\n\n\ndef _discovered_without",
+    replacement,
+    text,
+    flags=re.S,
+)
+if count != 1:
+    raise RuntimeError(f"replace universe fixtures: {count}")
+text, count = re.subn(
+    r"\n\ndef test_seed_etf_universe_from_seed_file_populates_known_etfs\(\):.*?(?=\n\ndef test_get_active_etfs_excludes_retired_rows)",
+    "",
+    text,
+    flags=re.S,
+)
+if count != 1:
+    raise RuntimeError(f"remove seed tests: {count}")
+text = text.replace(", seed_etf_universe_from_file", "")
+text = text.replace("seed_etf_universe_from_file, ", "")
+text = text.replace("seed_etf_universe_from_file(seen_date=", "_insert_known_etfs(seen_date=")
+text = text.replace("seed_etf_universe_from_file()", "_insert_known_etfs()")
+text = text.replace("assert len(active_codes) == 18", "assert len(active_codes) == 1")
+text = text.replace("assert len(seen_codes) == 18", "assert len(seen_codes) == 1")
+text = text.replace('assert summary["total_etfs"] == 18', 'assert summary["total_etfs"] == 1')
+if "seed_etf_universe_from_file" in text:
+    raise RuntimeError("test_etf_universe still references seed")
+write(path, text)
+
+path = "tests/test_prelisting_etfs.py"
+text = read(path)
+text = replace_once(
+    text,
+    "    seed_etf_universe_from_file,\n",
+    "    upsert_etf,\n",
+    "prelisting import",
+)
+text = replace_once(
+    text,
+    '''def _seed_with_future_etf():
+    seed_etf_universe_from_file(seen_date="2026-07-14")
+    reconcile_discovered_universe(
+        [FUTURE_ETF],
+        seen_date="2026-07-14",
+        discovery_complete=False,
+    )
+''',
+    '''def _seed_with_future_etf():
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "issuer": "Nomura",
+            "market": "TWSE",
+            "first_seen_date": "2026-07-14",
+        }
+    )
+    reconcile_discovered_universe(
+        [FUTURE_ETF],
+        seen_date="2026-07-14",
+        discovery_complete=False,
+    )
+''',
+    "prelisting fixture",
+)
+text = replace_once(
+    text,
+    '''def test_unknown_listing_date_remains_eligible():
+    db.init_db(":memory:")
+    seed_etf_universe_from_file(seen_date="2026-07-14")
+
+    active_codes = {
+        row["code"] for row in get_active_etfs(as_of_date="2026-07-14")
+    }
+
+    assert "00980A" in active_codes
+''',
+    '''def test_unknown_listing_date_remains_eligible():
+    db.init_db(":memory:")
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "listing_date": None,
+        }
+    )
+
+    active_codes = {
+        row["code"] for row in get_active_etfs(as_of_date="2026-07-14")
+    }
+
+    assert "00980A" in active_codes
+''',
+    "unknown listing fixture",
+)
+text = text.replace("== 19", "== 1").replace("== 20", "== 2")
+text = text.replace('"預期 19 檔 ETF"', '"預期 1 檔 ETF"')
+text = text.replace('"預期 20 檔 ETF"', '"預期 2 檔 ETF"')
+if "seed_etf_universe_from_file" in text:
+    raise RuntimeError("test_prelisting_etfs still references seed")
+write(path, text)
+
+path = "tests/test_report_change_diagnostics.py"
+text = read(path)
+text, count = re.subn(
+    r"ETF_CODES = \[.*?\]\n",
+    'ETF_CODES = ["00980A", "00981A"]\n',
+    text,
+    flags=re.S,
+)
+if count != 1:
+    raise RuntimeError(f"diagnostic universe: {count}")
+text = replace_once(
+    text,
+    '''def insert_full_holdings_day(date):
+    for etf_code in ETF_CODES:
+        insert_holding(date, etf_code)
+''',
+    '''def insert_full_holdings_day(date):
+    from etf_universe import upsert_etf
+
+    for etf_code in ETF_CODES:
+        upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
+        insert_holding(date, etf_code)
+''',
+    "diagnostic fixtures",
+)
+text = replace_once(
+    text,
+    '''def retire_test_etf(etf_code):
+    from etf_universe import retire_etf, seed_etf_universe_from_file
+
+    seed_etf_universe_from_file()
+    retire_etf(etf_code, reason="test retired")
+''',
+    '''def retire_test_etf(etf_code):
+    from etf_universe import retire_etf
+
+    retire_etf(etf_code, reason="test retired")
+''',
+    "diagnostic retirement",
+)
+write(path, text)
+
+path = "tests/test_etf_universe_scope_exclusions.py"
+text = read(path)
+text = replace_once(
+    text,
+    "    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, seed_etf_universe_from_file\n\n    seed_etf_universe_from_file()\n    retire_etf(\"00980A\", reason=\"not listed\")\n",
+    "    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, upsert_etf\n\n    upsert_etf({\"code\": \"00980A\", \"name\": \"主動野村臺灣優選\", \"market\": \"TWSE\"})\n    retire_etf(\"00980A\", reason=\"not listed\")\n",
+    "scope retirement fixture",
+)
+write(path, text)
+
+path = "tests/test_project_organization.py"
+text = read(path)
+text = replace_once(
+    text,
+    '''def test_etf_universe_seed_file_is_directly_under_data():
+    assert (ROOT / "data" / "etf_universe_seed.json").exists()
+    assert not (ROOT / "data" / "seeds" / "etf_universe_seed.json").exists()
+''',
+    '''def test_etf_universe_has_no_repository_seed_file():
+    assert not (ROOT / "data" / "etf_universe_seed.json").exists()
+    assert not (ROOT / "data" / "seeds" / "etf_universe_seed.json").exists()
+''',
+    "project organization",
+)
+write(path, text)
+
+path = "tests/test_readme.py"
+text = read(path)
+text = replace_once(
+    text,
+    '    assert "data/etf_universe_seed.json" in text\n',
+    '    assert "data/etf_universe_seed.json" not in text\n    assert "sole runtime source of truth" in text\n',
+    "README test",
+)
+write(path, text)
+
+path = "README.md"
+text = read(path)
+text = replace_once(
+    text,
+    "├── data/\n│   └── etf_universe_seed.json       # bootstrap ETF universe metadata\n├── scripts/\n",
+    "├── scripts/\n",
+    "README layout",
+)
+text, count = re.subn(
+    r"## ETF universe data\n\n.*?(?=\n## Scraper structure)",
+    '''## ETF universe data
+
+The `etf_universe` table in the operational SQLite database is the sole runtime source of truth for the ETF universe and official scraper configuration. Runtime reads never seed or mutate ETF rows.
+
+A new database starts with an empty `etf_universe` table. The nightly discovery step can create basic ETF metadata; supported official scraper settings such as `official_url`, `official_method`, and `official_logic` must be written directly to the database.
+
+The runtime database is not committed to the repository. Persist it across deployments and include it in the normal backup and restore process. Restoring production configuration means restoring the operational database, not regenerating it from a repository seed file.
+
+Important semantics:
+
+- `retired = 0`: included in nightly holdings fetches after the listing date.
+- `retired = 1`: retained for historical lookup but skipped by nightly holdings fetches.
+- `listing_date`: excludes pre-listing ETFs from the operational universe for earlier dates.
+- `first_seen_date`: records when discovery or an explicit DB write first introduced the ETF.
+''',
+    text,
+    flags=re.S,
+)
+if count != 1:
+    raise RuntimeError(f"README universe section: {count}")
+if "etf_universe_seed.json" in text:
+    raise RuntimeError("README still references seed file")
+write(path, text)
