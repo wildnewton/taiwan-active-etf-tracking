@@ -1,0 +1,62 @@
+name: Issue 130 fixture staging
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply-test-commit:
+    if: github.head_ref == 'staging/issue-130-db-only-config'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging/issue-130-db-only-config
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Apply explicit fixture updates
+        run: python scripts/issue130_fix_remaining_tests.py
+
+      - name: Remove staging files
+        run: |
+          rm scripts/issue130_fix_remaining_tests.py
+          rm .github/workflows/issue130-fixture-staging.yml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
+      - name: Compile and targeted tests
+        run: |
+          python -m compileall -q scripts tests
+          PYTHONPATH=. pytest -q \
+            tests/test_active_classification.py \
+            tests/test_canonical_comparability.py \
+            tests/test_change_diagnostics.py \
+            tests/test_flow_adjusted_materiality.py \
+            tests/test_fund_flow_adjustment.py \
+            tests/test_official.py \
+            tests/test_report_canonical_sources.py \
+            tests/test_report_redesign.py \
+            tests/test_signal_report.py
+
+      - name: Full suite
+        run: PYTHONPATH=. pytest -q
+
+      - name: Commit clean candidate
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: make ETF universe fixtures explicit"
+          git push origin HEAD:staging/issue-130-db-only-config
