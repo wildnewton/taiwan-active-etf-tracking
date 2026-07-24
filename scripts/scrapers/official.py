@@ -4,12 +4,15 @@ Official sources share the same structural snapshot validation as MoneyDJ.
 Total weight remains a diagnostic warning and never determines validity.
 """
 
+import asyncio
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
+from io import BytesIO
 from urllib.parse import urlparse
 
 import requests
+from openpyxl import load_workbook
 from bs4 import BeautifulSoup
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -24,6 +27,7 @@ OFFICIAL_WARNING_MIN_TOTAL_WEIGHT = 20.0
 OFFICIAL_WARNING_MAX_TOTAL_WEIGHT = 110.0
 EXTRACTION_METHOD_STATIC = "requests_bs4"
 EXTRACTION_METHOD_API = "playwright_api_intercept"
+EXTRACTION_METHOD_EXCEL = "requests_xlsx"
 EXTRACTION_METHOD_PLAYWRIGHT = "playwright_table_parse"
 EXTRACTION_METHOD_STEALTH = "stealth_playwright_api"
 _API_RESPONSE_TIMEOUT_MS = 10_000
@@ -681,11 +685,20 @@ def scrape_official_static(etf_code: str) -> dict:
         return _failed_result(source_url, str(exc))
 
 
-async def scrape_official_with_browser(etf_code: str, page) -> dict:
+async def scrape_official_with_browser(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     method = config["method"]
     issuer = config["issuer"]
+
+    if method == "api" and issuer == "JPMorgan":
+        if target_date is None:
+            return _failed_result(config["url"], "target_date is required for JPMorgan")
+        return await asyncio.to_thread(scrape_jpmorgan_excel, etf_code, target_date)
 
     if method == "api" and issuer == "Capital":
         return await scrape_capital_playwright(etf_code, page)
@@ -699,6 +712,7 @@ async def scrape_official_with_browser(etf_code: str, page) -> dict:
         return await scrape_mega_playwright(etf_code, page)
     if method == "playwright" and issuer == "Uni-President":
         return await scrape_uni_president_playwright(etf_code, page)
+
 
     return _failed_result(config["url"], f"No browser official scraper for {issuer} (method={method})")
 
@@ -944,6 +958,154 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
         pane_text,
     )
     return labeled_date_match.group(1) if labeled_date_match else None
+
+
+
+
+_JPMORGAN_SHEETS = {
+    "基金資產 - 股票": "stock",
+    "基金資產 - 期貨": "futures",
+    "基金資產 - 選擇權": "options",
+    "現金與約當現金": "cash",
+}
+
+
+def _jpmorgan_sheet_rows(sheet, expected_date: date) -> list[tuple[str, ...]]:
+    rows = [
+        tuple("" if value is None else str(value).strip() for value in row)
+        for row in sheet.iter_rows(values_only=True)
+    ]
+    title = rows[0][0] if rows and rows[0] else ""
+    match = re.search(r"\((\d{4}-\d{2}-\d{2})\)", title)
+    actual_date = match.group(1) if match else "missing"
+    if actual_date != expected_date.isoformat():
+        raise ValueError(
+            f"JPMorgan date mismatch: expected {expected_date.isoformat()}, "
+            f"got {actual_date}"
+        )
+
+    for index, row in enumerate(rows):
+        if row and row[0] in {"股票代碼", "商品代碼", "名稱"}:
+            return [item for item in rows[index + 1 :] if item and item[0]]
+    raise ValueError(f"JPMorgan table header not found: {title}")
+
+
+def _jpmorgan_non_stock_row(
+    raw: tuple[str, ...],
+    asset_type: str,
+    etf_code: str,
+    source_url: str,
+    date_str: str,
+) -> dict | None:
+    if asset_type == "cash":
+        if len(raw) < 3:
+            return None
+        code, name, shares, amount, weight = None, raw[0], None, raw[1], raw[2]
+        asset_name = name
+    else:
+        if len(raw) < 4 or raw[0].upper() in {"", "-", "N/A"}:
+            return None
+        code, name, shares, amount, weight = raw[0], raw[1], raw[2], None, raw[3]
+        asset_name = f"{name}({code})"
+
+    parsed_weight = _parse_float(weight)
+    if not name or parsed_weight is None:
+        return None
+    return {
+        "date": date_str,
+        "etf_code": etf_code,
+        "asset_name": asset_name,
+        "asset_type": asset_type,
+        "stock_code": code,
+        "stock_name": name,
+        "shares": _parse_number(shares) if shares else None,
+        "market_value": _parse_number(amount) if amount else None,
+        "weight_pct": parsed_weight,
+        "source_url": source_url,
+        "source_type": SOURCE_TYPE,
+        "extraction_method": EXTRACTION_METHOD_EXCEL,
+    }
+
+
+def parse_jpmorgan_excel(
+    content: bytes,
+    etf_code: str,
+    source_url: str,
+    target_date: date,
+) -> list[dict]:
+    workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+    try:
+        missing = [name for name in _JPMORGAN_SHEETS if name not in workbook.sheetnames]
+        if missing:
+            raise ValueError(f"JPMorgan sheets missing: {', '.join(missing)}")
+
+        etf_code = etf_code.upper()
+        date_str = target_date.strftime("%Y/%m/%d")
+        rows = []
+        for sheet_name, asset_type in _JPMORGAN_SHEETS.items():
+            for raw in _jpmorgan_sheet_rows(workbook[sheet_name], target_date):
+                if asset_type == "stock":
+                    if len(raw) < 5 or not re.fullmatch(r"\d{4}", raw[0]):
+                        continue
+                    weight = _parse_float(raw[4])
+                    if not raw[1] or weight is None:
+                        continue
+                    row = _row(
+                        etf_code,
+                        raw[0],
+                        raw[1],
+                        _parse_number(raw[2]),
+                        weight,
+                        source_url,
+                        date_str,
+                        EXTRACTION_METHOD_EXCEL,
+                    )
+                    row["market_value"] = _parse_number(raw[3])
+                else:
+                    row = _jpmorgan_non_stock_row(
+                        raw,
+                        asset_type,
+                        etf_code,
+                        source_url,
+                        date_str,
+                    )
+                if row:
+                    rows.append(row)
+
+        rows = dedupe_rows(rows)
+        if len([row for row in rows if row["asset_type"] == "stock"]) < 5:
+            raise ValueError("JPMorgan stock rows not found")
+        return rows
+    finally:
+        workbook.close()
+
+
+def scrape_jpmorgan_excel(etf_code: str, target_date: date) -> dict:
+    etf_code = etf_code.upper()
+    config = get_official_config(etf_code)
+    source_url = config["url"]
+    try:
+        params = {**config["internal_ids"], "date": target_date.isoformat()}
+        response = requests.get(
+            source_url,
+            params=params,
+            headers={
+                "User-Agent": "Mozilla/5.0",
+                "Accept": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        source_url = response.url
+        rows = parse_jpmorgan_excel(
+            response.content,
+            etf_code,
+            source_url,
+            target_date,
+        )
+        return _build_result(rows, source_url, EXTRACTION_METHOD_EXCEL)
+    except Exception as exc:
+        return _failed_result(source_url, f"JPMorgan Excel failed: {exc}")
 
 
 def _parse_float(value: str) -> float | None:

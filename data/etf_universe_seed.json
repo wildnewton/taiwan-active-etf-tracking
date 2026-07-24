@@ -15,9 +15,9 @@
     "name": "主動摩根台灣鑫收",
     "market": "TWSE",
     "isin": null,
-    "official_url": "https://am.jpmorgan.com/tw/zh/asset-management/twetf/funds/jpmorgan-tw-equity-high-income-etf/",
-    "official_method": "browser",
-    "official_logic": "slug=jpmorgan-tw-equity-high-income-etf"
+    "official_url": "https://am.jpmorgan.com/FundsMarketingHandler/excel",
+    "official_method": "api",
+    "official_logic": "type=holding_pcf;cusip=TW00000401A1;country=tw;role=twetf;locale=zh-TW"
   },
   {
     "code": "00403A",
