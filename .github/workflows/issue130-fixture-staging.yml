@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  apply-test-commit:
+  apply-and-capture:
     if: github.head_ref == 'staging/issue-130-db-only-config'
     runs-on: ubuntu-latest
     steps:
@@ -36,9 +36,10 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
-      - name: Compile and targeted tests
+      - name: Capture targeted result
         run: |
           python -m compileall -q scripts tests
+          set +e
           PYTHONPATH=. pytest -q \
             tests/test_active_classification.py \
             tests/test_canonical_comparability.py \
@@ -48,15 +49,17 @@ jobs:
             tests/test_official.py \
             tests/test_report_canonical_sources.py \
             tests/test_report_redesign.py \
-            tests/test_signal_report.py
+            tests/test_signal_report.py \
+            > issue130_targeted.txt 2>&1
+          status=$?
+          echo >> issue130_targeted.txt
+          echo "exit_status=$status" >> issue130_targeted.txt
+          exit 0
 
-      - name: Full suite
-        run: PYTHONPATH=. pytest -q
-
-      - name: Commit clean candidate
+      - name: Commit diagnostic candidate
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "test: make ETF universe fixtures explicit"
+          git commit -m "chore: capture remaining issue 130 failures"
           git push origin HEAD:staging/issue-130-db-only-config
