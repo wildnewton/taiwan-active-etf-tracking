@@ -12,7 +12,7 @@ from etf_universe import (
     get_active_etfs,
     get_etf_config,
     reconcile_discovered_universe,
-    seed_etf_universe_from_file,
+    upsert_etf,
 )
 
 
@@ -28,7 +28,15 @@ RUN_DATE = RUN_AT.date()
 
 
 def _seed_with_future_etf():
-    seed_etf_universe_from_file(seen_date="2026-07-14")
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "issuer": "Nomura",
+            "market": "TWSE",
+            "first_seen_date": "2026-07-14",
+        }
+    )
     reconcile_discovered_universe(
         [FUTURE_ETF],
         seen_date="2026-07-14",
@@ -85,14 +93,20 @@ def test_universe_persists_and_filters_listing_date():
     assert "00408A" in {
         row["code"] for row in get_active_etfs(as_of_date="2026-07-15")
     }
-    assert get_active_etf_count(as_of_date="2026-07-14") == 19
-    assert get_active_etf_count(as_of_date="2026-07-15") == 20
+    assert get_active_etf_count(as_of_date="2026-07-14") == 1
+    assert get_active_etf_count(as_of_date="2026-07-15") == 2
     assert get_etf_config("00408A")["retired"] == 0
 
 
 def test_unknown_listing_date_remains_eligible():
     db.init_db(":memory:")
-    seed_etf_universe_from_file(seen_date="2026-07-14")
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "listing_date": None,
+        }
+    )
 
     active_codes = {
         row["code"] for row in get_active_etfs(as_of_date="2026-07-14")
@@ -121,7 +135,7 @@ def test_sync_pipeline_uses_same_taipei_run_date_for_universe(tmp_path):
         summary = pipeline.run_daily_scrape(db_path)
 
     assert "00408A" not in seen_codes
-    assert summary["total_etfs"] == 19
+    assert summary["total_etfs"] == 1
 
 
 @pytest.mark.asyncio
@@ -144,7 +158,7 @@ async def test_async_pipeline_uses_same_taipei_run_date_for_universe(tmp_path):
         summary = await pipeline._run_scrape_async(db_path, None, fake_scrape)
 
     assert "00408A" not in seen_codes
-    assert summary["total_etfs"] == 19
+    assert summary["total_etfs"] == 1
 
 
 def test_report_uses_historical_listing_boundary_for_denominator_and_runs():
@@ -153,7 +167,7 @@ def test_report_uses_historical_listing_boundary_for_denominator_and_runs():
 
     quality = report._get_data_quality("2026-07-14")
 
-    assert quality["expected_count"] == 19
+    assert quality["expected_count"] == 1
     assert "00408A" not in quality["missing_etfs"]
 
 
@@ -182,8 +196,8 @@ def test_report_warnings_use_historical_universe_count():
     with patch("etf_universe._today", return_value="2026-07-15"):
         warnings = report._get_data_warnings("2026-07-14")
 
-    assert any("預期 19 檔 ETF" in warning for warning in warnings)
-    assert not any("預期 20 檔 ETF" in warning for warning in warnings)
+    assert any("預期 1 檔 ETF" in warning for warning in warnings)
+    assert not any("預期 2 檔 ETF" in warning for warning in warnings)
 
 
 def test_consensus_denominator_uses_historical_universe_count():
@@ -203,4 +217,4 @@ def test_consensus_denominator_uses_historical_universe_count():
         patch("etf_universe._today", return_value="2026-07-15"):
         rows = report._get_consensus_stocks("2026-07-14", min_etfs=1)
 
-    assert rows[0]["active_etf_count"] == 19
+    assert rows[0]["active_etf_count"] == 1

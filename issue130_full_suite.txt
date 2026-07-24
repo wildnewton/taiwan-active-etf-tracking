@@ -1,0 +1,693 @@
+FFFF...............................................FFF....FFF........... [ 13%]
+...................................................................FFFFF [ 27%]
+FFFFFFF................................................................. [ 41%]
+.....................................................................FFF [ 55%]
+.........F.............................................................. [ 69%]
+..........................................FFFF............F............. [ 83%]
+.............................F.......................................... [ 97%]
+............                                                             [100%]
+=================================== FAILURES ===================================
+_____________ test_weight_only_increase_is_passive_not_active_add ______________
+
+    def test_weight_only_increase_is_passive_not_active_add():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 5.0)
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 6.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2330")
+>       assert row["shares_delta_1d"] == 0
+               ^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_active_classification.py:151: TypeError
+____________ test_weight_only_decrease_is_passive_not_active_reduce ____________
+
+    def test_weight_only_decrease_is_passive_not_active_reduce():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 6.0)
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 5.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2330")
+>       assert row["shares_delta_1d"] == 0
+               ^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_active_classification.py:168: TypeError
+_ test_mixed_share_and_weight_direction_keeps_active_direction_but_marks_mixed _
+
+    def test_mixed_share_and_weight_direction_keeps_active_direction_but_marks_mixed():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 6.0)
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 110, 5.0)
+        insert_holding("2026-06-23", "00980A", "2454", "聯發科", 100, 5.0)
+        insert_holding("2026-06-24", "00980A", "2454", "聯發科", 90, 6.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        add_mixed = fetch_change("2330")
+>       assert add_mixed["position_change_type"] == "mixed_add_but_weight_down"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_active_classification.py:187: TypeError
+______________ test_consecutive_active_days_use_shares_not_weight ______________
+
+    def test_consecutive_active_days_use_shares_not_weight():
+        db.init_db(":memory:")
+        # Weight rises every day, but shares are unchanged. This is not active adding.
+        insert_holding("2026-06-22", "00980A", "2330", "台積電", 100, 4.0)
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 5.0)
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 6.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2330")
+>       assert row["consecutive_add_days"] == 2
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_active_classification.py:209: TypeError
+_________ test_change_detection_uses_one_canonical_source_per_etf_date _________
+
+    def test_change_detection_uses_one_canonical_source_per_etf_date():
+        db.init_db(":memory:")
+    
+        # MoneyDJ is valid and higher priority. Official is a valid lower-priority
+        # duplicate and must not affect ranking or deltas.
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2308", "台達電", 200, 5.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", None, 8.0, "official_static")
+    
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 110, 12.0, "moneydj_primary")
+        insert_holding("2026-06-24", "00980A", "2308", "台達電", 200, 5.0, "moneydj_primary")
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", None, 7.5, "official_static")
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+>       assert summary["ok"] is True
+E       assert False is True
+
+tests/test_canonical_comparability.py:126: AssertionError
+_ test_partial_current_source_is_not_comparable_and_does_not_create_removed_positions _
+
+    def test_partial_current_source_is_not_comparable_and_does_not_create_removed_positions():
+        db.init_db(":memory:")
+    
+        # Previous day is a structurally valid holdings source.
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2308", "台達電", 100, 8.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2454", "聯發科", 100, 6.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2383", "台光電", 100, 4.0, "moneydj_primary")
+    
+        # Current day only has one fallback stock and is structurally invalid. It
+        # must be skipped, not treated as removed positions.
+        insert_holding(
+            "2026-06-24",
+            "00980A",
+            "2330",
+            "台積電",
+            100,
+            10.5,
+            "official_static",
+            complete=False,
+        )
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        assert summary["ok"] is False
+        assert summary["rows"] == 0
+        assert summary["new_positions"] == 0
+        assert summary["removed_positions"] == 0
+>       assert summary["skipped_etfs"] == ["00980A"]
+E       AssertionError: assert [] == ['00980A']
+E         
+E         Right contains one more item: '00980A'
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     '00980A',
+E         - ]
+
+tests/test_canonical_comparability.py:168: AssertionError
+________________ test_high_overlap_source_switch_is_comparable _________________
+
+    def test_high_overlap_source_switch_is_comparable():
+        db.init_db(":memory:")
+    
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2308", "台達電", 100, 8.0, "moneydj_primary")
+        insert_holding("2026-06-23", "00980A", "2454", "聯發科", 100, 6.0, "moneydj_primary")
+    
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 105, 10.5, "moneydj_browser")
+        insert_holding("2026-06-24", "00980A", "2308", "台達電", 100, 8.0, "moneydj_browser")
+        insert_holding("2026-06-24", "00980A", "2454", "聯發科", 100, 6.0, "moneydj_browser")
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+>       assert summary["ok"] is True
+E       assert False is True
+
+tests/test_canonical_comparability.py:186: AssertionError
+_______________ test_comparable_etf_persists_included_diagnostic _______________
+
+    def test_comparable_etf_persists_included_diagnostic():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+        insert_holding("2026-06-23", "00980A", "2308", "Delta", 100, 8.0)
+        insert_holding("2026-06-24", "00980A", "2330", "TSMC", 110, 11.0)
+        insert_holding("2026-06-24", "00980A", "2308", "Delta", 100, 8.0)
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+>       assert summary["ok"] is True
+E       assert False is True
+
+tests/test_change_diagnostics.py:79: AssertionError
+__________________ test_skipped_etfs_persist_specific_reasons __________________
+
+    def test_skipped_etfs_persist_specific_reasons():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+        insert_holding("2026-06-23", "00980A", "2308", "Delta", 100, 8.0)
+        insert_holding("2026-06-23", "00980A", "2454", "MTK", 100, 6.0)
+        insert_holding("2026-06-23", "00981A", "2330", "TSMC", 100, 10.0)
+        insert_holding("2026-06-24", "00980A", "2330", "TSMC", 100, 10.5, "official_static")
+        insert_holding("2026-06-24", "00982A", "2330", "TSMC", 105, 10.5)
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+>       assert summary["skipped_etfs"] == ["00980A", "00981A", "00982A"]
+E       AssertionError: assert [] == ['00980A', '00981A', '00982A']
+E         
+E         Right contains 3 more items, first extra item: '00980A'
+E         
+E         Full diff:
+E         + []
+E         - [
+E         -     '00980A',
+E         -     '00981A',
+E         -     '00982A',
+E         - ]
+
+tests/test_change_diagnostics.py:105: AssertionError
+__________ test_diagnostics_are_replaced_for_same_date_pair_on_rerun ___________
+
+    def test_diagnostics_are_replaced_for_same_date_pair_on_rerun():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "TSMC", 100, 10.0)
+        insert_holding("2026-06-24", "00980A", "2330", "TSMC", 110, 11.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        rows = fetch_diagnostics()
+>       assert len(rows) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/test_change_diagnostics.py:123: AssertionError
+__ test_three_day_proportional_scaling_does_not_create_consecutive_add_signal __
+
+    def test_three_day_proportional_scaling_does_not_create_consecutive_add_signal():
+        db.init_db(":memory:")
+        seed_day("2026-06-21", 100.0, tsmc_weight=10.0)
+        seed_day("2026-06-22", 110.0, tsmc_weight=10.0)
+        seed_day("2026-06-23", 121.0, tsmc_weight=10.0)
+        seed_day("2026-06-24", 133.1, tsmc_weight=10.0)
+    
+        run_changes_for_four_days()
+        row = fetch_change("2026-06-24", "2330")
+    
+>       assert row["position_change_type"] == "flow_scaled_increase"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:112: TypeError
+_ test_three_day_proportional_scaling_does_not_create_consecutive_reduce_signal _
+
+    def test_three_day_proportional_scaling_does_not_create_consecutive_reduce_signal():
+        db.init_db(":memory:")
+        seed_day("2026-06-21", 100.0, tsmc_weight=10.0)
+        seed_day("2026-06-22", 90.0, tsmc_weight=10.0)
+        seed_day("2026-06-23", 81.0, tsmc_weight=10.0)
+        seed_day("2026-06-24", 72.9, tsmc_weight=10.0)
+    
+        run_changes_for_four_days()
+        row = fetch_change("2026-06-24", "2330")
+    
+>       assert row["position_change_type"] == "flow_scaled_decrease"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:131: TypeError
+____ test_three_day_excess_flow_adjusted_add_creates_consecutive_add_signal ____
+
+    def test_three_day_excess_flow_adjusted_add_creates_consecutive_add_signal():
+        db.init_db(":memory:")
+        seed_day("2026-06-21", 100.0, tsmc_shares=100.0, tsmc_weight=10.0)
+        seed_day("2026-06-22", 110.0, tsmc_shares=130.0, tsmc_weight=11.0)
+        seed_day("2026-06-23", 121.0, tsmc_shares=160.0, tsmc_weight=12.0)
+        seed_day("2026-06-24", 133.1, tsmc_shares=190.0, tsmc_weight=13.0)
+    
+        run_changes_for_four_days()
+        row = fetch_change("2026-06-24", "2330")
+    
+>       assert row["position_change_type"] == "confirmed_active_add"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:150: TypeError
+___________ test_immaterial_flow_adjusted_increase_is_not_active_add ___________
+
+    def test_immaterial_flow_adjusted_increase_is_not_active_add():
+        db.init_db(":memory:")
+        seed_day("2026-06-23", 100.0, tsmc_shares=100.0, tsmc_weight=10.0)
+        seed_day("2026-06-24", 110.0, tsmc_shares=110.5, tsmc_weight=10.1)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+        row = fetch_change("2026-06-24", "2330")
+    
+>       assert round(row["active_shares_delta_pct_1d"], 4) == round(0.5 / 110 * 100, 4)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:167: TypeError
+_________ test_material_flow_adjusted_increase_is_confirmed_active_add _________
+
+    def test_material_flow_adjusted_increase_is_confirmed_active_add():
+        db.init_db(":memory:")
+        seed_day("2026-06-23", 100.0, tsmc_shares=100.0, tsmc_weight=10.0)
+        seed_day("2026-06-24", 110.0, tsmc_shares=112.0, tsmc_weight=10.3)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+        row = fetch_change("2026-06-24", "2330")
+    
+>       assert round(row["active_shares_delta_pct_1d"], 4) == round(2.0 / 110 * 100, 4)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:184: TypeError
+___ test_materiality_threshold_does_not_block_new_or_removed_core_positions ____
+
+    def test_materiality_threshold_does_not_block_new_or_removed_core_positions():
+        db.init_db(":memory:")
+        seed_day("2026-06-23", 100.0, tsmc_shares=100.0, tsmc_weight=10.0)
+        seed_day("2026-06-24", 110.0, tsmc_shares=110.0, tsmc_weight=10.0)
+        insert_holding("2026-06-24", "6669", "緯穎", 50.0, 3.2)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+        new_row = fetch_change("2026-06-24", "6669")
+    
+>       assert new_row["position_change_type"] == "new_position"
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_flow_adjusted_materiality.py:199: TypeError
+________ test_proportional_share_increase_is_flow_scaled_not_active_add ________
+
+    def test_proportional_share_increase_is_flow_scaled_not_active_add():
+        db.init_db(":memory:")
+        seed_previous_day()
+        for code, name, weight in [
+            ("2330", "台積電", 10.0),
+            ("2308", "台達電", 8.0),
+            ("2454", "聯發科", 6.0),
+            ("2383", "台光電", 4.0),
+            ("2345", "智邦", 3.0),
+        ]:
+            insert_holding("2026-06-24", "00980A", code, name, 110, weight)
+    
+        summary = detect_holding_changes("2026-06-24", "2026-06-23")
+    
+>       assert summary["ok"] is True
+E       assert False is True
+
+tests/test_fund_flow_adjustment.py:103: AssertionError
+______ test_proportional_share_decrease_is_flow_scaled_not_active_reduce _______
+
+    def test_proportional_share_decrease_is_flow_scaled_not_active_reduce():
+        db.init_db(":memory:")
+        seed_previous_day()
+        for code, name, weight in [
+            ("2330", "台積電", 10.0),
+            ("2308", "台達電", 8.0),
+            ("2454", "聯發科", 6.0),
+            ("2383", "台光電", 4.0),
+            ("2345", "智邦", 3.0),
+        ]:
+            insert_holding("2026-06-24", "00980A", code, name, 90, weight)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2330")
+>       assert round(row["etf_scale_factor"], 4) == 0.9
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_fund_flow_adjustment.py:132: TypeError
+_________ test_excess_increase_above_etf_scale_is_confirmed_active_add _________
+
+    def test_excess_increase_above_etf_scale_is_confirmed_active_add():
+        db.init_db(":memory:")
+        seed_previous_day()
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 130, 11.0)
+        insert_holding("2026-06-24", "00980A", "2308", "台達電", 110, 8.0)
+        insert_holding("2026-06-24", "00980A", "2454", "聯發科", 110, 6.0)
+        insert_holding("2026-06-24", "00980A", "2383", "台光電", 110, 4.0)
+        insert_holding("2026-06-24", "00980A", "2345", "智邦", 110, 3.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        tsmc = fetch_change("2330")
+>       assert round(tsmc["etf_scale_factor"], 4) == 1.1
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_fund_flow_adjustment.py:152: TypeError
+_ test_underweight_after_etf_scale_is_confirmed_active_reduce_even_if_raw_shares_flat _
+
+    def test_underweight_after_etf_scale_is_confirmed_active_reduce_even_if_raw_shares_flat():
+        db.init_db(":memory:")
+        seed_previous_day()
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 9.0)
+        insert_holding("2026-06-24", "00980A", "2308", "台達電", 110, 8.0)
+        insert_holding("2026-06-24", "00980A", "2454", "聯發科", 110, 6.0)
+        insert_holding("2026-06-24", "00980A", "2383", "台光電", 110, 4.0)
+        insert_holding("2026-06-24", "00980A", "2345", "智邦", 110, 3.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        tsmc = fetch_change("2330")
+>       assert round(tsmc["etf_scale_factor"], 4) == 1.1
+                     ^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_fund_flow_adjustment.py:173: TypeError
+___________ test_scale_factor_uses_median_and_ignores_outlier_ratio ____________
+
+    def test_scale_factor_uses_median_and_ignores_outlier_ratio():
+        db.init_db(":memory:")
+        seed_previous_day()
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 200, 12.0)
+        insert_holding("2026-06-24", "00980A", "2308", "台達電", 110, 8.0)
+        insert_holding("2026-06-24", "00980A", "2454", "聯發科", 110, 6.0)
+        insert_holding("2026-06-24", "00980A", "2383", "台光電", 110, 4.0)
+        insert_holding("2026-06-24", "00980A", "2345", "智邦", 110, 3.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2308")
+>       assert round(row["etf_scale_factor"], 4) == 1.1
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_fund_flow_adjustment.py:193: TypeError
+___________ test_too_few_comparable_shares_disables_flow_adjustment ____________
+
+    def test_too_few_comparable_shares_disables_flow_adjustment():
+        db.init_db(":memory:")
+        insert_holding("2026-06-23", "00980A", "2330", "台積電", 100, 10.0)
+        insert_holding("2026-06-24", "00980A", "2330", "台積電", 110, 11.0)
+    
+        detect_holding_changes("2026-06-24", "2026-06-23")
+    
+        row = fetch_change("2330")
+>       assert row["etf_scale_factor"] is None
+               ^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: 'NoneType' object is not subscriptable
+
+tests/test_fund_flow_adjustment.py:207: TypeError
+___________________ test_get_official_config_returns_config ____________________
+
+    def test_get_official_config_returns_config():
+>       config = get_official_config("00405A")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_official.py:388: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/scrapers/official.py:44: in get_official_config
+    etf = get_etf_config(etf_code.upper())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/config.py:13: in get_etf_config
+    return _get_etf_config(code)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+code = '00405A'
+
+    def get_etf_config(code: str) -> dict:
+        row = _fetch_raw(code)
+        if row is None:
+>           raise KeyError(f"Unknown ETF code: {code}")
+E           KeyError: 'Unknown ETF code: 00405A'
+
+scripts/etf_universe.py:211: KeyError
+___________________ test_get_official_config_capital_is_api ____________________
+
+    def test_get_official_config_capital_is_api():
+>       config = get_official_config("00982A")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_official.py:398: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/scrapers/official.py:44: in get_official_config
+    etf = get_etf_config(etf_code.upper())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/config.py:13: in get_etf_config
+    return _get_etf_config(code)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+code = '00982A'
+
+    def get_etf_config(code: str) -> dict:
+        row = _fetch_raw(code)
+        if row is None:
+>           raise KeyError(f"Unknown ETF code: {code}")
+E           KeyError: 'Unknown ETF code: 00982A'
+
+scripts/etf_universe.py:211: KeyError
+________________ test_get_official_config_nomura_is_stealth_api ________________
+
+    def test_get_official_config_nomura_is_stealth_api():
+>       config = get_official_config("00980A")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_official.py:406: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/scrapers/official.py:44: in get_official_config
+    etf = get_etf_config(etf_code.upper())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+scripts/config.py:13: in get_etf_config
+    return _get_etf_config(code)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+code = '00980A'
+
+    def get_etf_config(code: str) -> dict:
+        row = _fetch_raw(code)
+        if row is None:
+>           raise KeyError(f"Unknown ETF code: {code}")
+E           KeyError: 'Unknown ETF code: 00980A'
+
+scripts/etf_universe.py:211: KeyError
+______________________ test_scrape_official_static_fubon _______________________
+
+    def test_scrape_official_static_fubon():
+        response = Mock()
+        response.text = VALID_FUBON_HTML
+        response.raise_for_status.return_value = None
+    
+        with patch("scrapers.official.requests.get", return_value=response):
+            result = scrape_official_static("00405A")
+    
+        assert result["ok"] is True
+>       assert result["source_url"] == FUBON_URL
+E       AssertionError: assert 'https://www.....html?00405A=' == 'https://webs...?stkId=00405A'
+E         
+E         - https://websys.fsit.com.tw/FubonETF/Fund/Assets.aspx?stkId=00405A
+E         + https://www.twse.com.tw/zh/products/securities/etf/products/content.html?00405A=
+
+tests/test_official.py:540: AssertionError
+_________ test_report_summary_stats_ignore_noncanonical_holdings_rows __________
+
+    def test_report_summary_stats_ignore_noncanonical_holdings_rows():
+        db.init_db(":memory:")
+        insert_full_day("2026-06-26")
+    
+        report = generate_signal_report("2026-06-26")
+    
+>       assert "ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19" in report
+E       AssertionError: assert 'ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_report_canonical_sources.py:80: AssertionError
+_______ test_report_consensus_ignores_noncanonical_duplicate_source_rows _______
+
+    def test_report_consensus_ignores_noncanonical_duplicate_source_rows():
+        db.init_db(":memory:")
+        insert_full_day("2026-06-26")
+    
+        report = generate_signal_report("2026-06-26")
+    
+>       assert "2330 台積電" in report
+E       AssertionError: assert '2330 台積電' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_report_canonical_sources.py:89: AssertionError
+____ test_report_consensus_weight_delta_uses_canonical_rows_for_both_dates _____
+
+    def test_report_consensus_weight_delta_uses_canonical_rows_for_both_dates():
+        db.init_db(":memory:")
+        for etf_code in ETF_CODES:
+            insert_holding("2026-06-25", etf_code, "2330", "台積電", 10.0, "moneydj_primary")
+            insert_holding("2026-06-25", etf_code, "2454", "聯發科", 99.0, "official_static")
+            insert_holding("2026-06-26", etf_code, "2330", "台積電", 11.0, "moneydj_primary")
+            insert_holding("2026-06-26", etf_code, "2454", "聯發科", 99.0, "official_static")
+    
+        report = generate_signal_report("2026-06-26")
+    
+>       assert "2330 台積電" in report
+E       AssertionError: assert '2330 台積電' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_report_canonical_sources.py:103: AssertionError
+____________ test_report_data_warnings_use_canonical_source_totals _____________
+
+    def test_report_data_warnings_use_canonical_source_totals():
+        db.init_db(":memory:")
+        for etf_code in ETF_CODES:
+            canonical_weight = 50.0 if etf_code == "00400A" else 90.0
+            insert_holding("2026-06-26", etf_code, "2330", "台積電", canonical_weight, "moneydj_primary")
+            insert_holding("2026-06-26", etf_code, "2454", "聯發科", 50.0, "official_static")
+    
+        report = generate_signal_report("2026-06-26")
+    
+>       assert "00400A: 股票權重僅 50.0%" in report
+E       AssertionError: assert '00400A: 股票權重僅 50.0%' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_report_canonical_sources.py:117: AssertionError
+_____ test_report_puts_data_quality_before_summary_and_shows_missing_etfs ______
+
+    def test_report_puts_data_quality_before_summary_and_shows_missing_etfs():
+        db.init_db(":memory:")
+        for etf_code in ETF_CODES[1:]:
+            insert_holding("2026-06-26", etf_code)
+    
+        report = generate_signal_report("2026-06-26")
+    
+        assert "═══ 資料品質 / 信任度 ═══" in report
+        assert report.index("資料品質 / 信任度") < report.index("═══ 摘要 ═══")
+>       assert "資料品質: ⚠️ Degraded" in report
+E       AssertionError: assert '資料品質: ⚠️ Degraded' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_report_redesign.py:219: AssertionError
+_____________________ test_report_warns_when_etfs_missing ______________________
+
+    def test_report_warns_when_etfs_missing():
+        """⚠️ Report should warn when holdings have < 19 ETFs for latest date."""
+        db.init_db(":memory:")
+        ensure_signal_table()
+    
+        # Insert holdings for only 13 ETFs (simulating incomplete scrape)
+        for i in range(400, 413):
+            etf = f"00{i}A"
+            insert_holding("2026-06-26", etf, str(2300 + i), f"Stock{i}", 5.0)
+    
+        report = generate_signal_report("2026-06-26")
+    
+>       assert "⚠️" in report, f"Expected ⚠️ warning in report:\n{report}"
+E       AssertionError: Expected ⚠️ warning in report:
+E         📊 台灣主動 ETF 每日報告
+E         📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26
+E         
+E         ═══ 資料品質 / 信任度 ═══
+E         資料品質: ✅ Clean
+E         成功持倉 ETF: 0
+E         資料品質警告: 無
+E         
+E         ═══ 摘要 ═══
+E         ETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0
+E         較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降
+E         
+E         ═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══
+E           無重大權重變動資料
+E       assert '⚠️' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+
+tests/test_signal_report.py:220: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_active_classification.py::test_weight_only_increase_is_passive_not_active_add - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_active_classification.py::test_weight_only_decrease_is_passive_not_active_reduce - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_active_classification.py::test_mixed_share_and_weight_direction_keeps_active_direction_but_marks_mixed - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_active_classification.py::test_consecutive_active_days_use_shares_not_weight - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_canonical_comparability.py::test_change_detection_uses_one_canonical_source_per_etf_date - assert False is True
+FAILED tests/test_canonical_comparability.py::test_partial_current_source_is_not_comparable_and_does_not_create_removed_positions - AssertionError: assert [] == ['00980A']
+  
+  Right contains one more item: '00980A'
+  
+  Full diff:
+  + []
+  - [
+  -     '00980A',
+  - ]
+FAILED tests/test_canonical_comparability.py::test_high_overlap_source_switch_is_comparable - assert False is True
+FAILED tests/test_change_diagnostics.py::test_comparable_etf_persists_included_diagnostic - assert False is True
+FAILED tests/test_change_diagnostics.py::test_skipped_etfs_persist_specific_reasons - AssertionError: assert [] == ['00980A', '00981A', '00982A']
+  
+  Right contains 3 more items, first extra item: '00980A'
+  
+  Full diff:
+  + []
+  - [
+  -     '00980A',
+  -     '00981A',
+  -     '00982A',
+  - ]
+FAILED tests/test_change_diagnostics.py::test_diagnostics_are_replaced_for_same_date_pair_on_rerun - assert 0 == 1
+ +  where 0 = len([])
+FAILED tests/test_flow_adjusted_materiality.py::test_three_day_proportional_scaling_does_not_create_consecutive_add_signal - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_flow_adjusted_materiality.py::test_three_day_proportional_scaling_does_not_create_consecutive_reduce_signal - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_flow_adjusted_materiality.py::test_three_day_excess_flow_adjusted_add_creates_consecutive_add_signal - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_flow_adjusted_materiality.py::test_immaterial_flow_adjusted_increase_is_not_active_add - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_flow_adjusted_materiality.py::test_material_flow_adjusted_increase_is_confirmed_active_add - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_flow_adjusted_materiality.py::test_materiality_threshold_does_not_block_new_or_removed_core_positions - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_fund_flow_adjustment.py::test_proportional_share_increase_is_flow_scaled_not_active_add - assert False is True
+FAILED tests/test_fund_flow_adjustment.py::test_proportional_share_decrease_is_flow_scaled_not_active_reduce - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_fund_flow_adjustment.py::test_excess_increase_above_etf_scale_is_confirmed_active_add - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_fund_flow_adjustment.py::test_underweight_after_etf_scale_is_confirmed_active_reduce_even_if_raw_shares_flat - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_fund_flow_adjustment.py::test_scale_factor_uses_median_and_ignores_outlier_ratio - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_fund_flow_adjustment.py::test_too_few_comparable_shares_disables_flow_adjustment - TypeError: 'NoneType' object is not subscriptable
+FAILED tests/test_official.py::test_get_official_config_returns_config - KeyError: 'Unknown ETF code: 00405A'
+FAILED tests/test_official.py::test_get_official_config_capital_is_api - KeyError: 'Unknown ETF code: 00982A'
+FAILED tests/test_official.py::test_get_official_config_nomura_is_stealth_api - KeyError: 'Unknown ETF code: 00980A'
+FAILED tests/test_official.py::test_scrape_official_static_fubon - AssertionError: assert 'https://www.....html?00405A=' == 'https://webs...?stkId=00405A'
+  
+  - https://websys.fsit.com.tw/FubonETF/Fund/Assets.aspx?stkId=00405A
+  + https://www.twse.com.tw/zh/products/securities/etf/products/content.html?00405A=
+FAILED tests/test_report_canonical_sources.py::test_report_summary_stats_ignore_noncanonical_holdings_rows - AssertionError: assert 'ETF 數量: 19 | 股票檔數: 1 | 非股票資產: 19' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_report_canonical_sources.py::test_report_consensus_ignores_noncanonical_duplicate_source_rows - AssertionError: assert '2330 台積電' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_report_canonical_sources.py::test_report_consensus_weight_delta_uses_canonical_rows_for_both_dates - AssertionError: assert '2330 台積電' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_report_canonical_sources.py::test_report_data_warnings_use_canonical_source_totals - AssertionError: assert '00400A: 股票權重僅 50.0%' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_report_redesign.py::test_report_puts_data_quality_before_summary_and_shows_missing_etfs - AssertionError: assert '資料品質: ⚠️ Degraded' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+FAILED tests/test_signal_report.py::test_report_warns_when_etfs_missing - AssertionError: Expected ⚠️ warning in report:
+  📊 台灣主動 ETF 每日報告
+  📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26
+  
+  ═══ 資料品質 / 信任度 ═══
+  資料品質: ✅ Clean
+  成功持倉 ETF: 0
+  資料品質警告: 無
+  
+  ═══ 摘要 ═══
+  ETF 數量: 0 | 股票檔數: 0 | 非股票資產: 0
+  較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降
+  
+  ═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══
+    無重大權重變動資料
+assert '⚠️' in '📊 台灣主動 ETF 每日報告\n📅 2026-07-24 14:37 CST | 資料日期: 2026-06-26\n\n═══ 資料品質 / 信任度 ═══\n資料品質: ✅ Clean\n成功持倉 ETF: 0\n資料品質警告:... | 非股票資產: 0\n較前日 (N/A): 🟢 0 新增 | 🔴 0 移除 | 📊 0 權重上升 | 📊 0 權重下降\n\n═══ 📊 Exposure movers（權重變動，不等於經理人交易） ═══\n  無重大權重變動資料'
+32 failed, 484 passed in 6.55s
+
+exit_status=1

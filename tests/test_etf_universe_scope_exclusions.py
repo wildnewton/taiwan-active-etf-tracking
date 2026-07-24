@@ -78,9 +78,9 @@ def test_reconcile_does_not_reactivate_retired_etf_marked_as_offshore_instrument
 
 def test_reconcile_also_preserves_normal_manual_retirement():
     db.init_db(":memory:")
-    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, seed_etf_universe_from_file
+    from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, upsert_etf
 
-    seed_etf_universe_from_file()
+    upsert_etf({"code": "00980A", "name": "主動野村臺灣優選", "market": "TWSE"})
     retire_etf("00980A", reason="not listed")
 
     summary = reconcile_discovered_universe(
