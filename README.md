@@ -194,7 +194,7 @@ Important semantics:
 - `retired = 0`: included in nightly holdings fetches after the listing date.
 - `retired = 1`: retained for historical lookup but skipped by nightly holdings fetches.
 - `listing_date`: excludes pre-listing ETFs from the operational universe for earlier dates.
-- `first_seen_date`: records when discovery or an explicit DB write first introduced the ETF.
+- `first_seen_date`: populated by discovery for newly discovered ETFs, or explicitly supplied by another writer.
 
 ## Scraper structure
 

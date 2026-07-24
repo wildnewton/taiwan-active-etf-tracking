@@ -79,7 +79,6 @@ def _with_derived_fields(row: dict) -> dict:
 
 
 def _fetch_raw(code: str) -> dict | None:
-    _ensure_table()
     conn = db._connect()
     old = conn.row_factory
     conn.row_factory = _dict_factory
