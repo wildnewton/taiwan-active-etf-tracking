@@ -24,8 +24,8 @@ def test_scraper_modules_import_from_runtime_scripts_path():
     assert callable(scrape_official_static)
 
 
-def test_etf_universe_seed_file_is_directly_under_data():
-    assert (ROOT / "data" / "etf_universe_seed.json").exists()
+def test_etf_universe_has_no_repository_seed_file():
+    assert not (ROOT / "data" / "etf_universe_seed.json").exists()
     assert not (ROOT / "data" / "seeds" / "etf_universe_seed.json").exists()
 
 

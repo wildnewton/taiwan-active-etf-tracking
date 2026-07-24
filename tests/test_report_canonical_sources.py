@@ -19,6 +19,9 @@ def insert_holding(
     source_type="moneydj_primary",
     shares=1000,
 ):
+    from etf_universe import upsert_etf
+
+    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
     with db._connect() as conn:
         conn.execute(
             """

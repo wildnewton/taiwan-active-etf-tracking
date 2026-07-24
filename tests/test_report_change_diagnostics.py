@@ -2,12 +2,7 @@ import db
 from report import generate_signal_report
 
 
-ETF_CODES = [
-    "00400A", "00401A", "00403A", "00404A", "00405A",
-    "00406A", "00980A", "00981A", "00982A", "00984A",
-    "00985A", "00987A", "00991A", "00992A", "00993A",
-    "00994A", "00995A", "00996A", "00999A",
-]
+ETF_CODES = ["00980A", "00981A"]
 
 
 def insert_holding(date, etf_code, weight_pct=100.0):
@@ -26,7 +21,10 @@ def insert_holding(date, etf_code, weight_pct=100.0):
 
 
 def insert_full_holdings_day(date):
+    from etf_universe import upsert_etf
+
     for etf_code in ETF_CODES:
+        upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
         insert_holding(date, etf_code)
 
 
@@ -64,9 +62,8 @@ def insert_change_diagnostic(
 
 
 def retire_test_etf(etf_code):
-    from etf_universe import retire_etf, seed_etf_universe_from_file
+    from etf_universe import retire_etf
 
-    seed_etf_universe_from_file()
     retire_etf(etf_code, reason="test retired")
 
 

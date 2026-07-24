@@ -12,7 +12,15 @@ ETF_CODES = [
 ]
 
 
+def ensure_universe(codes=ETF_CODES):
+    from etf_universe import upsert_etf
+
+    for code in codes:
+        upsert_etf({"code": code, "name": f"ETF {code}", "market": "TWSE"})
+
+
 def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", weight_pct=5.0):
+    ensure_universe([etf_code])
     with db._connect() as conn:
         conn.execute(
             """
@@ -209,6 +217,7 @@ def insert_report_change(
 
 def test_report_puts_data_quality_before_summary_and_shows_missing_etfs():
     db.init_db(":memory:")
+    ensure_universe()
     for etf_code in ETF_CODES[1:]:
         insert_holding("2026-06-26", etf_code)
 

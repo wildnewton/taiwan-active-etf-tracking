@@ -22,8 +22,6 @@ The cron wrapper is `scripts/nightly-cron.sh`. It resolves the project directory
 
 ```text
 .
-├── data/
-│   └── etf_universe_seed.json       # bootstrap ETF universe metadata
 ├── scripts/
 │   ├── backfill_changes.py          # maintenance script for backfilling change rows and derived layers
 │   ├── changes.py                   # holding change detection
@@ -185,14 +183,18 @@ PYTHONPATH=scripts python -m pytest tests/test_etf_universe.py tests/test_pipeli
 
 ## ETF universe data
 
-The project seeds initial ETF metadata from `data/etf_universe_seed.json`. After initialization, the database table `etf_universe` is the operational source of truth.
+The `etf_universe` table in the operational SQLite database is the sole runtime source of truth for the ETF universe and official scraper configuration. Runtime reads never seed or mutate ETF rows.
+
+A new database starts with an empty `etf_universe` table. The nightly discovery step can create basic ETF metadata; supported official scraper settings such as `official_url`, `official_method`, and `official_logic` must be written directly to the database.
+
+The runtime database is not committed to the repository. Persist it across deployments and include it in the normal backup and restore process. Restoring production configuration means restoring the operational database, not regenerating it from a repository seed file.
 
 Important semantics:
 
-- `retired = 0`: included in nightly holdings fetches.
+- `retired = 0`: included in nightly holdings fetches after the listing date.
 - `retired = 1`: retained for historical lookup but skipped by nightly holdings fetches.
-- `last_active_date`: last date the ETF belonged to the active tracked universe.
-- `pending_retirement_since`: temporary state used to avoid retiring an ETF after only one incomplete or anomalous discovery run.
+- `listing_date`: excludes pre-listing ETFs from the operational universe for earlier dates.
+- `first_seen_date`: populated by discovery for newly discovered ETFs, or explicitly supplied by another writer.
 
 ## Scraper structure
 

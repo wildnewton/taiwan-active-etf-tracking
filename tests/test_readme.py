@@ -28,7 +28,8 @@ def test_readme_documents_current_entrypoints_and_layout():
     assert "scripts/nightly-cron.sh" in text
     assert "scripts/nightly_pipeline.py" in text
     assert "scripts/scrapers/" in text
-    assert "data/etf_universe_seed.json" in text
+    assert "data/etf_universe_seed.json" not in text
+    assert "sole runtime source of truth" in text
 
 
 def test_readme_avoids_removed_or_stale_paths():

@@ -9,7 +9,7 @@ from db import (
     replace_daily_snapshot,
     snapshot_exists,
 )
-from etf_universe import get_active_etfs, get_etf_config, seed_etf_universe_from_file
+from etf_universe import get_active_etfs, get_etf_config
 from models import HoldingRow, NonStockAssetRow
 from scraper import (
     FAILED_RESULT,
@@ -164,7 +164,6 @@ def _browser_scrape_fn(page) -> AsyncScrapeFn:
 
 
 def _active_etfs_for_run(run_date: date) -> list[dict]:
-    seed_etf_universe_from_file()
     return get_active_etfs(as_of_date=run_date)
 
 

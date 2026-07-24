@@ -6,15 +6,12 @@ historical cutoff for manually retired ETFs.
 """
 from __future__ import annotations
 
-import json
 from datetime import date, datetime
-from pathlib import Path
 
 import db
 from config import get_moneydj_url
 
 
-SEED_PATH = Path(__file__).resolve().parents[1] / "data" / "etf_universe_seed.json"
 _SCOPE_EXCLUSION_MARKERS = (
     "excluded_from_taiwan_stock_universe",
     "trades_offshore_instruments=true",
@@ -82,7 +79,6 @@ def _with_derived_fields(row: dict) -> dict:
 
 
 def _fetch_raw(code: str) -> dict | None:
-    _ensure_table()
     conn = db._connect()
     old = conn.row_factory
     conn.row_factory = _dict_factory
@@ -93,18 +89,6 @@ def _fetch_raw(code: str) -> dict | None:
         ).fetchone()
     finally:
         conn.row_factory = old
-
-
-def _count_rows() -> int:
-    _ensure_table()
-    conn = db._connect()
-    old = conn.row_factory
-    conn.row_factory = None
-    try:
-        row = conn.execute("SELECT COUNT(*) FROM etf_universe").fetchone()
-    finally:
-        conn.row_factory = old
-    return row[0] if row else 0
 
 
 def _latest_holdings_dates(conn) -> dict[str, str]:
@@ -159,65 +143,9 @@ def _etf_codes_with_holdings_on_dates(conn, data_dates: list[str]) -> set[str]:
     return {row[0] for row in rows}
 
 
-def seed_etf_universe_from_file(
-    path: str | Path | None = None,
-    seen_date: str | None = None,
-) -> int:
-    """Seed known ETF metadata from JSON without overwriting DB edits."""
-    _ensure_table()
-    seed_path = Path(path) if path is not None else SEED_PATH
-    rows = json.loads(seed_path.read_text(encoding="utf-8"))
-    inserted = 0
-    seen_date = seen_date or _today()
-    now = _now()
-
-    with db._connect() as conn:
-        for raw in rows:
-            code = raw["code"].upper()
-            existing = conn.execute(
-                "SELECT 1 FROM etf_universe WHERE code = ?",
-                (code,),
-            ).fetchone()
-            if existing:
-                continue
-            conn.execute(
-                """
-                INSERT INTO etf_universe (
-                    code, name, issuer, market, isin, listing_date, retired,
-                    first_seen_date, official_url, official_method, official_logic,
-                    created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    code,
-                    raw["name"],
-                    raw.get("issuer"),
-                    raw.get("market"),
-                    raw.get("isin"),
-                    raw.get("listing_date"),
-                    seen_date,
-                    raw.get("official_url"),
-                    raw.get("official_method"),
-                    raw.get("official_logic"),
-                    now,
-                    now,
-                ),
-            )
-            inserted += 1
-    return inserted
-
-
-def ensure_seeded() -> int:
-    """Seed the universe only when it is currently empty."""
-    if _count_rows() > 0:
-        return 0
-    return seed_etf_universe_from_file()
-
-
 def get_active_etfs(
     as_of_date: date | datetime | str | None = None,
 ) -> list[dict]:
-    ensure_seeded()
     as_of_date = _as_date_text(as_of_date)
     conn = db._connect()
     old = conn.row_factory
@@ -252,7 +180,6 @@ def get_eligible_etf_codes(
     as_of_date: date | datetime | str,
 ) -> list[str]:
     """Return ETFs that belonged to the analysis universe on one date."""
-    ensure_seeded()
     as_of_date = _as_date_text(as_of_date)
     conn = db._connect()
     old = conn.row_factory
@@ -278,7 +205,6 @@ def get_eligible_etf_count(
 
 
 def get_etf_config(code: str) -> dict:
-    ensure_seeded()
     row = _fetch_raw(code)
     if row is None:
         raise KeyError(f"Unknown ETF code: {code}")
@@ -371,7 +297,6 @@ def retire_etf(
     Legacy date arguments remain accepted for callers but no longer affect state.
     """
     del last_active_date, reason, retired_since
-    ensure_seeded()
     with db._connect() as conn:
         conn.execute(
             """
@@ -394,7 +319,6 @@ def reconcile_discovered_universe(
     manually confirmed ``retired`` status. Candidate status is derived from the
     current complete discovery and the two latest usable holdings dates.
     """
-    ensure_seeded()
     seen_date = seen_date or _today()
     discovered = {
         row["code"].upper(): {**row, "code": row["code"].upper()}
