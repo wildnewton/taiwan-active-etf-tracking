@@ -19,7 +19,7 @@ def _seed_pending_etf(db_path):
     )
 
 
-def test_pending_review_does_not_trigger_secondary_discovery(tmp_path):
+def test_pending_review_does_not_trigger_secondary_discovery(tmp_path, capsys):
     db_path = tmp_path / "active_etf.sqlite"
     _seed_pending_etf(db_path)
 
@@ -40,8 +40,11 @@ def test_pending_review_does_not_trigger_secondary_discovery(tmp_path):
                 str(tmp_path / "reports"),
             )
 
+    output = capsys.readouterr().out
     discover.assert_called_once_with(str(db_path))
     external_request.assert_not_called()
+    assert "00408A" in output
+    assert "需人工查證" in output
 
 
 def test_skip_discovery_makes_no_external_discovery_calls(tmp_path):
