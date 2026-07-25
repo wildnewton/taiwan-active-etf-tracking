@@ -16,38 +16,62 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Run tests
+  targeted:
+    name: PR 141 targeted tests
     runs-on: ubuntu-latest
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           persist-credentials: false
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
-
       - name: Run PR 141 targeted tests
         run: >-
           PYTHONPATH=. pytest -q
           tests/test_prelisting_etfs.py
           tests/test_listing_date_pending_review_pipeline.py
-
-      - name: Run snapshot isolation regression
-        run: >-
-          PYTHONPATH=. pytest -q
           tests/test_daily_snapshot_replacement.py::test_pipeline_success_path_uses_snapshot_replacement_once_per_etf
 
-      - name: Run tests
-        run: PYTHONPATH=. pytest -q
+  suite-chunks:
+    name: Full-suite chunk ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [0, 1, 2, 3]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - name: Run test-file chunk
+        shell: bash
+        run: |
+          mapfile -t files < <(find tests -maxdepth 1 -name 'test_*.py' | sort)
+          selected=()
+          for i in "${!files[@]}"; do
+            if (( i % 4 == ${{ matrix.group }} )); then
+              selected+=("${files[$i]}")
+            fi
+          done
+          printf 'Running %s\n' "${selected[@]}"
+          PYTHONPATH=. pytest -q "${selected[@]}"
