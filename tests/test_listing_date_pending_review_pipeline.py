@@ -28,8 +28,8 @@ def test_pending_review_does_not_trigger_secondary_discovery(tmp_path):
         "discover_and_reconcile",
         return_value={"discovery_complete": True, "failed_markets": []},
     ) as discover, patch(
-        "etf_universe.discover_active_etfs_with_status"
-    ) as secondary_discovery, patch.object(
+        "discover_active_etfs.requests.get"
+    ) as external_request, patch.object(
         nightly_pipeline,
         "run_daily_scrape_with_browser",
         side_effect=RuntimeError("stop after pending review"),
@@ -41,7 +41,7 @@ def test_pending_review_does_not_trigger_secondary_discovery(tmp_path):
             )
 
     discover.assert_called_once_with(str(db_path))
-    secondary_discovery.assert_not_called()
+    external_request.assert_not_called()
 
 
 def test_skip_discovery_makes_no_external_discovery_calls(tmp_path):
@@ -52,8 +52,8 @@ def test_skip_discovery_makes_no_external_discovery_calls(tmp_path):
         nightly_pipeline,
         "discover_and_reconcile",
     ) as primary_discovery, patch(
-        "etf_universe.discover_active_etfs_with_status"
-    ) as secondary_discovery, patch.object(
+        "discover_active_etfs.requests.get"
+    ) as external_request, patch.object(
         nightly_pipeline,
         "run_daily_scrape_with_browser",
         side_effect=RuntimeError("stop after pending review"),
@@ -66,4 +66,4 @@ def test_skip_discovery_makes_no_external_discovery_calls(tmp_path):
             )
 
     primary_discovery.assert_not_called()
-    secondary_discovery.assert_not_called()
+    external_request.assert_not_called()
