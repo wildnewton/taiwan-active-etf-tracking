@@ -16,7 +16,7 @@ BASE_HOLDINGS = [
 def insert_holding(date, stock_code, stock_name, shares, weight_pct, etf_code="00980A"):
     from etf_universe import upsert_etf
 
-    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
+    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE", "listing_date": "2026-01-01"})
     with db._connect() as conn:
         conn.execute(
             """

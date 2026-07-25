@@ -19,8 +19,8 @@ def _seed_universe(conn, codes_with_status):
     """)
     for code, issuer, retired in codes_with_status:
         conn.execute(
-            "INSERT INTO etf_universe (code, name, issuer, retired, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, '2026-06-22T00:00:00', '2026-06-22T00:00:00')",
+            "INSERT INTO etf_universe (code, name, issuer, retired, listing_date, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, '2026-01-01', '2026-06-22T00:00:00', '2026-06-22T00:00:00')",
             (code, f"Test {code}", issuer, retired),
         )
 
