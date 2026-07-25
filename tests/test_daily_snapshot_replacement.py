@@ -10,7 +10,6 @@ import pytest
 pytestmark = pytest.mark.usefixtures("compact_snapshot_validation")
 
 
-
 RUN_DATE = date(2026, 7, 8)
 
 
@@ -257,6 +256,7 @@ def test_pipeline_success_path_uses_snapshot_replacement_once_per_etf():
             tzinfo=pipeline.TAIPEI_TIMEZONE,
         )), \
         patch("pipeline._active_etfs_for_run", return_value=[{"code": "00981A"}]), \
+        patch("pipeline.snapshot_exists", return_value=False), \
         patch("pipeline.scrape_holdings", return_value=scrape_result()), \
         patch("pipeline.init_db"), \
         patch("pipeline.replace_daily_snapshot") as replace_daily_snapshot:
