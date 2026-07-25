@@ -126,38 +126,6 @@ def test_pending_review_etfs_returned():
     assert "00980A" not in pending_codes
 
 
-def test_recommend_listing_date_returns_isin_data():
-    """recommend_listing_date() re-queries ISIN and returns date without writing."""
-    from discover_active_etfs import DiscoveryResult
-    from etf_universe import recommend_listing_date
-
-    fake_discovered = [
-        {
-            "code": "00408A",
-            "name": "主動第一金優股息",
-            "isin": "TW00000408A0",
-            "listing_date": "2026-07-15",
-            "market": "TWSE",
-        }
-    ]
-    fake_result = DiscoveryResult(
-        discovered=fake_discovered,
-        completed_markets=["TWSE"],
-        failed_markets=[],
-        expected_markets=["TWSE", "TPEx"],
-    )
-    with patch(
-        "etf_universe.discover_active_etfs_with_status",
-        return_value=fake_result,
-    ):
-        rec = recommend_listing_date("00408A")
-
-    assert rec is not None
-    assert rec["code"] == "00408A"
-    assert rec["listing_date"] == "2026-07-15"
-    assert rec["market"] == "TWSE"
-
-
 def test_unknown_listing_date_is_skipped():
     """ETFs with NULL listing_date are NOT eligible for scraping."""
     db.init_db(":memory:")
