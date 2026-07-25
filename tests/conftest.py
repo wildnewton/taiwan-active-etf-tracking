@@ -7,7 +7,13 @@ _PIPELINE_SCRAPE_UNIT_MODULES = {
     "test_pipeline",
     "test_pipeline_isolation_regression",
 }
-
+_NIGHTLY_PIPELINE_UNIT_MODULES = {
+    "test_nightly_discovery_status",
+    "test_nightly_existing_snapshot_completeness",
+    "test_nightly_persisted_coverage",
+    "test_nightly_pipeline",
+    "test_nightly_pipeline_non_trading_day",
+}
 _COMPACT_SNAPSHOT_MODULES = {
     "test_active_classification",
     "test_change_classification_version",
@@ -46,6 +52,18 @@ def isolate_pipeline_scrape_unit_tests_from_preexisting_snapshots(request):
         return
 
     with patch("pipeline.snapshot_exists", return_value=False):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def isolate_nightly_pipeline_unit_tests_from_pending_review_db(request):
+    """Keep mocked nightly tests independent of the real ETF-universe DB."""
+    module_name = getattr(request.module, "__name__", "")
+    if module_name not in _NIGHTLY_PIPELINE_UNIT_MODULES:
+        yield
+        return
+
+    with patch("etf_universe.get_pending_review_etfs", return_value=[]):
         yield
 
 

@@ -129,7 +129,6 @@ def run_try_run(
                 print(f"Disposable DB snapshot: {disposable_db}")
             else:
                 print("Production DB does not exist; try-run will start from an empty disposable DB")
-
             print(f"Disposable report directory: {disposable_reports}")
             result = run_nightly_pipeline(
                 str(disposable_db),
@@ -246,6 +245,21 @@ def run_nightly_pipeline(
                 raise
     else:
         print("Step 1/7: Skipping ETF universe discovery")
+
+    from etf_universe import get_pending_review_etfs
+
+    pending = get_pending_review_etfs()
+    if pending:
+        print(f"\n🆕 待審核 ETF ({len(pending)} 檔) — 缺少 listing_date，已跳過抓取:")
+        for etf in pending:
+            code = etf.get("code", "")
+            name = etf.get("name", "")
+            issuer = etf.get("issuer", "")
+            print(
+                f"  • {code} {name} ({issuer}) — "
+                "ISIN discovery 未提供有效 listing_date，需人工查證"
+            )
+        print("  使用 upsert_etf() 填入 listing_date 後，次日自動納入抓取\n")
 
     print("Step 2/7: Running browser-enabled scrape...")
     scrape_summary = run_daily_scrape_with_browser(db_path)

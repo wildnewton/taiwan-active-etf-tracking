@@ -14,6 +14,7 @@ KNOWN_ETFS = {
     "00980A": {
         "name": "主動野村臺灣優選",
         "issuer": "Nomura",
+        "listing_date": "2026-06-01",
         "official_url": "https://example.test/00980A",
         "official_method": "stealth_api",
         "official_logic": "fundNo=00980A",
@@ -21,6 +22,7 @@ KNOWN_ETFS = {
     "00981A": {
         "name": "主動統一台股增長",
         "issuer": "Uni-President",
+        "listing_date": "2026-06-01",
         "official_url": "https://example.test/00981A",
         "official_method": "playwright",
         "official_logic": "fundCode=49YTW",
@@ -45,7 +47,13 @@ def _insert_known_etfs(seen_date="2026-06-30"):
 def _discovered_without(*missing_codes):
     missing = set(missing_codes)
     return [
-        {"code": code, "name": f"ETF {code}", "market": "TWSE", "isin": f"ISIN{code}"}
+        {
+            "code": code,
+            "name": f"ETF {code}",
+            "market": "TWSE",
+            "isin": f"ISIN{code}",
+            "listing_date": "2026-06-01",
+        }
         for code in sorted(EXPECTED_CODES - missing)
     ]
 
@@ -230,7 +238,15 @@ def test_reconcile_discovery_inserts_new_without_persisting_missing_state():
 
     _insert_known_etfs(seen_date="2026-06-30")
     discovered = _discovered_without("00980A")
-    discovered.append({"code": "01000A", "name": "主動測試新ETF", "market": "TWSE", "isin": "TW00001000A"})
+    discovered.append(
+        {
+            "code": "01000A",
+            "name": "主動測試新ETF",
+            "market": "TWSE",
+            "isin": "TW00001000A",
+            "listing_date": "2026-06-01",
+        }
+    )
 
     summary = reconcile_discovered_universe(discovered, seen_date="2026-07-01")
     active_codes = {row["code"] for row in get_active_etfs()}

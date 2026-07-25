@@ -42,8 +42,8 @@ def seed_universe(codes_with_retired):
             conn.execute(
                 """
                 INSERT INTO etf_universe (
-                    code, name, issuer, retired, created_at, updated_at
-                ) VALUES (?, ?, 'Test Issuer', ?, '2026-07-08T00:00:00', '2026-07-08T00:00:00')
+                    code, name, issuer, retired, listing_date, created_at, updated_at
+                ) VALUES (?, ?, 'Test Issuer', ?, '2026-01-01', '2026-07-08T00:00:00', '2026-07-08T00:00:00')
                 """,
                 (code, f"Test {code}", retired),
             )
@@ -95,7 +95,7 @@ def insert_signal(
 def insert_holding(date, etf_code, stock_code, stock_name, weight_pct=5.0):
     from etf_universe import upsert_etf
 
-    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
+    upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE", "listing_date": "2026-01-01"})
     with db._connect() as conn:
         conn.execute(
             """

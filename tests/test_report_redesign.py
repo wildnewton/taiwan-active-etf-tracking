@@ -16,7 +16,7 @@ def ensure_universe(codes=ETF_CODES):
     from etf_universe import upsert_etf
 
     for code in codes:
-        upsert_etf({"code": code, "name": f"ETF {code}", "market": "TWSE"})
+        upsert_etf({"code": code, "name": f"ETF {code}", "market": "TWSE", "listing_date": "2026-01-01"})
 
 
 def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", weight_pct=5.0):

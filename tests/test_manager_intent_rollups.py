@@ -36,8 +36,8 @@ def seed_universe():
                 """
                 INSERT INTO etf_universe (
                     code, name, issuer, market, isin, retired,
-                    first_seen_date, created_at, updated_at
-                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-06-01', ?, ?)
+                    listing_date, first_seen_date, created_at, updated_at
+                ) VALUES (?, ?, ?, 'TWSE', NULL, ?, '2026-01-01', '2026-06-01', ?, ?)
                 """,
                 (
                     etf_code,

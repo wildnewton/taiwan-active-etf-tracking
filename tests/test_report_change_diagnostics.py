@@ -24,7 +24,7 @@ def insert_full_holdings_day(date):
     from etf_universe import upsert_etf
 
     for etf_code in ETF_CODES:
-        upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE"})
+        upsert_etf({"code": etf_code, "name": f"ETF {etf_code}", "market": "TWSE", "listing_date": "2026-01-01"})
         insert_holding(date, etf_code)
 
 

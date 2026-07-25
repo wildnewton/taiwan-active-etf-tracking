@@ -59,7 +59,7 @@ def _is_scope_excluded(row: dict) -> bool:
 
 def _is_listed_on(row: dict, as_of_date: str) -> bool:
     listing_date = row.get("listing_date")
-    return listing_date is None or listing_date <= as_of_date
+    return listing_date is not None and listing_date <= as_of_date
 
 
 def _is_eligible_on(
@@ -156,7 +156,8 @@ def get_active_etfs(
             SELECT {_ETF_SELECT_COLUMNS}
             FROM etf_universe
             WHERE retired = 0
-              AND (listing_date IS NULL OR listing_date <= ?)
+              AND listing_date IS NOT NULL
+              AND listing_date <= ?
             ORDER BY code
             """,
             (as_of_date,),
@@ -168,6 +169,30 @@ def get_active_etfs(
         for row in rows
         if not _is_scope_excluded(row)
     ]
+
+
+def get_pending_review_etfs() -> list[dict]:
+    """Return active ETFs with NULL listing_date pending manual review.
+
+    These ETFs are discovered but not yet scrape-eligible because their
+    listing_date is unknown. The nightly pipeline flags them so the user
+    can review and populate the date.
+    """
+    conn = db._connect()
+    old = conn.row_factory
+    conn.row_factory = _dict_factory
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT {_ETF_SELECT_COLUMNS}
+            FROM etf_universe
+            WHERE retired = 0 AND listing_date IS NULL
+            ORDER BY code
+            """
+        ).fetchall()
+    finally:
+        conn.row_factory = old
+    return [_with_derived_fields(row) for row in rows]
 
 
 def get_active_etf_count(

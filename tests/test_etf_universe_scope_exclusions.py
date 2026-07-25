@@ -11,6 +11,7 @@ def _upsert_scope_excluded_etf(code="00998A", official_logic="excluded_from_taiw
         "market": "TPEx",
         "isin": None,
         "retired": 1,
+        "listing_date": "2026-01-01",
         "first_seen_date": "2026-07-01",
         "official_url": "https://www.fhtrust.com.tw/ETF/trade_list",
         "official_method": "playwright",
@@ -30,10 +31,11 @@ def test_upsert_preserves_manual_status_when_metadata_update_omits_it():
         "code": "00998A",
         "name": "主動復華金融股息",
         "retired": 1,
+        "listing_date": "2026-01-01",
         "first_seen_date": "2026-07-01",
         "official_logic": "excluded_from_taiwan_stock_universe",
     })
-    upsert_etf({"code": "00998A", "name": "手動更新名稱"})
+    upsert_etf({"code": "00998A", "name": "手動更新名稱", "listing_date": "2026-01-01"})
 
     config = get_etf_config("00998A")
 
@@ -80,7 +82,7 @@ def test_reconcile_also_preserves_normal_manual_retirement():
     db.init_db(":memory:")
     from etf_universe import get_active_etfs, get_etf_config, reconcile_discovered_universe, retire_etf, upsert_etf
 
-    upsert_etf({"code": "00980A", "name": "主動野村臺灣優選", "market": "TWSE"})
+    upsert_etf({"code": "00980A", "name": "主動野村臺灣優選", "market": "TWSE", "listing_date": "2026-01-01"})
     retire_etf("00980A", reason="not listed")
 
     summary = reconcile_discovered_universe(

@@ -34,6 +34,7 @@ def _seed_with_future_etf():
             "name": "主動野村臺灣優選",
             "issuer": "Nomura",
             "market": "TWSE",
+            "listing_date": "2026-01-01",
             "first_seen_date": "2026-07-14",
         }
     )
@@ -98,7 +99,35 @@ def test_universe_persists_and_filters_listing_date():
     assert get_etf_config("00408A")["retired"] == 0
 
 
-def test_unknown_listing_date_remains_eligible():
+def test_pending_review_etfs_returned():
+    """get_pending_review_etfs() returns ETFs with NULL listing_date."""
+    from etf_universe import get_pending_review_etfs
+
+    db.init_db(":memory:")
+    upsert_etf(
+        {
+            "code": "00980A",
+            "name": "主動野村臺灣優選",
+            "listing_date": "2026-01-01",
+        }
+    )
+    upsert_etf(
+        {
+            "code": "00408A",
+            "name": "主動第一金優股息",
+            "listing_date": None,
+        }
+    )
+
+    pending = get_pending_review_etfs()
+    pending_codes = {row["code"] for row in pending}
+
+    assert "00408A" in pending_codes
+    assert "00980A" not in pending_codes
+
+
+def test_unknown_listing_date_is_skipped():
+    """ETFs with NULL listing_date are NOT eligible for scraping."""
     db.init_db(":memory:")
     upsert_etf(
         {
@@ -112,7 +141,7 @@ def test_unknown_listing_date_remains_eligible():
         row["code"] for row in get_active_etfs(as_of_date="2026-07-14")
     }
 
-    assert "00980A" in active_codes
+    assert "00980A" not in active_codes
 
 
 def test_sync_pipeline_uses_same_taipei_run_date_for_universe(tmp_path):
