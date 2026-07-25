@@ -4,7 +4,12 @@ import pytest
 
 import db
 import nightly_pipeline
-from etf_universe import upsert_etf
+from etf_universe import (
+    get_etf_config,
+    get_pending_review_etfs,
+    reconcile_discovered_universe,
+    upsert_etf,
+)
 
 
 def _seed_pending_etf(db_path):
@@ -17,6 +22,27 @@ def _seed_pending_etf(db_path):
             "listing_date": None,
         }
     )
+
+
+def test_discovery_without_valid_listing_date_stays_pending(tmp_path):
+    db_path = tmp_path / "active_etf.sqlite"
+    db.init_db(str(db_path))
+
+    reconcile_discovered_universe(
+        [
+            {
+                "code": "00408A",
+                "name": "主動第一金優股息",
+                "market": "TWSE",
+                "isin": "TW00000408A0",
+                "listing_date": None,
+            }
+        ],
+        seen_date="2026-07-25",
+    )
+
+    assert get_etf_config("00408A")["listing_date"] is None
+    assert [row["code"] for row in get_pending_review_etfs()] == ["00408A"]
 
 
 def test_pending_review_does_not_trigger_secondary_discovery(tmp_path, capsys):
