@@ -16,61 +16,40 @@ permissions:
   contents: read
 
 jobs:
-  interaction-quarter:
-    name: Interaction quarter ${{ matrix.left }}-${{ matrix.right }}
+  export-test-map:
+    name: Export diagnostic test map
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        left: [0, 1]
-        right: [0, 1]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest pytest-asyncio
-      - name: Run interaction quarter
+      - name: Build test map
         shell: bash
         run: |
           mapfile -t files < <(find tests -maxdepth 1 -name 'test_*.py' | sort)
-          selected=()
+          : > test-map.txt
           chunk_index=0
           subgroup_one_index=0
-          subgroup_three_index=0
-          left_half_index=0
-          right_half_index=0
           for i in "${!files[@]}"; do
             if (( i % 4 == 2 )); then
               subgroup=$((chunk_index % 4))
+              printf 'global=%s chunk_index=%s subgroup=%s' "$i" "$chunk_index" "$subgroup" >> test-map.txt
               if (( subgroup == 1 )); then
-                if (( subgroup_one_index % 2 == 0 )); then
-                  if (( left_half_index % 2 == ${{ matrix.left }} )); then
-                    selected+=("${files[$i]}")
-                  fi
-                  ((left_half_index+=1))
-                fi
+                printf ' subgroup_one_index=%s half=%s quarter=%s' \
+                  "$subgroup_one_index" \
+                  "$((subgroup_one_index % 2))" \
+                  "$(((subgroup_one_index / 2) % 2))" >> test-map.txt
                 ((subgroup_one_index+=1))
-              elif (( subgroup == 3 )); then
-                if (( subgroup_three_index % 2 == 1 )); then
-                  if (( right_half_index % 2 == ${{ matrix.right }} )); then
-                    selected+=("${files[$i]}")
-                  fi
-                  ((right_half_index+=1))
-                fi
-                ((subgroup_three_index+=1))
               fi
+              printf ' file=%s\n' "${files[$i]}" >> test-map.txt
               ((chunk_index+=1))
             fi
           done
-          printf 'Running %s\n' "${selected[@]}"
-          PYTHONPATH=. pytest -q "${selected[@]}"
+          cat test-map.txt
+      - name: Upload test map
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr141-test-map
+          path: test-map.txt
