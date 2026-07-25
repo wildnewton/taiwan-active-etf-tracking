@@ -7,6 +7,12 @@ import nightly_pipeline
 from etf_universe import upsert_etf
 
 
+@pytest.fixture(autouse=True)
+def reset_database_after_test():
+    yield
+    db.init_db(":memory:")
+
+
 def _seed_pending_etf(db_path):
     db.init_db(str(db_path))
     upsert_etf(
