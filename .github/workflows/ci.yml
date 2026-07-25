@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 jobs:
-  interaction-split:
-    name: Subgroup 1.${{ matrix.left }} + 3.${{ matrix.right }}
+  interaction-quarter:
+    name: Interaction quarter ${{ matrix.left }}-${{ matrix.right }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -39,27 +39,35 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
-      - name: Run interaction split
+      - name: Run interaction quarter
         shell: bash
         run: |
           mapfile -t files < <(find tests -maxdepth 1 -name 'test_*.py' | sort)
           selected=()
           chunk_index=0
-          left_index=0
-          right_index=0
+          subgroup_one_index=0
+          subgroup_three_index=0
+          left_half_index=0
+          right_half_index=0
           for i in "${!files[@]}"; do
             if (( i % 4 == 2 )); then
               subgroup=$((chunk_index % 4))
               if (( subgroup == 1 )); then
-                if (( left_index % 2 == ${{ matrix.left }} )); then
-                  selected+=("${files[$i]}")
+                if (( subgroup_one_index % 2 == 0 )); then
+                  if (( left_half_index % 2 == ${{ matrix.left }} )); then
+                    selected+=("${files[$i]}")
+                  fi
+                  ((left_half_index+=1))
                 fi
-                ((left_index+=1))
+                ((subgroup_one_index+=1))
               elif (( subgroup == 3 )); then
-                if (( right_index % 2 == ${{ matrix.right }} )); then
-                  selected+=("${files[$i]}")
+                if (( subgroup_three_index % 2 == 1 )); then
+                  if (( right_half_index % 2 == ${{ matrix.right }} )); then
+                    selected+=("${files[$i]}")
+                  fi
+                  ((right_half_index+=1))
                 fi
-                ((right_index+=1))
+                ((subgroup_three_index+=1))
               fi
               ((chunk_index+=1))
             fi
