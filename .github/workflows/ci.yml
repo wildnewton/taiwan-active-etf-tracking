@@ -16,13 +16,14 @@ permissions:
   contents: read
 
 jobs:
-  chunk-two-pairs:
-    name: Chunk 2 pair ${{ matrix.pair }}
+  interaction-split:
+    name: Subgroup 1.${{ matrix.left }} + 3.${{ matrix.right }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        pair: ["0-1", "0-2", "0-3", "1-2", "1-3", "2-3"]
+        left: [0, 1]
+        right: [0, 1]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -38,21 +39,27 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
-      - name: Run chunk-2 pair
+      - name: Run interaction split
         shell: bash
-        env:
-          PAIR: ${{ matrix.pair }}
         run: |
-          first=${PAIR%-*}
-          second=${PAIR#*-}
           mapfile -t files < <(find tests -maxdepth 1 -name 'test_*.py' | sort)
           selected=()
           chunk_index=0
+          left_index=0
+          right_index=0
           for i in "${!files[@]}"; do
             if (( i % 4 == 2 )); then
               subgroup=$((chunk_index % 4))
-              if (( subgroup == first || subgroup == second )); then
-                selected+=("${files[$i]}")
+              if (( subgroup == 1 )); then
+                if (( left_index % 2 == ${{ matrix.left }} )); then
+                  selected+=("${files[$i]}")
+                fi
+                ((left_index+=1))
+              elif (( subgroup == 3 )); then
+                if (( right_index % 2 == ${{ matrix.right }} )); then
+                  selected+=("${files[$i]}")
+                fi
+                ((right_index+=1))
               fi
               ((chunk_index+=1))
             fi
