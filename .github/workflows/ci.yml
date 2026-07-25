@@ -16,40 +16,47 @@ permissions:
   contents: read
 
 jobs:
-  export-test-map:
-    name: Export diagnostic test map
+  minimal-order-cases:
+    name: Minimal order case ${{ matrix.case }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [manager-before-nightly, nightly-before-report]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
           persist-credentials: false
-      - name: Build test map
-        shell: bash
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
         run: |
-          mapfile -t files < <(find tests -maxdepth 1 -name 'test_*.py' | sort)
-          : > test-map.txt
-          chunk_index=0
-          subgroup_one_index=0
-          for i in "${!files[@]}"; do
-            if (( i % 4 == 2 )); then
-              subgroup=$((chunk_index % 4))
-              printf 'global=%s chunk_index=%s subgroup=%s' "$i" "$chunk_index" "$subgroup" >> test-map.txt
-              if (( subgroup == 1 )); then
-                printf ' subgroup_one_index=%s half=%s quarter=%s' \
-                  "$subgroup_one_index" \
-                  "$((subgroup_one_index % 2))" \
-                  "$(((subgroup_one_index / 2) % 2))" >> test-map.txt
-                ((subgroup_one_index+=1))
-              fi
-              printf ' file=%s\n' "${files[$i]}" >> test-map.txt
-              ((chunk_index+=1))
-            fi
-          done
-          cat test-map.txt
-      - name: Upload test map
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+      - name: Run minimal order case
+        shell: bash
+        env:
+          CASE_NAME: ${{ matrix.case }}
+        run: |
+          if [[ "$CASE_NAME" == "manager-before-nightly" ]]; then
+            files=(tests/test_manager_intent_rollups.py tests/test_nightly_persisted_coverage.py)
+          else
+            files=(tests/test_nightly_persisted_coverage.py tests/test_report_redesign.py)
+          fi
+          set +e
+          PYTHONPATH=. pytest -q "${files[@]}" --junitxml="${CASE_NAME}.xml"
+          status=$?
+          echo "$status" > "${CASE_NAME}.status"
+          exit 0
+      - name: Upload diagnostic result
         uses: actions/upload-artifact@v4
         with:
-          name: pr141-test-map
-          path: test-map.txt
+          name: pr141-${{ matrix.case }}
+          path: |
+            ${{ matrix.case }}.xml
+            ${{ matrix.case }}.status
