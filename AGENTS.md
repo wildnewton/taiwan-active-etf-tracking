@@ -9,25 +9,32 @@ Track Taiwan active ETF **daily actual investment portfolios** (每日實際投�
 3. Which stocks appear in multiple active ETFs (consensus)?
 4. How do holdings change day-over-day?
 
-## Target ETFs
+## Target ETFs (19 Taiwan-focused active ETFs)
 
-The ETF universe is managed in the SQLite DB (`etf_universe` table). There is
-no hardcoded list. To see current targets:
-
-```sql
-SELECT code, name, issuer, listing_date
-FROM etf_universe
-WHERE retired = 0 AND listing_date IS NOT NULL AND listing_date <= date('now')
-ORDER BY code;
-```
-
-New ETFs are discovered automatically via TWSE/TPEx ISIN pages
-(`discover_active_etfs.py`). Discovery runs before scrape in the nightly
-pipeline. To manually add/remove: use `upsert_etf()` / `retire_etf()`.
+| ETF | 名稱 | 發行投信 | 資料來源 |
+|-----|------|---------|---------|
+| 00400A | 主動國泰動能高息 | 國泰投信 | 國泰投信 ETF 專區 → 該 ETF → 申購買回清單 / 投資組合 |
+| 00401A | 主動摩根台灣鑫收 | 摩根投信 | 摩根投信 ETF 專區 → 該 ETF → PCF / 持股 |
+| 00403A | 主動統一升級50 | 統一投信 | 統一投信 ETF 專區 → 申購買回清單 / 基金資訊 |
+| 00404A | 主動聯博動能50 | 聯博投信 | 聯博投信 ETF 專區 → 該 ETF → 申購買回清單 / 投資組合 |
+| 00405A | 主動富邦台灣龍耀 | 富邦投信 | 富邦 ETF 投資網 → 申購買回清單 |
+| 00406A | 主動中信台灣收益 | 中信投信 | 中信投信 ETF 專區 → 該 ETF → 申購買回清單 / 持股 |
+| 00980A | 主動野村臺灣優選 | 野村投信 | 野村 ETF 產品頁；每日公告投資組合清單 |
+| 00981A | 主動統一台股增長 | 統一投信 | 統一投信 ETF 專區 → 申購買回清單 |
+| 00982A | 主動群益台灣強棒 | 群益投信 | 群益 ETF 專區 → 申購買回清單 |
+| 00984A | 主動安聯台灣高息 | 安聯投信 | 安聯 ETF → 申購買回清單 |
+| 00985A | 主動野村台灣50 | 野村投信 | 野村 ETF 產品頁 → 投資組合 / 申購買回清單 |
+| 00987A | 主動台新優勢成長 | 台新投信 | 台新投信 ETF 專區 → 該 ETF → 申購買回清單 / 持股 |
+| 00991A | 主動復華未來50 | 復華投信 | 復華投信 ETF 專區 → 該 ETF → PCF / 投資組合 |
+| 00992A | 主動群益科技創新 | 群益投信 | 群益 ETF 專區 → 申購買回清單 / 投資組合 |
+| 00993A | 主動安聯台灣 | 安聯投信 | 安聯 ETF → 申購買回清單 / 投資組合 |
+| 00994A | 主動第一金台股優 | 第一金投信 | 第一金投信 ETF 專區 → 申購買回清單 / 持股 |
+| 00995A | 主動中信台灣卓越 | 中信投信 | 中信投信 ETF 專區 → 該 ETF → PCF / 持股 |
+| 00996A | 主動兆豐台灣豐收 | 兆豐投信 | 兆豐投信 ETF 專區 → 該 ETF → 申購買回清單 / 投資組合 |
+| 00999A | 主動野村臺灣高息 | 野村投信 | 野村 ETF 產品頁 → 投資組合 / 申購買回清單 |
 
 ### Excluded (invest in foreign markets, not Taiwan stocks)
-ETFs discovered but excluded from tracking are marked `retired=1` in the DB.
-Query: `SELECT code, name FROM etf_universe WHERE retired = 1 ORDER BY code`.
+00402A, 00983A, 00983D, 00984D, 00986A, 00988A, 00989A, 00990A, 00997A
 
 ### Known Data Source URLs
 | 投信 | URL |
@@ -50,21 +57,20 @@ Query: `SELECT code, name FROM etf_universe WHERE retired = 1 ORDER BY code`.
 ## Data Source Strategy
 1. **Primary:** Fund company websites — daily actual portfolio (每日實際投資組合)
 2. **Fallback:** TWSE e添富 — PDF prospectus (monthly top 10 + industry breakdown)
-3. Each fund company has a different URL pattern — need to map each issuer
+3. Each fund company has a different URL pattern — need to map all 19
 
 ## Phase Plan
-- [x] Phase 1: Enumerate all active ETFs — DB-backed universe with auto-discovery
-- [x] Phase 2: Map daily portfolio URL for each fund company
-- [x] Phase 3: Build scraper for each URL pattern
-- [x] Phase 4: Historical data collection + storage (SQLite)
-- [x] Phase 5: Change detection + signal generation
-- [x] Phase 6: Cron job for daily tracking
+- [x] Phase 1: Enumerate all active ETFs — **19 Taiwan-focused active ETFs identified**
+- [ ] Phase 2: Map daily portfolio URL for each fund company (19 ETFs, ~8 fund companies)
+- [ ] Phase 3: Build scraper for each URL pattern
+- [ ] Phase 4: Historical data collection + storage (SQLite)
+- [ ] Phase 5: Change detection + signal generation
+- [ ] Phase 6: Cron job for daily tracking
 
 ## Progress Log
 - 2026-04-24: Tested accessibility of 12 fund company websites — all accessible
 - 2026-04-26: Scraped holdings for 9 ETFs via fund company sites
-- 2026-06-21: Project resurrected — clarified data source is 每日實際投資組合 (not PCF)
-- 2026-07-24: Config migrated to DB-only (PR #138). Seed file removed.
+- 2026-06-21: Project resurrected — corrected ETF list to 19 (was 15), clarified data source is 每日實際投資組合 (not PCF)
 
 ## Operating Rules
 - Follow root AGENTS.md shared rules (TDD, approval before changes, etc.)
