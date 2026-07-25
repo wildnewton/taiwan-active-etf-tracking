@@ -195,46 +195,6 @@ def get_pending_review_etfs() -> list[dict]:
     return [_with_derived_fields(row) for row in rows]
 
 
-def discover_active_etfs_with_status(*args, **kwargs):
-    from discover_active_etfs import discover_active_etfs_with_status as _discover
-
-    return _discover(*args, **kwargs)
-
-
-def _isin_sources() -> list[dict[str, str]]:
-    from discover_active_etfs import SOURCES
-
-    return SOURCES
-
-
-def recommend_listing_date(code: str) -> dict | None:
-    """Re-query TWSE/TPEx ISIN pages to recommend a listing_date.
-
-    Returns dict with keys: code, name, isin, listing_date, market, source_url.
-    Does NOT write to DB; caller must use upsert_etf() to populate.
-    Returns None if the ETF is not found on ISIN pages.
-    """
-    result = discover_active_etfs_with_status()
-    for row in result.discovered:
-        if row.get("code", "").upper() == code.upper():
-            return {
-                "code": row.get("code"),
-                "name": row.get("name"),
-                "isin": row.get("isin"),
-                "listing_date": row.get("listing_date"),
-                "market": row.get("market"),
-                "source_url": next(
-                    (
-                        source["url"]
-                        for source in _isin_sources()
-                        if source["market"] == row.get("market")
-                    ),
-                    None,
-                ),
-            }
-    return None
-
-
 def get_active_etf_count(
     as_of_date: date | datetime | str | None = None,
 ) -> int:
