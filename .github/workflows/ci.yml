@@ -38,5 +38,16 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install pytest pytest-asyncio
 
+      - name: Run PR 141 targeted tests
+        run: >-
+          PYTHONPATH=. pytest -q
+          tests/test_prelisting_etfs.py
+          tests/test_listing_date_pending_review_pipeline.py
+
+      - name: Run snapshot isolation regression
+        run: >-
+          PYTHONPATH=. pytest -q
+          tests/test_daily_snapshot_replacement.py::test_pipeline_success_path_uses_snapshot_replacement_once_per_etf
+
       - name: Run tests
         run: PYTHONPATH=. pytest -q
