@@ -129,7 +129,6 @@ def run_try_run(
                 print(f"Disposable DB snapshot: {disposable_db}")
             else:
                 print("Production DB does not exist; try-run will start from an empty disposable DB")
-
             print(f"Disposable report directory: {disposable_reports}")
             result = run_nightly_pipeline(
                 str(disposable_db),
@@ -247,8 +246,8 @@ def run_nightly_pipeline(
     else:
         print("Step 1/7: Skipping ETF universe discovery")
 
-    # Flag ETFs pending listing_date review
-    from etf_universe import get_pending_review_etfs, recommend_listing_date
+    from etf_universe import get_pending_review_etfs
+
     pending = get_pending_review_etfs()
     if pending:
         print(f"\n🆕 待審核 ETF ({len(pending)} 檔) — 缺少 listing_date，已跳過抓取:")
@@ -256,19 +255,10 @@ def run_nightly_pipeline(
             code = etf.get("code", "")
             name = etf.get("name", "")
             issuer = etf.get("issuer", "")
-            rec = recommend_listing_date(code)
-            rec_date = rec.get("listing_date") if rec else None
-            rec_market = rec.get("market") if rec else None
-            if rec_date:
-                print(
-                    f"  • {code} {name} ({issuer}) — "
-                    f"建議 listing_date: {rec_date} (來源: {rec_market} ISIN)"
-                )
-            else:
-                print(
-                    f"  • {code} {name} ({issuer}) — "
-                    f"⚠️ ISIN 頁面亦無 listing_date，需手動查證"
-                )
+            print(
+                f"  • {code} {name} ({issuer}) — "
+                "ISIN discovery 未提供有效 listing_date，需人工查證"
+            )
         print("  使用 upsert_etf() 填入 listing_date 後，次日自動納入抓取\n")
 
     print("Step 2/7: Running browser-enabled scrape...")
