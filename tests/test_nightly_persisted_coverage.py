@@ -50,10 +50,7 @@ def _run_nightly(tmp_path, scrape_summary):
         "expected_count": 5,
         "actual_count": 4,
     }
-    with patch.object(nightly_pipeline.db, "init_db"), patch(
-        "etf_universe.get_pending_review_etfs",
-        return_value=[],
-    ), patch.object(
+    with patch.object(nightly_pipeline.db, "init_db"), patch.object(
         nightly_pipeline,
         "run_daily_scrape_with_browser",
         return_value=scrape_summary,
