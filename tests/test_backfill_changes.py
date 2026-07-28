@@ -58,11 +58,9 @@ def insert_stale_change(date="2026-06-24", stock_code="2330"):
             INSERT INTO etf_holding_changes (
                 date, etf_code, issuer, stock_code, stock_name, prev_date,
                 prev_weight_pct, weight_pct, weight_delta_1d, prev_shares,
-                shares, shares_delta_1d, position_change_type, source_type,
-                created_at
+                shares, shares_delta_1d, position_change_type
             ) VALUES (?, '00980A', 'Nomura', ?, '台積電', '2026-06-23',
-                10.0, 10.0, 0.0, 100.0, 100.0, 0.0, 'stale_row',
-                'moneydj_primary', '2026-06-25T00:00:00')
+                10.0, 10.0, 0.0, 100.0, 100.0, 0.0, 'stale_row')
             """,
             (date, stock_code),
         )
@@ -202,7 +200,6 @@ def test_backfill_recomputes_old_changes_and_populates_fund_flow_fields():
     row = fetch_change("2330")
     assert row["position_change_type"] == "confirmed_active_add"
     assert round(row["etf_scale_factor"], 4) == 1.1
-    assert round(row["expected_shares"], 4) == 110.0
     assert round(row["active_shares_delta_1d"], 4) == 20.0
 
 
@@ -231,62 +228,55 @@ def test_backfill_is_idempotent_and_can_regenerate_signals():
     assert signal_types() == first_signals == ["new_core_position"]
 
 
-def test_backfill_can_regenerate_manager_intent_and_signals_in_order():
+def test_backfill_can_regenerate_signals_after_changes():
     db.init_db(":memory:")
     seed_previous_day()
     seed_scaled_current_day()
     events = []
 
-    def fake_intent(date):
-        events.append(("intent", date))
-        return {"ok": True, "date": date, "rows": 12}
-
     def fake_signals(date):
         events.append(("signals", date))
         return {"ok": True, "date": date, "signals": 3}
 
-    with patch("backfill_changes.generate_manager_intent_rollups", side_effect=fake_intent), \
-        patch("backfill_changes.generate_manager_signals", side_effect=fake_signals):
+    with patch("backfill_changes.generate_manager_signals", side_effect=fake_signals):
         summary = backfill_changes(
             from_date="2026-06-24",
             to_date="2026-06-24",
-            regenerate_manager_intent=True,
             regenerate_signals=True,
         )
 
-    assert events == [("intent", "2026-06-24"), ("signals", "2026-06-24")]
-    assert summary["manager_intent_dates"] == ["2026-06-24"]
-    assert summary["manager_intent_rows"] == 12
+    assert events == [("signals", "2026-06-24")]
     assert summary["regenerated_signal_dates"] == ["2026-06-24"]
     assert summary["signal_rows"] == 3
+    assert "manager_intent_dates" not in summary
+    assert "manager_intent_rows" not in summary
 
 
-def test_backfill_all_derived_enables_manager_intent_and_signals():
+def test_backfill_all_derived_enables_signals():
     db.init_db(":memory:")
     seed_previous_day()
     seed_scaled_current_day()
 
-    with patch("backfill_changes.generate_manager_intent_rollups", return_value={"ok": True, "rows": 5}) as intent, \
-        patch("backfill_changes.generate_manager_signals", return_value={"ok": True, "signals": 2}) as signals:
+    with patch(
+        "backfill_changes.generate_manager_signals",
+        return_value={"ok": True, "signals": 2},
+    ) as signals:
         summary = backfill_changes(
             from_date="2026-06-24",
             to_date="2026-06-24",
             all_derived=True,
         )
 
-    intent.assert_called_once_with("2026-06-24")
     signals.assert_called_once_with("2026-06-24")
-    assert summary["manager_intent_rows"] == 5
     assert summary["signal_rows"] == 2
 
 
-def test_backfill_does_not_regenerate_derived_layers_when_changes_fail():
+def test_backfill_does_not_regenerate_signals_when_changes_fail():
     db.init_db(":memory:")
     seed_previous_day("2026-06-23")
     insert_holding("2026-06-24", "00980A", "2330", "台積電", 100, 10.5)
 
-    with patch("backfill_changes.generate_manager_intent_rollups") as intent, \
-        patch("backfill_changes.generate_manager_signals") as signals:
+    with patch("backfill_changes.generate_manager_signals") as signals:
         summary = backfill_changes(
             from_date="2026-06-24",
             to_date="2026-06-24",
@@ -294,7 +284,6 @@ def test_backfill_does_not_regenerate_derived_layers_when_changes_fail():
         )
 
     assert summary["processed_dates"] == []
-    intent.assert_not_called()
     signals.assert_not_called()
 
 

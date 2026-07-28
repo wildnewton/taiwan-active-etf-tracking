@@ -21,20 +21,15 @@ def insert_change(date, issuer, etf_code, direction="add", stock_code="2330"):
                 date, etf_code, issuer, stock_code, stock_name,
                 prev_date, prev_weight_pct, weight_pct, weight_delta_1d,
                 prev_shares, shares, shares_delta_1d,
-                shares_delta_3d, active_shares_delta_1d,
-                active_shares_delta_pct_1d, is_new_position,
-                is_removed_position, consecutive_active_add_days,
-                consecutive_active_reduce_days, position_change_type,
-                active_direction, active_delta_source, is_active_add,
-                is_active_reduce, is_passive_weight_change,
-                is_mixed_weight_share_signal, confidence, source_type,
-                created_at
+                active_shares_delta_1d, active_shares_delta_pct_1d,
+                is_new_position, is_removed_position,
+                consecutive_active_add_days, consecutive_active_reduce_days,
+                position_change_type, active_direction, is_active_add,
+                is_active_reduce, is_passive_weight_change, confidence
             ) VALUES (
                 ?, ?, ?, ?, '測試股', '2026-06-20',
-                2.0, 2.2, 0.2, 100.0, 110.0, ?, ?, ?,
-                2.0, 0, 0, 0, 0, ?, ?, 'flow_adjusted_shares',
-                ?, ?, 0, 0, 'normal', 'moneydj_primary',
-                '2026-06-25T00:00:00'
+                2.0, 2.2, 0.2, 100.0, 110.0, ?, ?, 2.0,
+                0, 0, 0, 0, ?, ?, ?, ?, 0, 'normal'
             )
             """,
             (
@@ -42,7 +37,6 @@ def insert_change(date, issuer, etf_code, direction="add", stock_code="2330"):
                 etf_code,
                 issuer,
                 stock_code,
-                shares_delta,
                 shares_delta,
                 active_delta,
                 position_change_type,
@@ -149,36 +143,3 @@ def test_consensus_direction_reversal_is_labeled_reversal():
     assert row["signal_freshness"] == "reversal"
     assert "opposite consensus" in row["freshness_reason"]
 
-
-def test_existing_signal_table_is_migrated_with_freshness_columns():
-    db.init_db(":memory:")
-    with db._connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE etf_manager_signals (
-                date TEXT NOT NULL,
-                signal_id TEXT PRIMARY KEY,
-                signal_type TEXT NOT NULL,
-                signal_strength TEXT NOT NULL,
-                signal_score REAL NOT NULL,
-                stock_code TEXT NOT NULL,
-                stock_name TEXT,
-                etf_codes TEXT NOT NULL,
-                issuers TEXT NOT NULL,
-                etf_count INTEGER NOT NULL,
-                issuer_count INTEGER NOT NULL,
-                explanation TEXT,
-                evidence_json TEXT,
-                action_label TEXT,
-                confidence TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-    insert_change("2026-06-24", "Nomura", "00980A", direction="add")
-    insert_change("2026-06-24", "Uni-President", "00981A", direction="add")
-
-    generate_manager_signals("2026-06-24")
-    row = fetch_consensus("2026-06-24", "consensus_add_3d")
-
-    assert row["signal_freshness"] == "new"

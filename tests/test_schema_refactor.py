@@ -122,7 +122,7 @@ def test_report_builds_manager_intent_in_memory(monkeypatch):
 
     monkeypatch.setattr(report, "build_manager_intent_rows", fake_build)
 
-    rows = report._get_manager_intent_rollups("2026-07-27")
+    rows = report._get_manager_intent_rows("2026-07-27")
 
     assert calls == [("2026-07-27", 5)]
     assert [row["stock_code"] for row in rows] == ["2317"]

@@ -1,6 +1,7 @@
 import json
 
 import db
+import signals
 from report import generate_signal_report
 
 
@@ -45,31 +46,7 @@ def insert_holding(date, etf_code, stock_code="2330", stock_name="台積電", we
 
 
 def ensure_signal_table():
-    with db._connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS etf_manager_signals (
-                date TEXT NOT NULL,
-                signal_id TEXT PRIMARY KEY,
-                signal_type TEXT NOT NULL,
-                signal_strength TEXT NOT NULL,
-                signal_score REAL NOT NULL,
-                stock_code TEXT NOT NULL,
-                stock_name TEXT,
-                etf_codes TEXT NOT NULL,
-                issuers TEXT NOT NULL,
-                etf_count INTEGER NOT NULL,
-                issuer_count INTEGER NOT NULL,
-                explanation TEXT,
-                evidence_json TEXT,
-                action_label TEXT,
-                confidence TEXT,
-                signal_freshness TEXT DEFAULT 'current',
-                freshness_reason TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
+    signals._ensure_table()
 
 
 def insert_signal(
@@ -102,17 +79,16 @@ def insert_signal(
         conn.execute(
             """
             INSERT INTO etf_manager_signals (
-                date, signal_id, signal_type, signal_strength, signal_score,
+                date, signal_id, signal_type, signal_score,
                 stock_code, stock_name, etf_codes, issuers, etf_count,
-                issuer_count, explanation, evidence_json, action_label,
-                confidence, signal_freshness, freshness_reason, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high', ?, ?, ?)
+                issuer_count, explanation, evidence_json,
+                confidence, signal_freshness, freshness_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high', ?, ?)
             """,
             (
                 date,
                 f"{date}:{signal_type}:{stock_code}:{'-'.join(etf_codes)}",
                 signal_type,
-                signal_strength,
                 signal_score,
                 stock_code,
                 stock_name,
@@ -122,10 +98,8 @@ def insert_signal(
                 len(issuers),
                 f"{stock_code} generated {signal_type}",
                 json.dumps(evidence, ensure_ascii=False),
-                action_label,
                 freshness,
                 reason,
-                f"{date}T00:00:00",
             ),
         )
 
@@ -140,10 +114,10 @@ def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weigh
                 shares_delta_1d, active_shares_delta_1d, active_shares_delta_pct_1d,
                 prev_rank, rank, is_new_position, is_removed_position,
                 position_change_type, active_direction, is_active_add, is_active_reduce,
-                confidence, source_type, created_at
+                confidence
             ) VALUES (?, ?, '測試投信', ?, ?, '2026-06-25', ?, ?, ?, 1000, 0,
                 -1000, -1000, -100.0, ?, NULL, 0, ?, 'removed_position',
-                'reduce', 0, 1, 'high', 'moneydj_primary', ?)
+                'reduce', 0, 1, 'high')
             """,
             (
                 date,
@@ -155,7 +129,6 @@ def insert_change(date, stock_code, stock_name, *, etf_code="00980A", prev_weigh
                 weight - prev_weight,
                 prev_rank,
                 is_removed,
-                f"{date}T00:00:00",
             ),
         )
 
@@ -188,9 +161,9 @@ def insert_report_change(
                 shares_delta_1d, active_shares_delta_1d, active_shares_delta_pct_1d,
                 prev_rank, rank, is_new_position, is_removed_position,
                 position_change_type, active_direction, is_active_add, is_active_reduce,
-                confidence, source_type, created_at
+                confidence
             ) VALUES (?, ?, ?, ?, ?, '2026-06-25', ?, ?, ?, 1000, 1120,
-                120, 120, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
+                120, 120, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high')
             """,
             (
                 date,
@@ -210,7 +183,6 @@ def insert_report_change(
                 active_direction,
                 is_active_add,
                 is_active_reduce,
-                f"{date}T00:00:00",
             ),
         )
 

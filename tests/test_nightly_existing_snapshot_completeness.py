@@ -38,8 +38,6 @@ def _run_with_summary(module, tmp_path, scrape_summary):
             "skipped_etfs": [],
         },
     ), patch.object(
-        module, "generate_manager_intent_rollups", return_value={}
-    ), patch.object(
         module, "generate_manager_signals", return_value={}
     ), patch.object(
         module, "generate_signal_report", return_value="report"

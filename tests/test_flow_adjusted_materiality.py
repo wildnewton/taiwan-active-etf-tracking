@@ -113,7 +113,6 @@ def test_three_day_proportional_scaling_does_not_create_consecutive_add_signal()
     row = fetch_change("2026-06-24", "2330")
 
     assert row["position_change_type"] == "flow_scaled_increase"
-    assert row["is_flow_scaled_change"] == 1
     assert row["is_active_add"] == 0
     assert row["consecutive_active_add_days"] == 0
 
@@ -132,7 +131,6 @@ def test_three_day_proportional_scaling_does_not_create_consecutive_reduce_signa
     row = fetch_change("2026-06-24", "2330")
 
     assert row["position_change_type"] == "flow_scaled_decrease"
-    assert row["is_flow_scaled_change"] == 1
     assert row["is_active_reduce"] == 0
     assert row["consecutive_active_reduce_days"] == 0
 

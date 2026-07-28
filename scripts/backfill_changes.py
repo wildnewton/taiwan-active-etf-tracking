@@ -1,8 +1,9 @@
-"""Backfill ETF holding changes and derived manager-intent/signals.
+"""Backfill ETF holding changes and persisted manager signals.
 
-Use this script after changing change-detection, manager-intent, or signal logic
-when existing DB rows need to be rebuilt from stored holdings. It does not scrape
-holdings and it does not generate reports.
+Use this script after changing change-detection or signal logic when existing DB
+rows need to be rebuilt from stored holdings. Manager intent is calculated in
+memory by the report and is not persisted. This script does not scrape holdings
+or generate reports.
 
 Common usage:
 
@@ -15,16 +16,13 @@ Common usage:
 Options:
 
 - --from-date / --to-date limit the holding dates to rebuild.
-- --regenerate-manager-intent rebuilds manager_intent_rollups after successful
-  change detection for each date.
 - --regenerate-signals rebuilds etf_manager_signals after successful change
   detection for each date.
-- --all-derived is shorthand for --regenerate-manager-intent plus
-  --regenerate-signals.
+- --all-derived is retained as shorthand for --regenerate-signals.
 
 Backfill order for each eligible date is:
 
-    detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
+    detect_holding_changes -> generate_manager_signals
 
 The previous comparison date is selected with changes.get_previous_valid_date(),
 not only from the immediately preceding holdings date or the requested date range.
@@ -37,7 +35,6 @@ from pathlib import Path
 
 import db
 from changes import detect_holding_changes, get_previous_valid_date
-from manager_intent import generate_manager_intent_rollups
 from signals import generate_manager_signals
 
 
@@ -74,7 +71,6 @@ def backfill_changes(
     from_date=None,
     to_date=None,
     regenerate_signals=False,
-    regenerate_manager_intent=False,
     all_derived=False,
 ):
     """Recompute historical holding changes and optionally derived layers.
@@ -84,7 +80,6 @@ def backfill_changes(
     against the proper preceding comparable holdings date.
     """
     if all_derived:
-        regenerate_manager_intent = True
         regenerate_signals = True
 
     all_dates = _all_holding_dates()
@@ -93,10 +88,8 @@ def backfill_changes(
     processed_dates = []
     skipped_first_dates = []
     skipped_etfs_by_date = {}
-    manager_intent_dates = []
     signal_dates = []
     total_change_rows = 0
-    total_manager_intent_rows = 0
     total_signal_rows = 0
 
     for current_date in all_dates:
@@ -116,11 +109,6 @@ def backfill_changes(
         if summary.get("ok"):
             processed_dates.append(current_date)
             total_change_rows += summary.get("rows", 0)
-            if regenerate_manager_intent:
-                intent_summary = generate_manager_intent_rollups(current_date)
-                if intent_summary.get("ok"):
-                    manager_intent_dates.append(current_date)
-                    total_manager_intent_rows += intent_summary.get("rows", 0)
             if regenerate_signals:
                 signal_summary = generate_manager_signals(current_date)
                 if signal_summary.get("ok"):
@@ -135,8 +123,6 @@ def backfill_changes(
         "skipped_first_dates": skipped_first_dates,
         "skipped_etfs_by_date": skipped_etfs_by_date,
         "change_rows": total_change_rows,
-        "manager_intent_dates": manager_intent_dates,
-        "manager_intent_rows": total_manager_intent_rows,
         "regenerated_signal_dates": signal_dates,
         "signal_rows": total_signal_rows,
     }
@@ -144,7 +130,7 @@ def backfill_changes(
 
 def _parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Backfill ETF holding changes and optionally derived manager-intent/signals."
+        description="Backfill ETF holding changes and optionally persisted manager signals."
     )
     parser.add_argument(
         "--db",
@@ -155,11 +141,6 @@ def _parse_args(argv=None):
     parser.add_argument("--from-date", dest="from_date")
     parser.add_argument("--to-date", dest="to_date")
     parser.add_argument(
-        "--regenerate-manager-intent",
-        action="store_true",
-        help="Regenerate manager_intent_rollups after recomputing changes.",
-    )
-    parser.add_argument(
         "--regenerate-signals",
         action="store_true",
         help="Regenerate etf_manager_signals after recomputing changes.",
@@ -167,7 +148,7 @@ def _parse_args(argv=None):
     parser.add_argument(
         "--all-derived",
         action="store_true",
-        help="Regenerate all derived layers after recomputing changes.",
+        help="Regenerate all persisted derived layers after recomputing changes.",
     )
     return parser.parse_args(argv)
 
@@ -178,7 +159,6 @@ def main(argv=None):
     summary = backfill_changes(
         from_date=args.from_date,
         to_date=args.to_date,
-        regenerate_manager_intent=args.regenerate_manager_intent,
         regenerate_signals=args.regenerate_signals,
         all_derived=args.all_derived,
     )

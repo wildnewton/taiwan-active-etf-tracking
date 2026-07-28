@@ -4,7 +4,7 @@ import math
 import pytest
 
 import db
-from manager_intent import generate_manager_intent_rollups
+from manager_intent import build_manager_intent_rows
 
 
 ETF_ROWS = {
@@ -18,6 +18,18 @@ ETF_ROWS = {
 }
 ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
+
+_generated_rows = []
+
+
+def generate_manager_intent_rollups(target_date, windows=(5, 10)):
+    global _generated_rows
+    _generated_rows = [
+        row
+        for window_days in windows
+        for row in build_manager_intent_rows(target_date, window_days)
+    ]
+    return {"ok": True, "date": target_date, "windows": list(windows), "rows": len(_generated_rows)}
 
 
 @pytest.fixture(autouse=True)
@@ -138,9 +150,9 @@ def insert_change(
                 prev_rank, rank, is_new_position, is_removed_position,
                 position_change_type, active_direction, is_active_add, is_active_reduce,
                 consecutive_active_add_days, consecutive_active_reduce_days,
-                confidence, source_type, created_at
+                confidence
             ) VALUES (?, ?, ?, ?, ?, '2026-06-21', 1.0, 2.0, 1.0, 1000, 1100,
-                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
+                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, ?, ?, 'high')
             """,
             (
                 date,
@@ -158,30 +170,23 @@ def insert_change(
                 is_active_reduce,
                 consecutive_active_add_days,
                 consecutive_active_reduce_days,
-                f"{date}T00:00:00",
             ),
         )
 
 
 def get_rollup(*, date="2026-06-26", window_days=5, entity_level="stock", stock_code="2330", issuer_key=""):
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = lambda cursor, row: {column[0]: row[index] for index, column in enumerate(cursor.description)}
-    try:
-        return conn.execute(
-            """
-            SELECT *
-            FROM manager_intent_rollups
-            WHERE date = ?
-              AND window_days = ?
-              AND entity_level = ?
-              AND stock_code = ?
-              AND issuer_key = ?
-            """,
-            (date, window_days, entity_level, stock_code, issuer_key),
-        ).fetchone()
-    finally:
-        conn.row_factory = old_factory
+    return next(
+        (
+            row
+            for row in _generated_rows
+            if row["date"] == date
+            and row["window_days"] == window_days
+            and row["entity_level"] == entity_level
+            and row["stock_code"] == stock_code
+            and row["issuer_key"] == issuer_key
+        ),
+        None,
+    )
 
 
 def setup_db():
@@ -299,23 +304,6 @@ def test_active_flag_with_missing_active_delta_fields_falls_back_to_base_score()
     assert row["cum_active_buy_score"] == 2.0
     assert row["net_active_score"] == 2.0
 
-
-def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
-    setup_db()
-    insert_eligible_history(etfs=("00980A", "00982A"))
-    insert_change("2026-06-25", "00980A", is_active_add=1)
-    insert_change("2026-06-26", "00982A", is_active_add=1)
-
-    generate_manager_intent_rollups("2026-06-26", windows=(5, 10))
-
-    with db._connect() as conn:
-        rows = conn.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT built_at), MIN(built_at) FROM manager_intent_rollups WHERE date = '2026-06-26'"
-        ).fetchone()
-
-    assert rows[0] > 0
-    assert rows[1] == 1
-    assert rows[2]
 
 
 def test_retired_etf_events_are_included_through_latest_holdings_date():

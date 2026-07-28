@@ -74,10 +74,6 @@ def _run_nightly(tmp_path, scrape_summary):
         },
     ), patch.object(
         nightly_pipeline,
-        "generate_manager_intent_rollups",
-        return_value={},
-    ), patch.object(
-        nightly_pipeline,
         "generate_manager_signals",
         return_value={},
     ), patch.object(

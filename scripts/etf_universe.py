@@ -49,7 +49,6 @@ def _ensure_table() -> None:
     conn = db._connect()
     with conn:
         db._create_etf_universe_table(conn)
-        db._ensure_etf_universe_columns(conn)
 
 
 def _is_scope_excluded(row: dict) -> bool:

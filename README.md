@@ -11,10 +11,9 @@ The operational ETF universe, official scraper configuration, and holdings snaps
 1. Discover and reconcile the ETF universe.
 2. Scrape holdings with browser support.
 3. Detect holding changes.
-4. Generate manager-intent rollups.
-5. Generate manager signals.
-6. Write the signal report.
-7. Write traction-analysis raw data.
+4. Generate manager signals.
+5. Write the signal report, including in-memory five-day manager intent.
+6. Write traction-analysis raw data.
 
 `scripts/nightly-cron.sh` resolves the project directory, writes `logs/nightly_pipeline.log`, and runs the pipeline with the production database and report directory.
 
@@ -75,7 +74,7 @@ Failed retries remain eligible until the exact target snapshot exists. The watch
 
 ## Backfill changes and derived layers
 
-Use `scripts/backfill_changes.py` when holdings already exist but change rows, manager-intent rollups, or manager signals must be rebuilt. It does not scrape holdings or generate reports.
+Use `scripts/backfill_changes.py` when holdings already exist but change rows or manager signals must be rebuilt. It does not scrape holdings or generate reports.
 
 ```bash
 PYTHONPATH=scripts python scripts/backfill_changes.py \
@@ -85,12 +84,12 @@ PYTHONPATH=scripts python scripts/backfill_changes.py \
   --all-derived
 ```
 
-Replace `--all-derived` with `--regenerate-manager-intent` or `--regenerate-signals`, or omit the derived-layer flag to rebuild only holding changes.
+Replace `--all-derived` with `--regenerate-signals`, or omit the derived-layer flag to rebuild only holding changes. Manager intent is calculated in memory when the report is generated.
 
 For each eligible date, processing order is:
 
 ```text
-detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
+detect_holding_changes -> generate_manager_signals
 ```
 
 The previous comparison date comes from the full holdings history, not only the requested range. Back up the database before rewriting historical data.

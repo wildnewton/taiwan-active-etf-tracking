@@ -1,7 +1,25 @@
-import json
+import pytest
 
 import db
+import report as report_module
 from report import generate_signal_report
+
+
+ROLLUPS = []
+
+
+@pytest.fixture(autouse=True)
+def in_memory_rollups(monkeypatch):
+    ROLLUPS.clear()
+
+    def build_rows(target_date, window_days=5):
+        return [
+            row
+            for row in ROLLUPS
+            if row["date"] == target_date and row["window_days"] == window_days
+        ]
+
+    monkeypatch.setattr(report_module, "build_manager_intent_rows", build_rows)
 
 
 def insert_rollup(
@@ -33,57 +51,37 @@ def insert_rollup(
     tags = tags or ["cross_fund_rotation", "rotation_net_accumulation"]
     net_score = buy_score - sell_score
     gross_score = buy_score + sell_score
-    with db._connect() as conn:
-        conn.execute(
-            """
-            INSERT INTO manager_intent_rollups (
-                date, window_days, entity_level, stock_code, stock_name,
-                issuer, issuer_key, eligible_days, buy_days, sell_days,
-                buy_day_pct, sell_day_pct, cum_active_buy_score,
-                cum_active_sell_score, net_active_score, gross_active_score,
-                net_to_gross, buy_etf_count, sell_etf_count,
-                buy_issuer_count, sell_issuer_count, rotation_buy_etf_count,
-                rotation_sell_etf_count, cross_fund_offset_ratio,
-                intent_direction, primary_intent_state, intent_pattern_tags_json,
-                confidence, metric_version, evidence_json, built_at, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                date,
-                window_days,
-                entity_level,
-                stock_code,
-                stock_name,
-                issuer,
-                issuer_key,
-                eligible_days,
-                buy_days,
-                sell_days,
-                buy_days / eligible_days if eligible_days else None,
-                sell_days / eligible_days if eligible_days else None,
-                buy_score,
-                sell_score,
-                net_score,
-                gross_score,
-                net_score / gross_score if gross_score else None,
-                buy_etf_count,
-                sell_etf_count,
-                buy_issuer_count,
-                sell_issuer_count,
-                rotation_buy_etf_count,
-                rotation_sell_etf_count,
-                offset_ratio,
-                intent_direction,
-                primary_state,
-                json.dumps(tags, ensure_ascii=False),
-                confidence,
-                "manager_intent_mvp_v1",
-                json.dumps([], ensure_ascii=False),
-                "2026-06-26T00:00:00+00:00",
-                "2026-06-26T00:00:00+00:00",
-            ),
-        )
-
+    ROLLUPS.append(
+        {
+            "date": date,
+            "window_days": window_days,
+            "entity_level": entity_level,
+            "stock_code": stock_code,
+            "stock_name": stock_name,
+            "issuer": issuer,
+            "issuer_key": issuer_key,
+            "eligible_days": eligible_days,
+            "buy_days": buy_days,
+            "sell_days": sell_days,
+            "cum_active_buy_score": buy_score,
+            "cum_active_sell_score": sell_score,
+            "net_active_score": net_score,
+            "gross_active_score": gross_score,
+            "net_to_gross": net_score / gross_score if gross_score else None,
+            "buy_etf_count": buy_etf_count,
+            "sell_etf_count": sell_etf_count,
+            "buy_issuer_count": buy_issuer_count,
+            "sell_issuer_count": sell_issuer_count,
+            "rotation_buy_etf_count": rotation_buy_etf_count,
+            "rotation_sell_etf_count": rotation_sell_etf_count,
+            "cross_fund_offset_ratio": offset_ratio,
+            "intent_direction": intent_direction,
+            "primary_intent_state": primary_state,
+            "intent_pattern_tags": tags,
+            "confidence": confidence,
+            "evidence": [],
+        }
+    )
 
 def test_report_renders_manager_intent_radar_before_exposure_movers_with_conservative_wording():
     db.init_db(":memory:")
