@@ -62,7 +62,7 @@ bash scripts/nightly-cron.sh
 
 ## Holdings-gap watchdog
 
-After the report job, retry only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`:
+Run this as a scheduled watchdog job after the report job; no specific clock time is required. It retries only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`:
 
 ```bash
 PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
