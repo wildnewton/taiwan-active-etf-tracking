@@ -62,7 +62,7 @@ bash scripts/nightly-cron.sh
 
 ## 21:00 holdings-gap watchdog
 
-After the report job, retry only eligible ETFs that still lack a persisted snapshot for the target date:
+After the report job, retry only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`:
 
 ```bash
 PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
@@ -71,7 +71,7 @@ PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
   --report-dir reports
 ```
 
-Failed retries remain eligible until the exact target snapshot exists. Date-only primary reports are replaced only when coverage improves, and partial coverage must not be reported as full-universe coverage.
+Failed retries remain eligible until the exact target snapshot exists. The watchdog must overwrite date-only primary reports only after holdings coverage improves, and partial coverage must not be reported as full-universe coverage.
 
 ## Backfill changes and derived layers
 
