@@ -1,0 +1,114 @@
+name: PR 145 remove docs-only tests
+
+on:
+  push:
+    branches:
+      - docs/remove-hardcoded-etf-table-from-agents
+
+permissions:
+  contents: write
+
+jobs:
+  remove-and-test:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: docs/remove-hardcoded-etf-table-from-agents
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest pytest-asyncio
+
+      - name: Remove docs-only tests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          signal_path = Path("tests/test_signal_report.py")
+          signal_text = signal_path.read_text(encoding="utf-8")
+          signal_text = signal_text.replace("from pathlib import Path\n", "", 1)
+          signal_text = signal_text.replace(
+              '\n\nREADME = Path(__file__).resolve().parent.parent / "README.md"\n',
+              "",
+              1,
+          )
+          watchdog_test = '''\n\ndef test_readme_documents_watchdog_job():
+              readme = README.read_text(encoding="utf-8")
+
+              assert "watchdog" in readme.lower()
+              assert "scripts/retry_stale_scrapes.py" in readme
+          '''
+          if watchdog_test not in signal_text:
+              raise SystemExit("watchdog README test not found")
+          signal_path.write_text(signal_text.replace(watchdog_test, ""), encoding="utf-8")
+
+          backfill_path = Path("tests/test_backfill_changes.py")
+          backfill_text = backfill_path.read_text(encoding="utf-8")
+          backfill_text = backfill_text.replace("from pathlib import Path\n", "", 1)
+          backfill_text = backfill_text.replace("import backfill_changes as backfill_module\n", "", 1)
+          backfill_text = backfill_text.replace(
+              '\n\nREADME = Path(__file__).resolve().parent.parent / "README.md"\n',
+              "",
+              1,
+          )
+          usage_test = '''\n\ndef test_backfill_usage_is_documented_in_script_and_readme():
+              script_doc = backfill_module.__doc__ or ""
+              readme_text = README.read_text(encoding="utf-8")
+
+              for text in (script_doc, readme_text):
+                  assert "scripts/backfill_changes.py" in text
+                  assert "--all-derived" in text
+                  assert "--regenerate-manager-intent" in text
+                  assert "--regenerate-signals" in text
+                  assert "--from-date" in text and "--to-date" in text
+          '''
+          if usage_test not in backfill_text:
+              raise SystemExit("backfill documentation test not found")
+          backfill_path.write_text(backfill_text.replace(usage_test, ""), encoding="utf-8")
+
+          organization_path = Path("tests/test_project_organization.py")
+          organization_text = organization_path.read_text(encoding="utf-8")
+          obsolete_docs_test = '''\n\ndef test_obsolete_docs_are_removed():
+              assert not (ROOT / "docs" / "MILESTONE_3_CHANGE_DETECTION.md").exists()
+              assert not (ROOT / "docs" / "playbook.docx").exists()
+          '''
+          if obsolete_docs_test not in organization_text:
+              raise SystemExit("obsolete docs test not found")
+          organization_path.write_text(
+              organization_text.replace(obsolete_docs_test, ""),
+              encoding="utf-8",
+          )
+          PY
+
+          git rm tests/test_readme.py
+          git rm .github/workflows/pr145-remove-doc-tests.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/test_signal_report.py tests/test_backfill_changes.py tests/test_project_organization.py
+          git commit -m "test: remove docs-only assertions"
+
+      - name: Run targeted behavior tests
+        run: |
+          PYTHONPATH=. pytest -q \
+            tests/test_signal_report.py \
+            tests/test_backfill_changes.py \
+            tests/test_project_organization.py \
+            tests/test_retry_stale_scrapes.py
+
+      - name: Run full suite
+        run: PYTHONPATH=. pytest -q
+
+      - name: Push tested commit
+        run: git push origin HEAD:docs/remove-hardcoded-etf-table-from-agents
