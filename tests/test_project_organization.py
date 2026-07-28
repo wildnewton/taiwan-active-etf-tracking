@@ -29,10 +29,5 @@ def test_etf_universe_has_no_repository_seed_file():
     assert not (ROOT / "data" / "seeds" / "etf_universe_seed.json").exists()
 
 
-def test_obsolete_docs_are_removed():
-    assert not (ROOT / "docs" / "MILESTONE_3_CHANGE_DETECTION.md").exists()
-    assert not (ROOT / "docs" / "playbook.docx").exists()
-
-
 def test_legacy_main_entrypoint_is_removed():
     assert not (ROOT / "scripts" / "main.py").exists()

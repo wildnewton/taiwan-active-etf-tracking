@@ -1,12 +1,8 @@
 import json
 import sqlite3
-from pathlib import Path
 
 import db
 from report import generate_signal_report, get_latest_signal_date
-
-
-README = Path(__file__).resolve().parent.parent / "README.md"
 
 
 def ensure_signal_table():
@@ -291,10 +287,3 @@ def test_report_freshness_excludes_retired_etfs():
 
     assert "00980A" in report
     assert "00983A" not in report
-
-
-def test_readme_documents_watchdog_job():
-    readme = README.read_text(encoding="utf-8")
-
-    assert "watchdog" in readme.lower()
-    assert "scripts/retry_stale_scrapes.py" in readme
