@@ -60,7 +60,7 @@ Run the cron wrapper manually:
 bash scripts/nightly-cron.sh
 ```
 
-## 21:00 holdings-gap watchdog
+## Holdings-gap watchdog
 
 After the report job, retry only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`:
 
