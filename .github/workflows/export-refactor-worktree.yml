@@ -1,16 +1,13 @@
 name: Export refactor worktree
 
 on:
-  push:
-    branches:
-      - refactor/remove-unused-schema
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   export:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +27,3 @@ jobs:
             /tmp/refactor-worktree.tar.xz
             /tmp/pytest-output.txt
           if-no-files-found: error
-      - name: Publish run id
-        run: |
-          echo "$GITHUB_RUN_ID" > .github/export-run-id.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/export-run-id.txt
-          git commit -m "chore: publish export run id"
-          git push origin HEAD:refactor/remove-unused-schema
