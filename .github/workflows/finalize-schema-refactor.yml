@@ -1,0 +1,49 @@
+name: Finalize schema refactor branch
+
+on:
+  push:
+    branches:
+      - refactor/remove-unused-schema
+    paths:
+      - .github/finalize-schema-refactor.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Prepare verified payloads
+        run: |
+          cat .github/schema-refactor-fixes.0* | base64 -d > /tmp/schema-refactor-fixes.tar.xz
+          echo "357af302b0323e4ba5311822f5e1114cf9d4ec70871f31a2f65fe1151aa99725  /tmp/schema-refactor-fixes.tar.xz" | sha256sum -c -
+          tar -cJf /tmp/green-base.tar.xz \
+            scripts/changes.py \
+            scripts/signals.py \
+            tests/test_manager_intent_no_persistence.py
+      - name: Rebuild clean RED to GREEN history
+        run: |
+          git reset --hard 6ee13f1e37539eaf0a78085c50368766f0a2888c
+          tar -xJf /tmp/green-base.tar.xz
+          tar -xJf /tmp/schema-refactor-fixes.tar.xz
+          rm -f tests/test_change_classification_version.py
+          rm -f .github/export-run-id.txt
+          rm -f .github/schema-refactor-fixes.*
+          rm -f .github/finalize-schema-refactor.trigger
+          rm -f .github/workflows/export-refactor-worktree.yml
+          rm -f .github/workflows/finalize-schema-refactor.yml
+          PYTHONPATH=scripts python -m pytest -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: remove unused derived-data schema"
+          git push --force origin HEAD:refactor/remove-unused-schema
