@@ -20,7 +20,7 @@ Use the canonical helpers in `scripts/etf_universe.py`:
 - `upsert_etf()` for manual metadata/configuration changes.
 - `retire_etf()` only after retirement is manually confirmed.
 
-Discovery runs before scraping in the nightly pipeline and reconciles ETF metadata from TWSE/TPEx ISIN pages. Confirmed retirement and permanent scope exclusion are separate states; rely on the canonical helpers rather than inferring eligibility from `retired` alone.
+By default, discovery runs before scraping in the nightly pipeline and reconciles ETF metadata from TWSE/TPEx ISIN pages. Confirmed retirement and permanent scope exclusion are separate states; rely on the canonical helpers rather than inferring eligibility from `retired` alone.
 
 ## Data Sources
 
