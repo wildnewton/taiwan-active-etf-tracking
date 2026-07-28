@@ -1,4 +1,3 @@
-import importlib
 import sqlite3
 
 import pytest
@@ -6,6 +5,7 @@ import pytest
 import db
 import manager_intent
 import report
+import rebuild_derived_schema as cutover
 
 
 DATES = [
@@ -19,6 +19,47 @@ DATES = [
 
 def _columns(conn, table):
     return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _insert_valid_snapshot(conn, date, etf_code="00980A", issuer="Issuer A"):
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO etf_universe (
+            code, name, issuer, market, listing_date, retired,
+            first_seen_date, created_at, updated_at
+        ) VALUES (?, ?, ?, 'TWSE', '2026-01-01', 0,
+                  '2026-01-01', '2026-01-01', '2026-01-01')
+        """,
+        (etf_code, etf_code, issuer),
+    )
+    for stock_code, stock_name, weight in (
+        ("2330", "台積電", 8.0),
+        ("2317", "鴻海", 6.0),
+        ("2454", "聯發科", 5.0),
+        ("2308", "台達電", 4.0),
+        ("2881", "富邦金", 3.0),
+    ):
+        conn.execute(
+            """
+            INSERT INTO etf_daily_holdings (
+                date, etf_code, asset_name, asset_type, stock_code,
+                stock_name, shares, weight_pct, source_url, source_type,
+                extraction_method, scraped_at
+            ) VALUES (?, ?, ?, 'stock', ?, ?, 1000, ?, 'https://test',
+                      'moneydj_primary', 'test', ?)
+            """,
+            (date, etf_code, stock_name, stock_code, stock_name, weight, date),
+        )
+    conn.execute(
+        """
+        INSERT INTO etf_daily_non_stock_assets (
+            date, etf_code, asset_name, asset_type, weight_pct,
+            source_url, source_type, extraction_method, scraped_at
+        ) VALUES (?, ?, 'Cash', 'cash', 74.0, 'https://test',
+                  'moneydj_primary', 'test', ?)
+        """,
+        (date, etf_code, date),
+    )
 
 
 def _seed_legacy_derived_schema(db_path):
@@ -83,8 +124,9 @@ def test_one_time_cutover_rebuilds_only_derived_tables_and_writes_backup(tmp_pat
     db_path = tmp_path / "active-etf.sqlite"
     backup_path = tmp_path / "active-etf.pre-schema-refactor.sqlite"
     _seed_legacy_derived_schema(db_path)
+    with sqlite3.connect(db_path) as conn:
+        _insert_valid_snapshot(conn, "2026-07-24")
 
-    cutover = importlib.import_module("rebuild_derived_schema")
     summary = cutover.rebuild_derived_schema(
         db_path,
         backup_path=backup_path,
@@ -110,6 +152,72 @@ def test_one_time_cutover_rebuilds_only_derived_tables_and_writes_backup(tmp_pat
             "action_label",
             "created_at",
         }.isdisjoint(_columns(conn, "etf_manager_signals"))
+        assert conn.execute(
+            "SELECT COUNT(*) FROM etf_daily_holdings"
+        ).fetchone()[0] == 5
+        assert conn.execute(
+            "SELECT issuer FROM etf_universe WHERE code = '00980A'"
+        ).fetchone() == ("Issuer A",)
+
+
+def test_cutover_rebuilds_changes_signals_and_report_smoke(tmp_path):
+    db_path = tmp_path / "active-etf.sqlite"
+    backup_path = tmp_path / "active-etf.pre-schema-refactor.sqlite"
+    _seed_legacy_derived_schema(db_path)
+    with sqlite3.connect(db_path) as conn:
+        _insert_valid_snapshot(conn, "2026-07-24")
+        _insert_valid_snapshot(conn, "2026-07-25")
+        conn.execute(
+            """
+            UPDATE etf_daily_holdings
+            SET shares = 1100, weight_pct = 9.0
+            WHERE date = '2026-07-25' AND stock_code = '2330'
+            """
+        )
+        conn.execute(
+            """
+            UPDATE etf_daily_non_stock_assets
+            SET weight_pct = 73.0
+            WHERE date = '2026-07-25'
+            """
+        )
+
+    summary = cutover.rebuild_derived_schema(
+        db_path,
+        backup_path=backup_path,
+    )
+
+    assert summary["backfill_summary"]["processed_dates"] == ["2026-07-25"]
+    assert summary["backfill_summary"]["change_rows"] > 0
+    assert summary["smoke_report_date"] == "2026-07-25"
+    assert summary["smoke_report_chars"] > 0
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM etf_holding_changes WHERE date = '2026-07-25'"
+        ).fetchone()[0] > 0
+
+
+def test_cutover_restores_original_database_when_rebuild_fails(tmp_path, monkeypatch):
+    db_path = tmp_path / "active-etf.sqlite"
+    backup_path = tmp_path / "active-etf.pre-schema-refactor.sqlite"
+    _seed_legacy_derived_schema(db_path)
+
+    def fail_backfill(**_kwargs):
+        raise RuntimeError("forced backfill failure")
+
+    monkeypatch.setattr(cutover, "backfill_changes", fail_backfill)
+
+    with pytest.raises(RuntimeError, match="forced backfill failure"):
+        cutover.rebuild_derived_schema(db_path, backup_path=backup_path)
+
+    assert backup_path.exists()
+    with sqlite3.connect(db_path) as conn:
+        assert "created_at" in _columns(conn, "etf_holding_changes")
+        assert "signal_strength" in _columns(conn, "etf_manager_signals")
+        assert conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'manager_intent_rollups'"
+        ).fetchone() == ("manager_intent_rollups",)
 
 
 def test_issuer_lookup_propagates_database_errors():
@@ -151,24 +259,30 @@ def _seed_manager_intent_integration_data():
                 (code, code, issuer),
             )
             for date in DATES:
-                conn.execute(
-                    """
-                    INSERT INTO etf_daily_holdings (
-                        date, etf_code, asset_name, asset_type, stock_code,
-                        stock_name, shares, weight_pct, source_url, source_type,
-                        extraction_method, scraped_at
-                    ) VALUES (?, ?, '台積電', 'stock', '2330', '台積電',
-                              1000, 5.0, 'https://test', 'moneydj_primary',
-                              'test', ?)
-                    """,
-                    (date, code, date),
-                )
+                for stock_code, stock_name in (
+                    ("2330", "台積電"),
+                    ("2317", "鴻海"),
+                    ("2454", "聯發科"),
+                    ("2308", "台達電"),
+                    ("2881", "富邦金"),
+                ):
+                    conn.execute(
+                        """
+                        INSERT INTO etf_daily_holdings (
+                            date, etf_code, asset_name, asset_type, stock_code,
+                            stock_name, shares, weight_pct, source_url, source_type,
+                            extraction_method, scraped_at
+                        ) VALUES (?, ?, ?, 'stock', ?, ?, 1000, 5.0,
+                                  'https://test', 'moneydj_primary', 'test', ?)
+                        """,
+                        (date, code, stock_name, stock_code, stock_name, date),
+                    )
                 conn.execute(
                     """
                     INSERT INTO etf_daily_non_stock_assets (
                         date, etf_code, asset_name, asset_type, weight_pct,
                         source_url, source_type, extraction_method, scraped_at
-                    ) VALUES (?, ?, 'Cash', 'cash', 95.0, 'https://test',
+                    ) VALUES (?, ?, 'Cash', 'cash', 75.0, 'https://test',
                               'moneydj_primary', 'test', ?)
                     """,
                     (date, code, date),

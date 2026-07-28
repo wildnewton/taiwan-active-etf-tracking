@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections import defaultdict
 from typing import Iterable
 
@@ -236,10 +237,7 @@ def _holding_rows(
 
 
 def _issuer_by_etf(conn) -> dict[str, str]:
-    try:
-        rows = conn.execute("SELECT code, issuer FROM etf_universe").fetchall()
-    except Exception:
-        return {}
+    rows = conn.execute("SELECT code, issuer FROM etf_universe").fetchall()
     return {row[0]: row[1] for row in rows if row[1]}
 
 
@@ -262,7 +260,9 @@ def _comparable_context(
             """,
             window_dates,
         )
-    except Exception:
+    except sqlite3.OperationalError as exc:
+        if "no such table: etf_change_diagnostics" not in str(exc):
+            raise
         diagnostics = []
     context = {
         (row["date"], row["etf_code"])

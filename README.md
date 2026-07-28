@@ -94,6 +94,18 @@ detect_holding_changes -> generate_manager_signals
 
 The previous comparison date comes from the full holdings history, not only the requested range. Back up the database before rewriting historical data.
 
+### One-time compact-schema cutover
+
+Before deploying this schema refactor to the existing production database, run the targeted cutover against a copied database. It preserves holdings and ETF-universe data, creates a SQLite backup, replaces only recomputable derived tables, backfills changes and signals, and generates an in-memory report smoke check.
+
+```bash
+PYTHONPATH=scripts python scripts/rebuild_derived_schema.py \
+  --db /path/to/active_etf_holdings.copy.sqlite \
+  --backup /path/to/active_etf_holdings.pre-schema-refactor.sqlite
+```
+
+After inspecting the returned backfill and smoke-report summary, run the normal nightly pipeline in try-run mode against that copy. Apply the same cutover to production only while cron is paused, then retain the generated backup until the next successful nightly run.
+
 ## Run tests
 
 Full suite:
