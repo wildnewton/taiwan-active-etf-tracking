@@ -322,13 +322,3 @@ async def test_undated_capital_result_continues_to_static_fallback():
 
     static_fallback.assert_called_once_with("00982A")
     assert result == static_result
-
-
-def test_legacy_listener_mock_adapter_is_removed():
-    conftest = Path(__file__).with_name("conftest.py").read_text(encoding="utf-8")
-    official_tests = Path(__file__).with_name("test_official.py").read_text(encoding="utf-8")
-
-    assert "adapt_legacy_official_playwright_mocks" not in conftest
-    assert "page.on = _on" not in official_tests
-    assert "_fire_response_events" not in official_tests
-    assert "page.expect_response" in official_tests

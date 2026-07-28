@@ -293,11 +293,14 @@ def test_report_freshness_excludes_retired_etfs():
     assert "00983A" not in report
 
 
-def test_readme_documents_watchdog_retry_prompt():
+def test_readme_documents_watchdog_job_without_fixed_schedule():
     readme = README.read_text(encoding="utf-8")
+    normalized = readme.lower()
 
-    assert "21:00" in readme
+    assert "21:00" not in readme
+    assert "watchdog" in normalized
     assert "scripts/retry_stale_scrapes.py" in readme
     assert '--date "$(date +%F)"' in readme
-    assert "target-date holdings gaps" in readme
-    assert "overwrite date-only primary reports only after holdings coverage improves" in readme
+    assert "target-date holdings gaps" in normalized
+    assert "coverage improves" in normalized
+    assert "partial coverage" in normalized

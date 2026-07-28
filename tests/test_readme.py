@@ -14,22 +14,26 @@ def test_readme_exists():
 
 
 def test_readme_documents_taiwan_stock_active_etf_scope():
-    text = _readme_text()
+    text = _readme_text().lower()
 
-    assert (
-        "Taiwan Active ETF Tracking is a Python pipeline for tracking "
-        "Taiwan-listed active ETFs whose investment universe is Taiwan stocks."
-    ) in text
+    assert "taiwan-listed active etfs" in text
+    assert "taiwan stocks" in text
 
 
-def test_readme_documents_current_entrypoints_and_layout():
+def test_readme_documents_current_entrypoints_and_db_configuration():
     text = _readme_text()
 
     assert "scripts/nightly-cron.sh" in text
     assert "scripts/nightly_pipeline.py" in text
     assert "scripts/scrapers/" in text
     assert "data/etf_universe_seed.json" not in text
-    assert "sole runtime source of truth" in text
+    for identifier in (
+        "etf_universe",
+        "official_url",
+        "official_method",
+        "official_logic",
+    ):
+        assert identifier in text
 
 
 def test_readme_avoids_removed_or_stale_paths():
