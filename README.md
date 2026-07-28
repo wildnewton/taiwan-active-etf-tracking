@@ -60,7 +60,7 @@ Run the cron wrapper manually:
 bash scripts/nightly-cron.sh
 ```
 
-## Holdings-gap watchdog
+## 21:00 holdings-gap watchdog
 
 After the report job, retry only eligible ETFs that still lack a persisted snapshot for the target date:
 
