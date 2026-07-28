@@ -1,25 +1,7 @@
 import json
-import sqlite3
-from datetime import datetime
 
 import db
 from changes import get_latest_valid_date
-
-
-def score_to_action_label(score):
-    if score >= 8:
-        return "Strong Watch"
-    if score >= 4:
-        return "Watch"
-    if score >= 1:
-        return "Mild Positive"
-    if score <= -8:
-        return "Strong Reduce Watch"
-    if score <= -4:
-        return "Reduce Watch"
-    if score <= -1:
-        return "Mild Negative"
-    return "Neutral"
 
 
 def _dict_factory(cursor, row):
@@ -34,7 +16,6 @@ def _ensure_table():
             date TEXT NOT NULL,
             signal_id TEXT PRIMARY KEY,
             signal_type TEXT NOT NULL,
-            signal_strength TEXT NOT NULL,
             signal_score REAL NOT NULL,
             stock_code TEXT NOT NULL,
             stock_name TEXT,
@@ -44,23 +25,16 @@ def _ensure_table():
             issuer_count INTEGER NOT NULL,
             explanation TEXT,
             evidence_json TEXT,
-            action_label TEXT,
             confidence TEXT,
             signal_freshness TEXT DEFAULT 'current',
-            freshness_reason TEXT,
-            created_at TEXT NOT NULL
+            freshness_reason TEXT
         )
         """
     )
-    _ensure_signal_columns(conn)
-
-
-def _ensure_signal_columns(conn):
-    existing = {row[1] for row in conn.execute("PRAGMA table_info(etf_manager_signals)").fetchall()}
-    if "signal_freshness" not in existing:
-        conn.execute("ALTER TABLE etf_manager_signals ADD COLUMN signal_freshness TEXT DEFAULT 'current'")
-    if "freshness_reason" not in existing:
-        conn.execute("ALTER TABLE etf_manager_signals ADD COLUMN freshness_reason TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_etf_manager_signals_date "
+        "ON etf_manager_signals(date)"
+    )
 
 
 def _load(date):
@@ -89,7 +63,9 @@ def _change_dates_through(date, limit=3):
 
 def _previous_change_date(date):
     conn = db._connect()
-    row = conn.execute("SELECT MAX(date) FROM etf_holding_changes WHERE date < ?", (date,)).fetchone()
+    row = conn.execute(
+        "SELECT MAX(date) FROM etf_holding_changes WHERE date < ?", (date,)
+    ).fetchone()
     return row[0] if row and row[0] else None
 
 
@@ -103,7 +79,9 @@ def _recent(date, limit=3):
         conn.row_factory = _dict_factory
         marks = ",".join("?" for _ in dates)
         return conn.execute(
-            "SELECT * FROM etf_holding_changes WHERE date IN (" + marks + ") ORDER BY date, stock_code, etf_code",
+            "SELECT * FROM etf_holding_changes WHERE date IN ("
+            + marks
+            + ") ORDER BY date, stock_code, etf_code",
             dates,
         ).fetchall()
     finally:
@@ -112,10 +90,6 @@ def _recent(date, limit=3):
 
 def _gte(value, threshold):
     return value is not None and value >= threshold
-
-
-def _lte(value, threshold):
-    return value is not None and value <= threshold
 
 
 def _positive(value):
@@ -135,20 +109,12 @@ def _active_delta(row):
     return value if value is not None else row.get("shares_delta_1d")
 
 
-def _three_day_fallback_delta(row):
-    if row.get("active_shares_delta_1d") is not None:
-        return None
-    return row.get("shares_delta_3d")
-
-
 def _active_add_event(row):
     if row.get("is_new_position") and _gte(row.get("weight_pct"), 2.0):
         return True
     if row.get("is_active_add"):
         return True
-    if row.get("active_direction") == "add":
-        return True
-    return False
+    return row.get("active_direction") == "add"
 
 
 def _active_reduce_event(row):
@@ -156,14 +122,12 @@ def _active_reduce_event(row):
         return True
     if row.get("is_active_reduce"):
         return True
-    if row.get("active_direction") == "reduce":
-        return True
-    return False
+    return row.get("active_direction") == "reduce"
 
 
 def _consecutive_active_add_event(row):
     if row.get("consecutive_active_add_days", 0) >= 3:
-        return _positive(_active_delta(row)) or _positive(_three_day_fallback_delta(row))
+        return _positive(_active_delta(row))
     return (
         not row.get("is_passive_weight_change")
         and row.get("consecutive_active_add_days", 0) == 0
@@ -175,7 +139,7 @@ def _consecutive_active_add_event(row):
 
 def _consecutive_active_reduce_event(row):
     if row.get("consecutive_active_reduce_days", 0) >= 3:
-        return _negative(_active_delta(row)) or _negative(_three_day_fallback_delta(row))
+        return _negative(_active_delta(row))
     return (
         not row.get("is_passive_weight_change")
         and row.get("consecutive_active_reduce_days", 0) == 0
@@ -203,9 +167,7 @@ def _evidence(rows):
             "stock_name": row.get("stock_name"),
             "weight_pct": row.get("weight_pct"),
             "prev_weight_pct": row.get("prev_weight_pct"),
-            "weight_delta_3d": row.get("weight_delta_3d"),
             "shares_delta_1d": row.get("shares_delta_1d"),
-            "shares_delta_3d": row.get("shares_delta_3d"),
             "active_shares_delta_1d": row.get("active_shares_delta_1d"),
             "active_shares_delta_pct_1d": row.get("active_shares_delta_pct_1d"),
             "position_change_type": row.get("position_change_type"),
@@ -214,13 +176,23 @@ def _evidence(rows):
             "consecutive_add_days": row.get("consecutive_add_days"),
             "consecutive_reduce_days": row.get("consecutive_reduce_days"),
             "consecutive_active_add_days": row.get("consecutive_active_add_days"),
-            "consecutive_active_reduce_days": row.get("consecutive_active_reduce_days"),
+            "consecutive_active_reduce_days": row.get(
+                "consecutive_active_reduce_days"
+            ),
         }
         for row in rows
     ]
 
 
-def _signal(date, signal_type, strength, score, row, rows, signal_freshness="current", freshness_reason=None):
+def _signal(
+    date,
+    signal_type,
+    score,
+    row,
+    rows,
+    signal_freshness="current",
+    freshness_reason=None,
+):
     etfs = sorted({event["etf_code"] for event in rows})
     issuers = sorted(_issuers(rows))
     signal_id = f"{date}:{signal_type}:{row['stock_code']}:{'-'.join(etfs)}"
@@ -228,7 +200,6 @@ def _signal(date, signal_type, strength, score, row, rows, signal_freshness="cur
         "date": date,
         "signal_id": signal_id,
         "signal_type": signal_type,
-        "signal_strength": strength,
         "signal_score": score,
         "stock_code": row["stock_code"],
         "stock_name": row.get("stock_name"),
@@ -238,11 +209,9 @@ def _signal(date, signal_type, strength, score, row, rows, signal_freshness="cur
         "issuer_count": len(issuers),
         "explanation": signal_type,
         "evidence_json": json.dumps(_evidence(rows), ensure_ascii=False),
-        "action_label": score_to_action_label(score),
         "confidence": row.get("confidence") or "normal",
         "signal_freshness": signal_freshness,
         "freshness_reason": freshness_reason,
-        "created_at": datetime.now().isoformat(),
     }
 
 
@@ -250,17 +219,53 @@ def _single_signals(date, rows):
     signals = []
     for row in rows:
         if row["is_new_position"] and _gte(row["weight_pct"], 2.0):
-            strength = "strong" if _gte(row["weight_pct"], 3.0) and row.get("rank") is not None and row["rank"] <= 15 else "medium"
-            signals.append(_signal(date, "new_core_position", strength, 4, row, [row], "current", "single ETF new core position"))
+            signals.append(
+                _signal(
+                    date,
+                    "new_core_position",
+                    4,
+                    row,
+                    [row],
+                    "current",
+                    "single ETF new core position",
+                )
+            )
         if row["is_removed_position"] and _gte(row["prev_weight_pct"], 2.0):
-            strength = "strong" if _gte(row["prev_weight_pct"], 3.0) and row.get("prev_rank") is not None and row["prev_rank"] <= 15 else "medium"
-            signals.append(_signal(date, "removed_core_position", strength, -5, row, [row], "current", "single ETF removed core position"))
+            signals.append(
+                _signal(
+                    date,
+                    "removed_core_position",
+                    -5,
+                    row,
+                    [row],
+                    "current",
+                    "single ETF removed core position",
+                )
+            )
         if _consecutive_active_add_event(row):
-            score = 3 + (1 if (_positive(_active_delta(row)) or _positive(_three_day_fallback_delta(row))) else 0)
-            signals.append(_signal(date, "consecutive_add_3d", "medium", score, row, [row], "current", "single ETF consecutive active add"))
+            signals.append(
+                _signal(
+                    date,
+                    "consecutive_add_3d",
+                    4,
+                    row,
+                    [row],
+                    "current",
+                    "single ETF consecutive active add",
+                )
+            )
         if _consecutive_active_reduce_event(row):
-            score = -3 + (-1 if (_negative(_active_delta(row)) or _negative(_three_day_fallback_delta(row))) else 0)
-            signals.append(_signal(date, "consecutive_reduce_3d", "medium", score, row, [row], "current", "single ETF consecutive active reduce"))
+            signals.append(
+                _signal(
+                    date,
+                    "consecutive_reduce_3d",
+                    -4,
+                    row,
+                    [row],
+                    "current",
+                    "single ETF consecutive active reduce",
+                )
+            )
     return signals
 
 
@@ -269,7 +274,11 @@ def _group_consensus_events(rows, predicate):
     for row in rows:
         if predicate(row):
             grouped.setdefault(row["stock_code"], []).append(row)
-    return {stock_code: events for stock_code, events in grouped.items() if len(_issuers(events)) >= 2}
+    return {
+        stock_code: events
+        for stock_code, events in grouped.items()
+        if len(_issuers(events)) >= 2
+    }
 
 
 def _consensus_groups_for_date(date, predicate):
@@ -283,13 +292,22 @@ def _freshness_label(date, events, same_prior_events, opposite_prior_events):
     current_issuer_count = len(_issuers(events))
     prior_issuer_count = len(_issuers(same_prior_events)) if same_prior_events else 0
     if not today_events:
-        return "stale", "consensus remains in the rolling window, but there is no current-day event"
+        return (
+            "stale",
+            "consensus remains in the rolling window, but there is no current-day event",
+        )
     if opposite_prior_events:
-        return "reversal", "current consensus follows an opposite consensus in the previous window"
+        return (
+            "reversal",
+            "current consensus follows an opposite consensus in the previous window",
+        )
     if not same_prior_events:
         return "new", "first reaches consensus in the rolling window"
     if current_issuer_count < prior_issuer_count:
-        return "fading", f"issuer count declined from {prior_issuer_count} to {current_issuer_count}"
+        return (
+            "fading",
+            f"issuer count declined from {prior_issuer_count} to {current_issuer_count}",
+        )
     return "persistent", "consensus continues with current-day evidence"
 
 
@@ -304,12 +322,15 @@ def _consensus(date):
     for signal_type, predicate, opposite_predicate in specs:
         grouped = _group_consensus_events(rows, predicate)
         previous_same = _consensus_groups_for_date(previous_date, predicate)
-        previous_opposite = _consensus_groups_for_date(previous_date, opposite_predicate)
+        previous_opposite = _consensus_groups_for_date(
+            previous_date, opposite_predicate
+        )
         for stock_code, events in grouped.items():
             issuer_count = len(_issuers(events))
-            representative = sorted(events, key=lambda event: (event["date"], event["etf_code"]))[-1]
-            strong = issuer_count >= 3
-            score = 6 if strong else 4
+            representative = sorted(
+                events, key=lambda event: (event["date"], event["etf_code"])
+            )[-1]
+            score = 6 if issuer_count >= 3 else 4
             if signal_type == "consensus_reduce_3d":
                 score = -score
             freshness, reason = _freshness_label(
@@ -318,7 +339,17 @@ def _consensus(date):
                 previous_same.get(stock_code),
                 previous_opposite.get(stock_code),
             )
-            out.append(_signal(date, signal_type, "strong" if strong else "medium", score, representative, events, freshness, reason))
+            out.append(
+                _signal(
+                    date,
+                    signal_type,
+                    score,
+                    representative,
+                    events,
+                    freshness,
+                    reason,
+                )
+            )
     return out
 
 
@@ -330,16 +361,15 @@ def _replace(date, signals):
             conn.executemany(
                 """
                 INSERT OR REPLACE INTO etf_manager_signals (
-                    date, signal_id, signal_type, signal_strength, signal_score,
+                    date, signal_id, signal_type, signal_score,
                     stock_code, stock_name, etf_codes, issuers, etf_count,
-                    issuer_count, explanation, evidence_json, action_label,
-                    confidence, signal_freshness, freshness_reason, created_at
+                    issuer_count, explanation, evidence_json, confidence,
+                    signal_freshness, freshness_reason
                 ) VALUES (
-                    :date, :signal_id, :signal_type, :signal_strength,
-                    :signal_score, :stock_code, :stock_name, :etf_codes,
-                    :issuers, :etf_count, :issuer_count, :explanation,
-                    :evidence_json, :action_label, :confidence,
-                    :signal_freshness, :freshness_reason, :created_at
+                    :date, :signal_id, :signal_type, :signal_score,
+                    :stock_code, :stock_name, :etf_codes, :issuers, :etf_count,
+                    :issuer_count, :explanation, :evidence_json, :confidence,
+                    :signal_freshness, :freshness_reason
                 )
                 """,
                 signals,
@@ -350,7 +380,12 @@ def generate_manager_signals(signal_date=None):
     _ensure_table()
     date = signal_date or get_latest_valid_date()
     if not date:
-        return {"ok": False, "date": None, "signals": 0, "reason": "no signal date"}
+        return {
+            "ok": False,
+            "date": None,
+            "signals": 0,
+            "reason": "no signal date",
+        }
     signals = _single_signals(date, _load(date)) + _consensus(date)
     unique = {signal["signal_id"]: signal for signal in signals}
     _replace(date, list(unique.values()))

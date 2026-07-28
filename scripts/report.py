@@ -15,6 +15,7 @@ from etf_universe import (
     get_eligible_etf_codes,
     get_eligible_etf_count,
 )
+from manager_intent import build_manager_intent_rows
 
 CST = timezone(timedelta(hours=8))
 _MATERIAL_POSITION_WEIGHT = 0.5
@@ -538,18 +539,14 @@ def _get_change_summary(data_date):
 def _get_manager_intent_rollups(data_date, limit=_MANAGER_INTENT_LIMIT):
     if not data_date:
         return []
-    try:
-        with _using_row_factory(_dict_factory) as conn:
-            rows = conn.execute(
-                """SELECT *
-                   FROM manager_intent_rollups
-                   WHERE date = ?
-                     AND window_days = ?
-                     AND primary_intent_state NOT IN ('neutral', 'insufficient_data')""",
-                (data_date, _MANAGER_INTENT_WINDOW),
-            ).fetchall()
-    except sqlite3.OperationalError:
-        return []
+    rows = [
+        row
+        for row in build_manager_intent_rows(
+            data_date,
+            window_days=_MANAGER_INTENT_WINDOW,
+        )
+        if row.get("primary_intent_state") not in _EXCLUDED_MANAGER_INTENT_STATES
+    ]
     return sorted(rows, key=_manager_intent_sort_key)[:limit]
 
 
@@ -924,17 +921,6 @@ def _fmt_signed(value):
 
 def _dict_factory(cursor, row):
     return {column[0]: row[index] for index, column in enumerate(cursor.description)}
-
-
-SIGNAL_SECTIONS = [
-    ("A. Strong consensus adds", lambda row: row["signal_type"] == "consensus_add_3d" and row["signal_strength"] == "strong"),
-    ("B. New core positions", lambda row: row["signal_type"] == "new_core_position"),
-    ("C. Consecutive accumulations", lambda row: row["signal_type"] == "consecutive_add_3d"),
-    ("D. Consensus adds", lambda row: row["signal_type"] == "consensus_add_3d" and row["signal_strength"] != "strong"),
-    ("E. Consensus reductions", lambda row: row["signal_type"] == "consensus_reduce_3d"),
-    ("F. Consecutive reductions", lambda row: row["signal_type"] == "consecutive_reduce_3d"),
-    ("G. Removed core positions", lambda row: row["signal_type"] == "removed_core_position"),
-]
 
 
 def generate_daily_report(summary: dict) -> str:

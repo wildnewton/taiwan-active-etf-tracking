@@ -5,7 +5,6 @@ from typing import Optional
 
 import db
 from etf_universe import get_eligible_etf_codes, get_etf_config
-from source_priority import source_priority
 
 
 _EPSILON = 1e-9
@@ -15,6 +14,8 @@ _WEEKDAYS = ['週一', '週二', '週三', '週四', '週五', '週六', '週日
 
 def _weekday_label(date_str: str) -> str:
     return _WEEKDAYS[datetime.strptime(date_str, '%Y-%m-%d').weekday()]
+
+
 _MIN_SCALE_SAMPLE_SIZE = 3
 _MIN_ACTIVE_DELTA_PCT = 1.0
 
@@ -154,13 +155,11 @@ def _select_canonical_sources(date_value: str) -> dict:
         entry = db.get_canonical_snapshot_entry(date_value, etf_code)
         if not entry:
             continue
-        entry = {
+        selected[etf_code] = {
             **entry,
             "etf_code": etf_code,
             "source_family": _source_family(entry["source_type"]),
         }
-        entry["quality_score"] = _source_quality_score(entry)
-        selected[etf_code] = entry
     return selected
 
 
@@ -171,15 +170,6 @@ def _source_family(source_type: str) -> str:
     if "official" in source_type:
         return "official"
     return source_type or "unknown"
-
-
-def _source_quality_score(entry: dict) -> float:
-    priority = source_priority(entry["source_type"])
-    stock_count_bonus = entry["stock_count"] * 2.0
-    shares_bonus = entry["shares_coverage"] * 10.0
-    total_weight = entry["total_weight"]
-    weight_bonus = 5.0 if 80.0 <= total_weight <= 105.0 else 0.0
-    return priority + stock_count_bonus + shares_bonus + weight_bonus
 
 
 def _comparable_etfs(current_sources: dict, previous_sources: dict) -> tuple[set[str], list[str]]:
@@ -217,16 +207,10 @@ def _diagnostic_row(current_date, previous_date, etf_code, current, previous, st
         "reason": reason,
         "current_source_type": _source_attr(current, "source_type"),
         "previous_source_type": _source_attr(previous, "source_type"),
-        "current_source_family": _source_attr(current, "source_family"),
-        "previous_source_family": _source_attr(previous, "source_family"),
         "current_stock_count": _source_attr(current, "stock_count"),
         "previous_stock_count": _source_attr(previous, "stock_count"),
         "current_total_weight": _source_attr(current, "total_weight"),
         "previous_total_weight": _source_attr(previous, "total_weight"),
-        "current_shares_coverage": _source_attr(current, "shares_coverage"),
-        "previous_shares_coverage": _source_attr(previous, "shares_coverage"),
-        "current_quality_score": _source_attr(current, "quality_score"),
-        "previous_quality_score": _source_attr(previous, "quality_score"),
         "overlap_ratio": overlap_ratio,
         "size_ratio": size_ratio,
         "created_at": created_at,
@@ -371,9 +355,7 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
     )
     today_rank = today["rank"] if today else None
     previous_rank = previous["rank"] if previous else None
-    rank_delta = previous_rank - today_rank if today_rank is not None and previous_rank is not None else None
     stock_name = today.get("stock_name") if today and today.get("stock_name") else previous.get("stock_name") if previous else None
-    source_type = today.get("source_type") if today and today.get("source_type") else previous.get("source_type") if previous else None
     if etf_scale_factor is None:
         consecutive_active_add_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="add")
         consecutive_active_reduce_days = _consecutive_active_direction_days(etf_code, stock_code, current_date, trading_dates, shares_cache, direction="reduce")
@@ -390,33 +372,21 @@ def _build_change_row(*, current_date: str, previous_date: str, etf_code: str, s
         "prev_weight_pct": previous_weight,
         "weight_pct": today_weight if today_weight is not None else 0.0,
         "weight_delta_1d": weight_delta,
-        "weight_delta_pct_1d": _relative_delta_pct(weight_delta, previous_weight),
         "prev_shares": previous_shares,
         "shares": today_shares,
         "shares_delta_1d": shares_delta,
-        "shares_delta_pct_1d": _relative_delta_pct(shares_delta, previous_shares),
         "etf_scale_factor": etf_scale_factor,
-        "expected_shares": expected_shares,
         "active_shares_delta_1d": active_shares_delta,
         "active_shares_delta_pct_1d": active_shares_delta_pct,
         "prev_rank": previous_rank,
         "rank": today_rank,
-        "rank_delta_1d": rank_delta,
         "is_new_position": is_new_position,
         "is_removed_position": is_removed_position,
-        "weight_delta_3d": _rolling_weight_delta(etf_code, stock_code, current_date, 3, trading_dates, weight_cache),
-        "weight_delta_5d": _rolling_weight_delta(etf_code, stock_code, current_date, 5, trading_dates, weight_cache),
-        "weight_delta_10d": _rolling_weight_delta(etf_code, stock_code, current_date, 10, trading_dates, weight_cache),
-        "shares_delta_3d": _rolling_shares_delta(etf_code, stock_code, current_date, 3, trading_dates, shares_cache),
-        "shares_delta_5d": _rolling_shares_delta(etf_code, stock_code, current_date, 5, trading_dates, shares_cache),
-        "shares_delta_10d": _rolling_shares_delta(etf_code, stock_code, current_date, 10, trading_dates, shares_cache),
         "consecutive_add_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="add"),
         "consecutive_reduce_days": _consecutive_direction_days(etf_code, stock_code, current_date, trading_dates, weight_cache, direction="reduce"),
         "consecutive_active_add_days": consecutive_active_add_days,
         "consecutive_active_reduce_days": consecutive_active_reduce_days,
         **classification,
-        "source_type": source_type,
-        "created_at": datetime.now().isoformat(),
     }
 
 
@@ -443,51 +413,47 @@ def _is_material_active_delta(active_shares_delta, active_shares_delta_pct):
 
 def _classify_position_change(*, shares_delta, active_shares_delta, active_shares_delta_pct, weight_delta, etf_scale_factor, is_new_position: bool, is_removed_position: bool) -> dict:
     if is_new_position:
-        return _classification("new_position", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
+        return _classification("new_position", "add", 1, 0, 0, "add", "high")
     if is_removed_position:
-        return _classification("removed_position", "reduce", 0, 1, 0, 0, 0, "reduce", "high", etf_scale_factor)
+        return _classification("removed_position", "reduce", 0, 1, 0, "reduce", "high")
     if active_shares_delta is None:
         if weight_delta > _EPSILON:
-            return _classification("weight_only_increase", "unknown", 0, 0, 0, 0, 0, "unknown", "low", etf_scale_factor)
+            return _classification("weight_only_increase", "unknown", 0, 0, 0, "unknown", "low")
         if weight_delta < -_EPSILON:
-            return _classification("weight_only_decrease", "unknown", 0, 0, 0, 0, 0, "unknown", "low", etf_scale_factor)
-        return _classification("unchanged", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
+            return _classification("weight_only_decrease", "unknown", 0, 0, 0, "unknown", "low")
+        return _classification("unchanged", "none", 0, 0, 0, "none", "low")
     if etf_scale_factor is not None and abs(active_shares_delta) <= _EPSILON and shares_delta is not None:
         if shares_delta > _EPSILON:
-            return _classification("flow_scaled_increase", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
+            return _classification("flow_scaled_increase", "none", 0, 0, 0, "none", "medium")
         if shares_delta < -_EPSILON:
-            return _classification("flow_scaled_decrease", "none", 0, 0, 0, 0, 1, "none", "medium", etf_scale_factor)
+            return _classification("flow_scaled_decrease", "none", 0, 0, 0, "none", "medium")
     if not _is_material_active_delta(active_shares_delta, active_shares_delta_pct):
         if active_shares_delta > _EPSILON:
-            return _classification("immaterial_active_increase", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
+            return _classification("immaterial_active_increase", "none", 0, 0, 0, "none", "low")
         if active_shares_delta < -_EPSILON:
-            return _classification("immaterial_active_decrease", "none", 0, 0, 0, 0, 0, "none", "low", etf_scale_factor)
+            return _classification("immaterial_active_decrease", "none", 0, 0, 0, "none", "low")
     if active_shares_delta > _EPSILON and weight_delta >= -_EPSILON:
-        return _classification("confirmed_active_add", "add", 1, 0, 0, 0, 0, "add", "high", etf_scale_factor)
+        return _classification("confirmed_active_add", "add", 1, 0, 0, "add", "high")
     if active_shares_delta > _EPSILON and weight_delta < -_EPSILON:
-        return _classification("mixed_add_but_weight_down", "add", 1, 0, 0, 1, 0, "add", "medium", etf_scale_factor)
+        return _classification("mixed_add_but_weight_down", "add", 1, 0, 0, "add", "medium")
     if active_shares_delta < -_EPSILON and weight_delta <= _EPSILON:
-        return _classification("confirmed_active_reduce", "reduce", 0, 1, 0, 0, 0, "reduce", "high", etf_scale_factor)
+        return _classification("confirmed_active_reduce", "reduce", 0, 1, 0, "reduce", "high")
     if active_shares_delta < -_EPSILON and weight_delta > _EPSILON:
-        return _classification("mixed_reduce_but_weight_up", "reduce", 0, 1, 0, 1, 0, "reduce", "medium", etf_scale_factor)
+        return _classification("mixed_reduce_but_weight_up", "reduce", 0, 1, 0, "reduce", "medium")
     if weight_delta > _EPSILON:
-        return _classification("passive_weight_increase", "none", 0, 0, 1, 0, 0, "none", "low", etf_scale_factor)
+        return _classification("passive_weight_increase", "none", 0, 0, 1, "none", "low")
     if weight_delta < -_EPSILON:
-        return _classification("passive_weight_decrease", "none", 0, 0, 1, 0, 0, "none", "low", etf_scale_factor)
-    return _classification("unchanged", "none", 0, 0, 0, 0, 0, "none", "high", etf_scale_factor)
+        return _classification("passive_weight_decrease", "none", 0, 0, 1, "none", "low")
+    return _classification("unchanged", "none", 0, 0, 0, "none", "high")
 
 
-def _classification(position_change_type, active_direction, is_active_add, is_active_reduce, is_passive_weight_change, is_mixed_weight_share_signal, is_flow_scaled_change, flow_adjusted_direction, confidence, etf_scale_factor) -> dict:
-    active_delta_source = "flow_adjusted_shares" if etf_scale_factor is not None else "shares"
+def _classification(position_change_type, active_direction, is_active_add, is_active_reduce, is_passive_weight_change, flow_adjusted_direction, confidence) -> dict:
     return {
         "position_change_type": position_change_type,
         "active_direction": active_direction,
-        "active_delta_source": active_delta_source,
         "is_active_add": is_active_add,
         "is_active_reduce": is_active_reduce,
         "is_passive_weight_change": is_passive_weight_change,
-        "is_mixed_weight_share_signal": is_mixed_weight_share_signal,
-        "is_flow_scaled_change": is_flow_scaled_change,
         "flow_adjusted_direction": flow_adjusted_direction,
         "confidence": confidence,
     }
@@ -532,26 +498,6 @@ def _relative_delta_pct(delta, previous):
     return delta / previous * 100.0
 
 
-def _rolling_weight_delta(etf_code: str, stock_code: str, current_date: str, window_size: int, trading_dates: list[str], weight_cache: dict[str, dict]):
-    dates = [date_value for date_value in trading_dates if date_value <= current_date]
-    if len(dates) < window_size:
-        return None
-    start_date = dates[-window_size]
-    return weight_cache.get(current_date, {}).get((etf_code, stock_code), 0.0) - weight_cache.get(start_date, {}).get((etf_code, stock_code), 0.0)
-
-
-def _rolling_shares_delta(etf_code: str, stock_code: str, current_date: str, window_size: int, trading_dates: list[str], shares_cache: dict[str, dict]):
-    dates = [date_value for date_value in trading_dates if date_value <= current_date]
-    if len(dates) < window_size:
-        return None
-    start_date = dates[-window_size]
-    current_shares = shares_cache.get(current_date, {}).get((etf_code, stock_code), 0.0)
-    start_shares = shares_cache.get(start_date, {}).get((etf_code, stock_code), 0.0)
-    if current_shares is None or start_shares is None:
-        return None
-    return current_shares - start_shares
-
-
 def _consecutive_direction_days(etf_code: str, stock_code: str, current_date: str, trading_dates: list[str], weight_cache: dict[str, dict], direction: str) -> int:
     dates = [date_value for date_value in trading_dates if date_value <= current_date]
     count = 0
@@ -589,7 +535,7 @@ def _consecutive_active_direction_days(etf_code: str, stock_code: str, current_d
 
 
 def _ensure_change_diagnostics_table(conn):
-    conn.execute("CREATE TABLE IF NOT EXISTS etf_change_diagnostics (date TEXT NOT NULL, prev_date TEXT NOT NULL, etf_code TEXT NOT NULL, status TEXT NOT NULL, reason TEXT, current_source_type TEXT, previous_source_type TEXT, current_source_family TEXT, previous_source_family TEXT, current_stock_count INTEGER, previous_stock_count INTEGER, current_total_weight REAL, previous_total_weight REAL, current_shares_coverage REAL, previous_shares_coverage REAL, current_quality_score REAL, previous_quality_score REAL, overlap_ratio REAL, size_ratio REAL, created_at TEXT NOT NULL, PRIMARY KEY (date, prev_date, etf_code))")
+    conn.execute("CREATE TABLE IF NOT EXISTS etf_change_diagnostics (date TEXT NOT NULL, prev_date TEXT NOT NULL, etf_code TEXT NOT NULL, status TEXT NOT NULL, reason TEXT, current_source_type TEXT, previous_source_type TEXT, current_stock_count INTEGER, previous_stock_count INTEGER, current_total_weight REAL, previous_total_weight REAL, overlap_ratio REAL, size_ratio REAL, created_at TEXT NOT NULL, PRIMARY KEY (date, prev_date, etf_code))")
 
 
 def _persist_change_diagnostics(current_date: str, previous_date: str, diagnostics: list[dict]) -> None:
@@ -604,20 +550,14 @@ def _persist_change_diagnostics(current_date: str, previous_date: str, diagnosti
                 INSERT OR REPLACE INTO etf_change_diagnostics (
                     date, prev_date, etf_code, status, reason,
                     current_source_type, previous_source_type,
-                    current_source_family, previous_source_family,
                     current_stock_count, previous_stock_count,
                     current_total_weight, previous_total_weight,
-                    current_shares_coverage, previous_shares_coverage,
-                    current_quality_score, previous_quality_score,
                     overlap_ratio, size_ratio, created_at
                 ) VALUES (
                     :date, :prev_date, :etf_code, :status, :reason,
                     :current_source_type, :previous_source_type,
-                    :current_source_family, :previous_source_family,
                     :current_stock_count, :previous_stock_count,
                     :current_total_weight, :previous_total_weight,
-                    :current_shares_coverage, :previous_shares_coverage,
-                    :current_quality_score, :previous_quality_score,
                     :overlap_ratio, :size_ratio, :created_at
                 )
                 """,
@@ -636,35 +576,25 @@ def _persist_changes(current_date: str, changes: list[dict]) -> None:
                 INSERT OR REPLACE INTO etf_holding_changes (
                     date, etf_code, issuer, stock_code, stock_name,
                     prev_date, prev_weight_pct, weight_pct, weight_delta_1d,
-                    weight_delta_pct_1d, prev_shares, shares, shares_delta_1d,
-                    shares_delta_pct_1d, etf_scale_factor, expected_shares,
+                    prev_shares, shares, shares_delta_1d, etf_scale_factor,
                     active_shares_delta_1d, active_shares_delta_pct_1d,
-                    prev_rank, rank, rank_delta_1d, is_new_position,
-                    is_removed_position, weight_delta_3d, weight_delta_5d,
-                    weight_delta_10d, shares_delta_3d, shares_delta_5d,
-                    shares_delta_10d, consecutive_add_days,
-                    consecutive_reduce_days, consecutive_active_add_days,
-                    consecutive_active_reduce_days, position_change_type,
-                    active_direction, active_delta_source, is_active_add,
+                    prev_rank, rank, is_new_position, is_removed_position,
+                    consecutive_add_days, consecutive_reduce_days,
+                    consecutive_active_add_days, consecutive_active_reduce_days,
+                    position_change_type, active_direction, is_active_add,
                     is_active_reduce, is_passive_weight_change,
-                    is_mixed_weight_share_signal, is_flow_scaled_change,
-                    flow_adjusted_direction, confidence, source_type, created_at
+                    flow_adjusted_direction, confidence
                 ) VALUES (
                     :date, :etf_code, :issuer, :stock_code, :stock_name,
-                    :prev_date, :prev_weight_pct, :weight_pct,
-                    :weight_delta_1d, :weight_delta_pct_1d, :prev_shares,
-                    :shares, :shares_delta_1d, :shares_delta_pct_1d,
-                    :etf_scale_factor, :expected_shares, :active_shares_delta_1d,
-                    :active_shares_delta_pct_1d, :prev_rank, :rank,
-                    :rank_delta_1d, :is_new_position, :is_removed_position,
-                    :weight_delta_3d, :weight_delta_5d, :weight_delta_10d,
-                    :shares_delta_3d, :shares_delta_5d, :shares_delta_10d,
+                    :prev_date, :prev_weight_pct, :weight_pct, :weight_delta_1d,
+                    :prev_shares, :shares, :shares_delta_1d, :etf_scale_factor,
+                    :active_shares_delta_1d, :active_shares_delta_pct_1d,
+                    :prev_rank, :rank, :is_new_position, :is_removed_position,
                     :consecutive_add_days, :consecutive_reduce_days,
                     :consecutive_active_add_days, :consecutive_active_reduce_days,
-                    :position_change_type, :active_direction, :active_delta_source,
-                    :is_active_add, :is_active_reduce, :is_passive_weight_change,
-                    :is_mixed_weight_share_signal, :is_flow_scaled_change,
-                    :flow_adjusted_direction, :confidence, :source_type, :created_at
+                    :position_change_type, :active_direction, :is_active_add,
+                    :is_active_reduce, :is_passive_weight_change,
+                    :flow_adjusted_direction, :confidence
                 )
                 """,
                 changes,
