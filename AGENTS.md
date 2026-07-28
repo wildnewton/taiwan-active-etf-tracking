@@ -9,36 +9,32 @@ Track Taiwan active ETF **daily actual investment portfolios** (每日實際投�
 3. Which stocks appear in multiple active ETFs (consensus)?
 4. How do holdings change day-over-day?
 
-## Target ETFs
+## ETF Universe
 
-The ETF universe is managed in the SQLite DB (`etf_universe` table). There is
-no hardcoded list. To see current targets:
+The operational ETF universe and official scraper configuration live in the SQLite `etf_universe` table. Do not maintain a hardcoded ETF list or duplicate eligibility rules in documentation SQL.
 
-```sql
-SELECT code, name, issuer, listing_date
-FROM etf_universe
-WHERE retired = 0 AND listing_date IS NOT NULL AND listing_date <= date('now')
-ORDER BY code;
-```
+Use the canonical helpers in `scripts/etf_universe.py`:
 
-New ETFs are discovered automatically via TWSE/TPEx ISIN pages
-(`discover_active_etfs.py`). Discovery runs before scrape in the nightly
-pipeline. To manually add/remove: use `upsert_etf()` / `retire_etf()`.
+- `get_active_etfs()` for current nightly scrape targets.
+- `get_eligible_etf_codes(date)` for the historical analysis universe.
+- `upsert_etf()` for manual metadata/configuration changes.
+- `retire_etf()` only after retirement is manually confirmed.
 
-### Excluded (invest in foreign markets, not Taiwan stocks)
-ETFs discovered but excluded from tracking are marked `retired=1` in the DB.
-Query: `SELECT code, name FROM etf_universe WHERE retired = 1 ORDER BY code`.
+Discovery runs before scraping in the nightly pipeline and reconciles ETF metadata from TWSE/TPEx ISIN pages. Confirmed retirement and permanent scope exclusion are separate states; rely on the canonical helpers rather than inferring eligibility from `retired` alone.
 
-## Data Source Strategy
-1. **Primary:** MoneyDJ website 
-2. **Fallback:** Fund issuer websites — daily actual portfolio (每日實際投資組合)
+## Data Sources
 
-### Excluded Data Sources
-- ~~FinMind~~ — `TaiwanStockHoldingSharesPer` is 股權分散表 (shareholder distribution), NOT ETF holdings. No ETF holdings dataset exists on FinMind.
-- MOPS (公開資訊觀測站) — daily PCF data, security checks may block automated access (investigating browser options)
+The scraper router tries sources in this order:
+
+1. MoneyDJ static scraper.
+2. MoneyDJ browser fallback.
+3. Official browser/API fallback.
+4. Official static fallback.
+
+Do not use FinMind `TaiwanStockHoldingSharesPer`; it is shareholder-distribution data, not ETF holdings.
 
 ## Operating Rules
-- Follow root AGENTS.md shared rules (TDD, approval before changes, etc.)
-- All timestamps GMT+8
-- Cite data source and date for all holdings data
-- Never fabricate holdings data — if source unavailable, report gap
+
+- All timestamps use GMT+8.
+- Cite the source and date for holdings data.
+- Never fabricate holdings data; report a gap when no valid source is available.
