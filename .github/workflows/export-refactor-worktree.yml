@@ -1,0 +1,31 @@
+name: Export refactor worktree
+
+on:
+  push:
+    branches:
+      - refactor/remove-unused-schema
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Capture test output
+        run: pytest -q > /tmp/pytest-output.txt 2>&1 || true
+      - name: Package worktree
+        run: tar --exclude=.git -cJf /tmp/refactor-worktree.tar.xz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: refactor-worktree
+          path: |
+            /tmp/refactor-worktree.tar.xz
+            /tmp/pytest-output.txt
+          if-no-files-found: error
