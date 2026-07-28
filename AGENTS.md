@@ -29,42 +29,13 @@ pipeline. To manually add/remove: use `upsert_etf()` / `retire_etf()`.
 ETFs discovered but excluded from tracking are marked `retired=1` in the DB.
 Query: `SELECT code, name FROM etf_universe WHERE retired = 1 ORDER BY code`.
 
-### Known Data Source URLs
-| 投信 | URL |
-|------|-----|
-| 富邦 | https://websys.fsit.com.tw/FubonETF/Trade/Pcf.aspx |
-| 野村 | https://www.nomurafunds.com.tw/ETFWEB/product-description?fundNo=00980A |
-| 統一 | https://www.ezmoney.com.tw/ETF/Transaction/PCF |
-| 群益 | https://www.capitalfund.com.tw/etf/transaction/buyback |
-| 安聯 | https://etf.allianzgi.com.tw/list-trade |
+## Data Source Strategy
+1. **Primary:** MoneyDJ website 
+2. **Fallback:** Fund issuer websites — daily actual portfolio (每日實際投資組合)
 
 ### Excluded Data Sources
 - ~~FinMind~~ — `TaiwanStockHoldingSharesPer` is 股權分散表 (shareholder distribution), NOT ETF holdings. No ETF holdings dataset exists on FinMind.
 - MOPS (公開資訊觀測站) — daily PCF data, security checks may block automated access (investigating browser options)
-
-## Disclosure Rules (from prospectus)
-- **Daily**: 每日實際投資組合 (actual portfolio) — published on fund company sites
-- **Weekly**: Industry-level holdings (產業別持股比例) — published on SITCA
-- **Monthly**: Top 10 holdings — published on fund company sites
-
-## Data Source Strategy
-1. **Primary:** Fund company websites — daily actual portfolio (每日實際投資組合)
-2. **Fallback:** TWSE e添富 — PDF prospectus (monthly top 10 + industry breakdown)
-3. Each fund company has a different URL pattern — need to map each issuer
-
-## Phase Plan
-- [x] Phase 1: Enumerate all active ETFs — DB-backed universe with auto-discovery
-- [x] Phase 2: Map daily portfolio URL for each fund company
-- [x] Phase 3: Build scraper for each URL pattern
-- [x] Phase 4: Historical data collection + storage (SQLite)
-- [x] Phase 5: Change detection + signal generation
-- [x] Phase 6: Cron job for daily tracking
-
-## Progress Log
-- 2026-04-24: Tested accessibility of 12 fund company websites — all accessible
-- 2026-04-26: Scraped holdings for 9 ETFs via fund company sites
-- 2026-06-21: Project resurrected — clarified data source is 每日實際投資組合 (not PCF)
-- 2026-07-24: Config migrated to DB-only (PR #138). Seed file removed.
 
 ## Operating Rules
 - Follow root AGENTS.md shared rules (TDD, approval before changes, etc.)
