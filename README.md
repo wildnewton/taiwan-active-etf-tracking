@@ -50,6 +50,7 @@ PYTHONPATH=scripts python scripts/nightly_pipeline.py \
 
 Useful flags:
 
+- `--try-run`: run the real workflow against disposable database and report state, then discard all changes.
 - `--skip-discovery`: reuse the existing DB universe while debugging scraper or report behaviour.
 - `--strict-discovery`: fail the run when exchange discovery fails.
 
