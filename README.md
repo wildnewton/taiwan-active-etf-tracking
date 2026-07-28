@@ -2,57 +2,34 @@
 
 Taiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETFs whose investment universe is Taiwan stocks.
 
-The project stores canonical ETF universe and holdings snapshots in SQLite. Holdings tables are the source of truth for data completeness and retry decisions; scrape-attempt status is not persisted.
+The operational ETF universe, official scraper configuration, and holdings snapshots are stored in SQLite. Holdings tables are the source of truth for completeness and retry decisions; scrape-attempt status is not persisted.
 
-## What the nightly job does
+## Nightly workflow
 
-The production workflow is `scripts/nightly_pipeline.py`. It runs the full sequence:
+`scripts/nightly_pipeline.py` runs the production sequence:
 
-1. Discover and reconcile the active ETF universe.
-2. Run the browser-enabled holdings scrape.
+1. Discover and reconcile the ETF universe.
+2. Scrape holdings with browser support.
 3. Detect holding changes.
 4. Generate manager-intent rollups.
 5. Generate manager signals.
 6. Write the signal report.
-7. Write traction analysis raw data.
+7. Write traction-analysis raw data.
 
-The cron wrapper is `scripts/nightly-cron.sh`. It resolves the project directory relative to the script location, writes logs to `logs/nightly_pipeline.log`, and runs the nightly pipeline with the project database and report directory.
+`scripts/nightly-cron.sh` resolves the project directory, writes `logs/nightly_pipeline.log`, and runs the pipeline with the production database and report directory.
 
-## Repository layout
+Key entry points:
 
-```text
-.
-├── scripts/
-│   ├── backfill_changes.py          # maintenance script for backfilling change rows and derived layers
-│   ├── changes.py                   # holding change detection
-│   ├── config.py                    # URL/config helpers
-│   ├── db.py                        # SQLite schema and persistence helpers
-│   ├── discover_active_etfs.py      # exchange discovery and universe reconciliation
-│   ├── etf_universe.py              # DB-backed ETF universe helpers
-│   ├── models.py                    # shared dataclasses
-│   ├── nightly-cron.sh              # cron wrapper
-│   ├── nightly_pipeline.py          # production nightly workflow
-│   ├── pipeline.py                  # scrape pipeline
-│   ├── report.py                    # report generation
-│   ├── retry_stale_scrapes.py       # target-date holdings-gap retry workflow
-│   ├── scraper.py                   # scrape router / decision tree
-│   ├── scrapers/                    # source-specific scraper implementations
-│   ├── signals.py                   # manager signal generation
-│   └── traction_analysis.py         # nightly traction report generation
-└── tests/                           # pytest regression tests
-```
+- `scripts/nightly_pipeline.py`: production workflow.
+- `scripts/pipeline.py`: holdings scrape pipeline.
+- `scripts/etf_universe.py`: DB-backed universe and eligibility helpers.
+- `scripts/retry_stale_scrapes.py`: target-date holdings-gap retry.
+- `scripts/backfill_changes.py`: rebuild changes and derived layers.
+- `scripts/scrapers/`: source-specific scraper implementations.
 
-Generated runtime files are not committed:
-
-```text
-data/active_etf_holdings.sqlite
-logs/
-reports/
-```
+Runtime data under `data/`, `logs/`, and `reports/` is not committed.
 
 ## Setup
-
-Create a virtual environment and install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -61,15 +38,21 @@ pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-## Running the pipeline
+## Run the pipeline
 
-Run the full nightly workflow manually:
+Run the full workflow manually:
 
 ```bash
 PYTHONPATH=scripts python scripts/nightly_pipeline.py \
   --db data/active_etf_holdings.sqlite \
   --report-dir reports
 ```
+
+Useful flags:
+
+- `--try-run`: run the real workflow against disposable database and report state, then discard all changes.
+- `--skip-discovery`: reuse the existing DB universe while debugging scraper or report behaviour.
+- `--strict-discovery`: fail the run when exchange discovery fails.
 
 Run the cron wrapper manually:
 
@@ -77,29 +60,9 @@ Run the cron wrapper manually:
 bash scripts/nightly-cron.sh
 ```
 
-Skip ETF universe discovery when debugging scraper/report behavior against the existing DB universe:
+## Holdings-gap watchdog
 
-```bash
-PYTHONPATH=scripts python scripts/nightly_pipeline.py \
-  --skip-discovery \
-  --db data/active_etf_holdings.sqlite \
-  --report-dir reports
-```
-
-Use strict discovery when a failed exchange discovery should fail the whole run:
-
-```bash
-PYTHONPATH=scripts python scripts/nightly_pipeline.py \
-  --strict-discovery \
-  --db data/active_etf_holdings.sqlite \
-  --report-dir reports
-```
-
-## 21:00 holdings-gap watchdog
-
-After the report job, the watchdog retries only eligible ETFs that still lack a persisted holdings snapshot for the target date. It does not re-scrape the full universe.
-
-Recommended command:
+Run this watchdog job after the report job at any appropriate time. It retries only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`:
 
 ```bash
 PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
@@ -108,19 +71,11 @@ PYTHONPATH=scripts python scripts/retry_stale_scrapes.py \
   --report-dir reports
 ```
 
-Watchdog prompt expectations:
+Failed retries remain eligible until the exact target snapshot exists. The watchdog must overwrite date-only primary reports only after holdings coverage improves, and partial coverage must not be reported as full-universe coverage.
 
-- retry only target-date holdings gaps selected by `scripts/retry_stale_scrapes.py`
-- keep failed retries eligible until the exact target snapshot exists
-- distinguish a prior available snapshot from no historical snapshot
-- overwrite date-only primary reports only after holdings coverage improves
-- do not make all-universe claims when target coverage is partial
+## Backfill changes and derived layers
 
-## Backfilling changes and derived signals
-
-Use `scripts/backfill_changes.py` when stored holdings already exist but change detection, manager-intent rollups, or manager signals need to be rebuilt after logic changes. The script does not scrape holdings and does not generate reports.
-
-Backfill changes plus all derived layers for a date range:
+Use `scripts/backfill_changes.py` when holdings already exist but change rows, manager-intent rollups, or manager signals must be rebuilt. It does not scrape holdings or generate reports.
 
 ```bash
 PYTHONPATH=scripts python scripts/backfill_changes.py \
@@ -130,75 +85,51 @@ PYTHONPATH=scripts python scripts/backfill_changes.py \
   --all-derived
 ```
 
-Backfill only change-detection rows:
+Replace `--all-derived` with `--regenerate-manager-intent` or `--regenerate-signals`, or omit the derived-layer flag to rebuild only holding changes.
 
-```bash
-PYTHONPATH=scripts python scripts/backfill_changes.py \
-  --db data/active_etf_holdings.sqlite \
-  --from-date 2026-07-01 \
-  --to-date 2026-07-08
-```
-
-Backfill changes and only manager-intent rollups:
-
-```bash
-PYTHONPATH=scripts python scripts/backfill_changes.py \
-  --db data/active_etf_holdings.sqlite \
-  --from-date 2026-07-01 \
-  --to-date 2026-07-08 \
-  --regenerate-manager-intent
-```
-
-Backfill changes and only manager signals:
-
-```bash
-PYTHONPATH=scripts python scripts/backfill_changes.py \
-  --db data/active_etf_holdings.sqlite \
-  --from-date 2026-07-01 \
-  --to-date 2026-07-08 \
-  --regenerate-signals
-```
-
-For each eligible date, the order is:
+For each eligible date, processing order is:
 
 ```text
 detect_holding_changes -> generate_manager_intent_rollups -> generate_manager_signals
 ```
 
-The previous comparison date is taken from the full holdings history, not only from the requested date range. Use maintenance scripts with care against a backed-up database when rewriting historical data.
+The previous comparison date comes from the full holdings history, not only the requested range. Back up the database before rewriting historical data.
 
-## Running tests
+## Run tests
 
-Run the full suite:
+Full suite:
 
 ```bash
 PYTHONPATH=scripts python -m pytest
 ```
 
-Run targeted tests for a specific change:
+Targeted example:
 
 ```bash
 PYTHONPATH=scripts python -m pytest tests/test_etf_universe.py tests/test_pipeline.py
 ```
 
-## ETF universe data
+## ETF universe and configuration
 
-The `etf_universe` table in the operational SQLite database is the sole runtime source of truth for the ETF universe and official scraper configuration. Runtime reads never seed or mutate ETF rows.
+The operational SQLite `etf_universe` table is the sole runtime source of truth for the ETF universe and official scraper configuration. Runtime reads never seed ETF rows.
 
-A new database starts with an empty `etf_universe` table. The nightly discovery step can create basic ETF metadata; supported official scraper settings such as `official_url`, `official_method`, and `official_logic` must be written directly to the database.
+A new database starts with an empty universe. Nightly discovery can create basic ETF metadata; supported official scraper settings such as `official_url`, `official_method`, and `official_logic` must be written directly to the database.
 
-The runtime database is not committed to the repository. Persist it across deployments and include it in the normal backup and restore process. Restoring production configuration means restoring the operational database, not regenerating it from a repository seed file.
+The runtime database is not committed. Persist it across deployments and include it in normal backup and restore procedures. Restoring production configuration means restoring the operational database, not regenerating it from a repository seed file.
 
 Important semantics:
 
-- `retired = 0`: included in nightly holdings fetches after the listing date.
-- `retired = 1`: retained for historical lookup but skipped by nightly holdings fetches.
-- `listing_date`: excludes pre-listing ETFs from the operational universe for earlier dates.
-- `first_seen_date`: populated by discovery for newly discovered ETFs, or explicitly supplied by another writer.
+- `get_active_etfs()` is the canonical current nightly scrape universe.
+- `get_eligible_etf_codes(date)` is the canonical historical analysis universe.
+- `retired = 0` means not manually retired; listing-date and permanent scope-exclusion rules still apply.
+- `retired = 1` preserves the ETF for historical lookup but excludes it from current nightly fetches.
+- Permanent scope exclusion is distinct from retirement and is evaluated by the canonical universe helpers.
+- `listing_date` excludes an ETF before it was listed.
+- `first_seen_date` records initial discovery unless explicitly supplied by another writer.
 
-## Scraper structure
+## Scraper source order
 
-`scripts/scraper.py` is the scrape router. It chooses sources in this order:
+`scripts/scraper.py` tries:
 
 1. MoneyDJ static scraper.
 2. MoneyDJ browser fallback.
@@ -207,17 +138,9 @@ Important semantics:
 
 Source-specific implementations live under `scripts/scrapers/`.
 
-## Maintenance scripts
-
-- `scripts/backfill_changes.py`: rebuilds change-detection rows and, optionally, manager-intent rollups and manager signals from stored holdings.
-- `scripts/retry_stale_scrapes.py`: retries eligible ETFs missing target-date holdings and overwrites date-only primary reports only after coverage improves.
-- `scripts/traction_analysis.py`: generates nightly traction analysis output.
-
-Use maintenance scripts with care against a backed-up database when changing historical data.
-
 ## Forced selected scrape
 
-`run_selected_scrape_with_browser()` limits a run to explicitly selected ETF codes. By default it still skips any ETF that already has a valid snapshot for the target date. Use `force=True` only for an intentional maintenance re-fetch, such as verifying a repaired parser or re-checking a specific historical date. Forced fetch does not bypass snapshot validation or replacement arbitration.
+`run_selected_scrape_with_browser()` limits a run to selected ETF codes. By default it skips ETFs that already have a valid target-date snapshot. Use `force=True` only for an intentional maintenance re-fetch, such as verifying a repaired parser or rechecking a historical date. Forced fetch does not bypass snapshot validation or replacement arbitration.
 
 ```bash
 PYTHONPATH=scripts python - <<'PY'

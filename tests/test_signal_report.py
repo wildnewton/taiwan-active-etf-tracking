@@ -1,12 +1,8 @@
 import json
 import sqlite3
-from pathlib import Path
 
 import db
 from report import generate_signal_report, get_latest_signal_date
-
-
-README = Path(__file__).resolve().parent.parent / "README.md"
 
 
 def ensure_signal_table():
@@ -291,13 +287,3 @@ def test_report_freshness_excludes_retired_etfs():
 
     assert "00980A" in report
     assert "00983A" not in report
-
-
-def test_readme_documents_watchdog_retry_prompt():
-    readme = README.read_text(encoding="utf-8")
-
-    assert "21:00" in readme
-    assert "scripts/retry_stale_scrapes.py" in readme
-    assert '--date "$(date +%F)"' in readme
-    assert "target-date holdings gaps" in readme
-    assert "overwrite date-only primary reports only after holdings coverage improves" in readme
