@@ -1,7 +1,5 @@
 import sqlite3
 
-import pytest
-
 import db
 
 
@@ -20,11 +18,9 @@ TARGET_COLUMNS = [
     "created_at",
     "updated_at",
 ]
-LEGACY_COLUMNS = [
+PRODUCTION_LEGACY_COLUMNS = [
     "last_active_date",
     "pending_retirement_since",
-    "last_seen_date",
-    "retired_since",
 ]
 ROWS = [
     (
@@ -60,8 +56,7 @@ ROWS = [
 ]
 
 
-def _create_legacy_universe(db_path, legacy_columns, *, rows=ROWS, name_sql="TEXT NOT NULL"):
-    legacy_sql = "".join(f", {column} TEXT" for column in legacy_columns)
+def _create_production_universe(db_path, *, rows=ROWS, name_sql="TEXT NOT NULL"):
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             f"""
@@ -71,15 +66,16 @@ def _create_legacy_universe(db_path, legacy_columns, *, rows=ROWS, name_sql="TEX
                 issuer TEXT,
                 market TEXT,
                 isin TEXT,
-                listing_date TEXT,
                 retired INTEGER NOT NULL DEFAULT 0,
                 first_seen_date TEXT,
+                last_active_date TEXT,
+                pending_retirement_since TEXT,
                 official_url TEXT,
                 official_method TEXT,
                 official_logic TEXT,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-                {legacy_sql}
+                updated_at TEXT NOT NULL,
+                listing_date TEXT
             )
             """
         )
@@ -93,10 +89,13 @@ def _create_legacy_universe(db_path, legacy_columns, *, rows=ROWS, name_sql="TEX
         )
 
 
-@pytest.mark.parametrize("legacy_column", LEGACY_COLUMNS)
-def test_init_db_rebuilds_etf_universe_for_each_legacy_column(tmp_path, legacy_column):
-    db_path = tmp_path / f"legacy-{legacy_column}.sqlite"
-    _create_legacy_universe(db_path, [legacy_column])
+def test_migration_scope_matches_production_legacy_columns():
+    assert db._LEGACY_ETF_UNIVERSE_COLUMNS == set(PRODUCTION_LEGACY_COLUMNS)
+
+
+def test_init_db_rebuilds_current_production_etf_universe(tmp_path):
+    db_path = tmp_path / "production-schema.sqlite"
+    _create_production_universe(db_path)
 
     db.init_db(db_path)
 
@@ -107,16 +106,21 @@ def test_init_db_rebuilds_etf_universe_for_each_legacy_column(tmp_path, legacy_c
         rows = conn.execute(
             f"SELECT {', '.join(TARGET_COLUMNS)} FROM etf_universe ORDER BY code"
         ).fetchall()
+        index = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+            ("idx_etf_universe_retired",),
+        ).fetchone()
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
 
     assert columns == TARGET_COLUMNS
     assert primary_key_columns == {"code": 1}
     assert rows == ROWS
+    assert index == ("idx_etf_universe_retired",)
     assert integrity == "ok"
 
 
 def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
-    db_path = tmp_path / "invalid-legacy.sqlite"
+    db_path = tmp_path / "invalid-production-schema.sqlite"
     invalid_row = (
         "00999A",
         None,
@@ -132,15 +136,18 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
         "2026-07-01T00:00:00",
         "2026-07-29T00:00:00",
     )
-    _create_legacy_universe(
+    _create_production_universe(
         db_path,
-        ["last_active_date"],
         rows=[invalid_row],
         name_sql="TEXT",
     )
 
-    with pytest.raises(sqlite3.IntegrityError):
+    try:
         db.init_db(db_path)
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise AssertionError("expected the compact schema copy to reject NULL name")
 
     with sqlite3.connect(db_path) as conn:
         columns = {
@@ -154,14 +161,14 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
             "SELECT code, name, official_url FROM etf_universe"
         ).fetchone()
 
-    assert "last_active_date" in columns
+    assert set(PRODUCTION_LEGACY_COLUMNS) <= columns
     assert matching_tables == [("etf_universe",)]
     assert row == ("00999A", None, "https://example.test/00999A")
 
 
 def test_etf_universe_migration_is_idempotent(tmp_path):
-    db_path = tmp_path / "legacy-idempotent.sqlite"
-    _create_legacy_universe(db_path, ["pending_retirement_since"])
+    db_path = tmp_path / "production-schema-idempotent.sqlite"
+    _create_production_universe(db_path)
     db.init_db(db_path)
 
     with sqlite3.connect(db_path) as conn:
