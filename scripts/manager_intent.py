@@ -4,8 +4,6 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import defaultdict
-from typing import Iterable
-
 import db
 from etf_universe import get_eligible_etf_codes
 
@@ -63,7 +61,7 @@ def _build_window_rows(conn, target_date: str, window_days: int) -> list[dict]:
         eligible_codes_by_date,
     )
     events = _change_events(conn, window_dates, eligible_codes_by_date)
-    candidates, stock_names, issuer_by_etf = _candidate_etf_stocks(
+    stock_names, issuer_by_etf, holding_presence = _candidate_etf_stocks(
         conn,
         window_dates,
         events,
@@ -79,7 +77,11 @@ def _build_window_rows(conn, target_date: str, window_days: int) -> list[dict]:
     if not comparable_context:
         return []
 
-    eligible_dates = _eligible_dates_by_entity(candidates, issuer_by_etf, comparable_context, window_dates)
+    eligible_dates = _eligible_dates_by_entity(
+        holding_presence,
+        issuer_by_etf,
+        comparable_context,
+    )
     metrics = _event_metrics(events, stock_names)
     rows = []
 
@@ -181,10 +183,14 @@ def _candidate_etf_stocks(
     events: list[dict],
     eligible_codes_by_date: dict[str, set[str]],
     canonical_sources: dict[tuple[str, str], str],
-) -> tuple[set[tuple[str, str]], dict[str, str], dict[str, str]]:
-    candidates: set[tuple[str, str]] = set()
+) -> tuple[
+    dict[str, str],
+    dict[str, str],
+    set[tuple[str, str, str]],
+]:
     stock_names: dict[str, str] = {}
     issuer_by_etf = _issuer_by_etf(conn)
+    holding_presence: set[tuple[str, str, str]] = set()
 
     for row in _holding_rows(
         conn,
@@ -194,19 +200,18 @@ def _candidate_etf_stocks(
     ):
         etf_code = row["etf_code"]
         stock_code = row["stock_code"]
-        candidates.add((etf_code, stock_code))
+        holding_presence.add((row["date"], etf_code, stock_code))
         stock_names.setdefault(stock_code, row.get("stock_name"))
 
     for event in events:
         etf_code = event["etf_code"]
         stock_code = event["stock_code"]
-        candidates.add((etf_code, stock_code))
         if event.get("stock_name"):
             stock_names.setdefault(stock_code, event.get("stock_name"))
         if event.get("issuer"):
             issuer_by_etf.setdefault(etf_code, event.get("issuer"))
 
-    return candidates, stock_names, issuer_by_etf
+    return stock_names, issuer_by_etf, holding_presence
 
 
 def _holding_rows(
@@ -283,21 +288,19 @@ def _comparable_context(
 
 
 def _eligible_dates_by_entity(
-    candidates: set[tuple[str, str]],
+    holding_presence: set[tuple[str, str, str]],
     issuer_by_etf: dict[str, str],
     comparable_context: set[tuple[str, str]],
-    window_dates: list[str],
 ) -> dict[tuple[str, str, str], set[str]]:
     eligible = defaultdict(set)
-    for etf_code, stock_code in candidates:
+    for date, etf_code, stock_code in holding_presence:
+        if (date, etf_code) not in comparable_context:
+            continue
         issuer = issuer_by_etf.get(etf_code)
         if not issuer:
             continue
-        for date in window_dates:
-            if (date, etf_code) not in comparable_context:
-                continue
-            eligible[("issuer_stock", stock_code, issuer)].add(date)
-            eligible[("stock", stock_code, "")].add(date)
+        eligible[("issuer_stock", stock_code, issuer)].add(date)
+        eligible[("stock", stock_code, "")].add(date)
     return eligible
 
 

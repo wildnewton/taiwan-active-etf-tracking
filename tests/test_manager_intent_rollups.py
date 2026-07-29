@@ -425,3 +425,48 @@ def test_cross_fund_rotation_with_positive_net_keeps_rotation_accumulation_state
     assert row["intent_direction"] == "rotation_accumulation"
     assert row["primary_intent_state"] == "cross_fund_rotation_accumulation"
     assert json.loads(row["intent_pattern_tags_json"]) == ["cross_fund_rotation", "rotation_net_accumulation"]
+
+
+def test_new_position_history_counts_only_dates_stock_is_in_canonical_holdings():
+    setup_db()
+    insert_eligible_history(
+        stock_code="2317",
+        stock_name="鴻海",
+        etfs=("00980A", "00982A"),
+        dates=WINDOW_DATES[:-1],
+    )
+    insert_eligible_history(
+        stock_code="2330",
+        stock_name="台積電",
+        etfs=("00980A", "00982A"),
+        dates=WINDOW_DATES[-1:],
+    )
+    insert_change("2026-06-26", "00980A", is_new_position=1)
+    insert_change("2026-06-26", "00982A", is_new_position=1)
+
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
+    row = get_rollup()
+
+    assert row["eligible_days"] == 1
+    assert row["primary_intent_state"] == "insufficient_data"
+
+
+def test_removed_position_counts_only_prior_canonical_holding_dates():
+    setup_db()
+    insert_eligible_history(
+        etfs=("00980A",),
+        dates=WINDOW_DATES[:-1],
+    )
+    insert_eligible_history(
+        stock_code="2317",
+        stock_name="鴻海",
+        etfs=("00980A",),
+        dates=WINDOW_DATES[-1:],
+    )
+    insert_change("2026-06-26", "00980A", is_removed_position=1)
+
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["eligible_days"] == 4
+    assert row["cum_active_sell_score"] == 4.0
