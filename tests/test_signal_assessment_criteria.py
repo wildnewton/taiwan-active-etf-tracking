@@ -47,38 +47,43 @@ def _insert_signal(
         )
 
 
-def test_init_db_seeds_default_criterion_without_overwriting_customization(tmp_path):
+def test_init_db_seeds_minimal_default_criterion_without_overwriting_customization(
+    tmp_path,
+):
     db_path = tmp_path / "criteria.sqlite"
     db.init_db(db_path)
+
+    assert _columns("assessment_criteria") == {
+        "criterion_key",
+        "enabled",
+        "weight",
+        "importance",
+        "parameters_json",
+    }
 
     with db._connect() as conn:
         row = conn.execute(
             """
-            SELECT criterion_key, scope, enabled, weight, importance,
-                   parameters_json, description, updated_at
+            SELECT criterion_key, enabled, weight, importance, parameters_json
             FROM assessment_criteria
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
         ).fetchone()
         assert row is not None
-        assert row[0:5] == (
+        assert row[0:4] == (
             "minimum_issuer_consensus",
-            "manager_signal",
             1,
             6.0,
             "high",
         )
-        assert json.loads(row[5]) == {"min_issuer_count": 3}
-        assert row[6]
-        assert row[7]
+        assert json.loads(row[4]) == {"min_issuer_count": 3}
 
         conn.execute(
             """
             UPDATE assessment_criteria
             SET weight = 9.5,
                 importance = 'critical',
-                parameters_json = '{"min_issuer_count": 2}',
-                updated_at = 'custom'
+                parameters_json = '{"min_issuer_count": 2}'
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
         )
@@ -88,7 +93,7 @@ def test_init_db_seeds_default_criterion_without_overwriting_customization(tmp_p
     with db._connect() as conn:
         customized = conn.execute(
             """
-            SELECT weight, importance, parameters_json, updated_at
+            SELECT weight, importance, parameters_json
             FROM assessment_criteria
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
@@ -97,7 +102,6 @@ def test_init_db_seeds_default_criterion_without_overwriting_customization(tmp_p
         9.5,
         "critical",
         '{"min_issuer_count": 2}',
-        "custom",
     )
 
 
@@ -165,8 +169,7 @@ def test_report_reads_threshold_and_importance_from_database():
             UPDATE assessment_criteria
             SET parameters_json = '{"min_issuer_count": 2}',
                 importance = 'critical',
-                weight = 11.0,
-                updated_at = 'custom'
+                weight = 11.0
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
         )
@@ -196,11 +199,9 @@ def test_disabled_or_invalid_criteria_fail_closed_with_visible_warning():
         conn.execute(
             """
             INSERT INTO assessment_criteria (
-                criterion_key, scope, enabled, weight, importance,
-                parameters_json, description, updated_at
+                criterion_key, enabled, weight, importance, parameters_json
             ) VALUES (
-                'unknown_evaluator', 'manager_signal', 1, 1.0, 'high',
-                '{}', 'invalid test criterion', 'custom'
+                'unknown_evaluator', 1, 1.0, 'high', '{}'
             )
             """
         )
