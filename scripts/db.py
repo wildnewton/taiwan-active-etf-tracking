@@ -166,21 +166,26 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
     stock_rows = [_row_dict(row) for row in stock_rows]
     non_stock_rows = [_row_dict(row) for row in non_stock_rows]
     rows = stock_rows + non_stock_rows
-    if not rows:
-        return {"inserted": False, "reason": "empty_snapshot"}
+    valid, reason = validate_snapshot_rows(rows)
+    if not valid:
+        return {"inserted": False, "reason": f"invalid_snapshot:{reason}"}
 
     snapshot_key = _snapshot_key(rows)
     source_type = _snapshot_source_type(rows)
-    incoming = _snapshot_entry(source_type, stock_rows, non_stock_rows)
+    incoming = _snapshot_entry(source_type, rows)
 
     with _connect() as conn:
         existing_entries = _existing_snapshot_entries(conn, *snapshot_key)
         existing_best = _best_snapshot_entry(existing_entries)
-        if existing_best and existing_best["source_type"] != source_type:
-            incoming_key = _snapshot_sort_key(incoming)
-            existing_key = _snapshot_sort_key(existing_best)
-            if incoming_key < existing_key:
-                _delete_snapshot_sources_except(conn, *snapshot_key, existing_best["source_type"])
+        if existing_best:
+            same_source = existing_best["source_type"] == source_type
+            if (
+                not same_source
+                and _snapshot_sort_key(incoming) < _snapshot_sort_key(existing_best)
+            ):
+                _delete_snapshot_sources_except(
+                    conn, *snapshot_key, existing_best["source_type"]
+                )
                 return {
                     "inserted": False,
                     "reason": "existing_higher_priority_source_preserved",
@@ -194,21 +199,177 @@ def replace_daily_snapshot(stock_rows, non_stock_rows):
         return {"inserted": True, "source_type": source_type}
 
 
+def compare_snapshot_to_existing(stock_rows, non_stock_rows):
+    """Compare a valid incoming snapshot with the canonical persisted snapshot."""
+    stock_rows = [_row_dict(row) for row in stock_rows]
+    non_stock_rows = [_row_dict(row) for row in non_stock_rows]
+    rows = stock_rows + non_stock_rows
+    valid, reason = validate_snapshot_rows(rows)
+    incoming = _snapshot_entry(_snapshot_source_type(rows), rows) if valid else None
+    if not valid:
+        return {
+            "existing_snapshot_found": False,
+            "incoming_valid": False,
+            "reason": reason,
+        }
+
+    date_value, etf_code = _snapshot_key(rows)
+    with _connect() as conn:
+        existing = _best_snapshot_entry(
+            _existing_snapshot_entries(conn, date_value, etf_code)
+        )
+    if not existing:
+        return {
+            "existing_snapshot_found": False,
+            "incoming_valid": True,
+            "incoming_source_type": incoming["source_type"],
+            "incoming_stock_count": incoming["stock_count"],
+            "incoming_total_weight": incoming["total_weight"],
+        }
+
+    weight_delta = round(
+        abs(incoming["total_weight"] - existing["total_weight"]),
+        10,
+    )
+    equivalent = (
+        incoming["stock_count"] == existing["stock_count"]
+        and weight_delta < 1.0
+    )
+    return {
+        "existing_snapshot_found": True,
+        "incoming_valid": True,
+        "incoming_source_type": incoming["source_type"],
+        "existing_source_type": existing["source_type"],
+        "incoming_stock_count": incoming["stock_count"],
+        "existing_stock_count": existing["stock_count"],
+        "incoming_total_weight": incoming["total_weight"],
+        "existing_total_weight": existing["total_weight"],
+        "weight_delta_pct_points": weight_delta,
+        "equivalent": equivalent,
+    }
+
+
+def _snapshot_exists(conn, date_value, etf_code):
+    return _best_snapshot_entry(
+        _existing_snapshot_entries(conn, date_value, etf_code)
+    ) is not None
+
+
+def get_canonical_snapshot_entry(data_date, etf_code):
+    """Return the highest-ranked valid snapshot entry for one ETF/date."""
+    data_date = _serialize(data_date)
+    with _connect() as conn:
+        entry = _best_snapshot_entry(
+            _existing_snapshot_entries(conn, data_date, etf_code)
+        )
+        if not entry:
+            return None
+        stock_codes = {
+            row[0]
+            for row in conn.execute(
+                """
+                SELECT stock_code
+                FROM etf_daily_holdings
+                WHERE date = ? AND etf_code = ? AND source_type = ?
+                """,
+                (data_date, etf_code, entry["source_type"]),
+            ).fetchall()
+        }
+        return {**entry, "stock_codes": stock_codes}
+
+
+def get_canonical_snapshot_source(data_date, etf_code):
+    """Return the canonical valid source type for one ETF/date."""
+    entry = get_canonical_snapshot_entry(data_date, etf_code)
+    return entry["source_type"] if entry else None
+
+
 def snapshot_exists(date_value, etf_code):
-    """Return whether a holdings snapshot exists for one ETF/data date."""
+    """Return whether one valid snapshot exists for an ETF/data date."""
     date_value = _serialize(date_value)
     with _connect() as conn:
-        holding = conn.execute(
-            "SELECT 1 FROM etf_daily_holdings WHERE date = ? AND etf_code = ? LIMIT 1",
-            (date_value, etf_code),
-        ).fetchone()
-        if holding:
-            return True
-        non_stock = conn.execute(
-            "SELECT 1 FROM etf_daily_non_stock_assets WHERE date = ? AND etf_code = ? LIMIT 1",
-            (date_value, etf_code),
-        ).fetchone()
-    return non_stock is not None
+        return _snapshot_exists(conn, date_value, etf_code)
+
+
+def get_snapshot_etf_codes(data_date):
+    """Return ETFs with a valid persisted snapshot on ``data_date``."""
+    data_date = _serialize(data_date)
+    with _connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT etf_code FROM etf_daily_holdings WHERE date = ?
+            UNION
+            SELECT etf_code FROM etf_daily_non_stock_assets WHERE date = ?
+            ORDER BY etf_code
+            """,
+            (data_date, data_date),
+        ).fetchall()
+        return [
+            row[0]
+            for row in rows
+            if _snapshot_exists(conn, data_date, row[0])
+        ]
+
+
+def get_latest_snapshot_date(etf_code, before_date=None, eligible_only=False):
+    """Return the latest valid snapshot date, optionally historically eligible."""
+    if before_date is not None:
+        before_date = _serialize(before_date)
+        params = [etf_code, before_date, etf_code, before_date]
+    else:
+        params = [etf_code, etf_code]
+    with _connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT date
+            FROM (
+                SELECT date FROM etf_daily_holdings
+                WHERE etf_code = ? {"AND date < ?" if before_date is not None else ""}
+                UNION
+                SELECT date FROM etf_daily_non_stock_assets
+                WHERE etf_code = ? {"AND date < ?" if before_date is not None else ""}
+            )
+            ORDER BY date DESC
+            """,
+            params,
+        ).fetchall()
+        for row in rows:
+            if eligible_only:
+                from etf_universe import get_eligible_etf_codes
+
+                if etf_code not in get_eligible_etf_codes(row[0]):
+                    continue
+            if _snapshot_exists(conn, row[0], etf_code):
+                return row[0]
+    return None
+
+
+def get_target_snapshot_coverage(data_date):
+    """Return persisted holdings coverage for one candidate data date."""
+    from etf_universe import get_eligible_etf_codes
+
+    data_date = _serialize(data_date)
+    expected = set(get_eligible_etf_codes(data_date))
+    persisted = set(get_snapshot_etf_codes(data_date))
+    actual = persisted & expected
+    missing = sorted(expected - actual)
+    latest_available = {
+        etf_code: get_latest_snapshot_date(
+            etf_code,
+            before_date=data_date,
+            eligible_only=True,
+        )
+        for etf_code in missing
+    }
+    return {
+        "date": data_date,
+        "expected_etf_codes": sorted(expected),
+        "actual_etf_codes": sorted(actual),
+        "missing_etfs": missing,
+        "latest_available_dates": latest_available,
+        "expected_count": len(expected),
+        "actual_count": len(actual),
+    }
 
 
 def _snapshot_key(rows):
@@ -225,78 +386,87 @@ def _snapshot_source_type(rows):
     return next(iter(source_types))
 
 
-def _snapshot_entry(source_type, stock_rows, non_stock_rows):
-    stock_count = len(stock_rows)
-    shares_count = sum(1 for row in stock_rows if row.get("shares") is not None)
-    total_weight = sum((row.get("weight_pct") or 0.0) for row in stock_rows)
+def _snapshot_entry(source_type, rows):
+    valid, validation_reason = validate_snapshot_rows(rows)
+    metrics = snapshot_metrics(rows)
     return {
         "source_type": source_type,
-        "stock_count": stock_count,
-        "non_stock_count": len(non_stock_rows),
-        "shares_coverage": shares_count / stock_count if stock_count else 0.0,
-        "total_weight": total_weight,
+        "stock_count": metrics["stock_count"],
+        "non_stock_count": metrics["row_count"] - metrics["stock_count"],
+        "row_count": metrics["row_count"],
+        "shares_coverage": metrics["shares_coverage"],
+        "total_weight": metrics["total_weight"],
+        "valid": valid,
+        "validation_reason": validation_reason,
     }
 
 
-def _existing_snapshot_entries(conn, date_value, etf_code):
+def _existing_snapshot_rows_by_source(conn, date_value, etf_code):
     grouped = {}
-    for source_type, stock_count, shares_count, total_weight in conn.execute(
+    holding_rows = conn.execute(
         """
-        SELECT source_type,
-               COUNT(*) AS stock_count,
-               SUM(CASE WHEN shares IS NOT NULL THEN 1 ELSE 0 END) AS shares_count,
-               SUM(weight_pct) AS total_weight
+        SELECT date, etf_code, asset_name, asset_type, stock_code, stock_name,
+               shares, weight_pct, source_url, source_type, extraction_method,
+               scraped_at
         FROM etf_daily_holdings
         WHERE date = ? AND etf_code = ?
-        GROUP BY source_type
         """,
         (date_value, etf_code),
-    ).fetchall():
-        grouped[source_type] = {
-            "source_type": source_type,
-            "stock_count": stock_count or 0,
-            "non_stock_count": 0,
-            "shares_coverage": (shares_count or 0) / stock_count if stock_count else 0.0,
-            "total_weight": total_weight or 0.0,
-        }
+    ).fetchall()
+    for row in holding_rows:
+        item = dict(zip(
+            (
+                "date", "etf_code", "asset_name", "asset_type", "stock_code",
+                "stock_name", "shares", "weight_pct", "source_url",
+                "source_type", "extraction_method", "scraped_at",
+            ),
+            row,
+        ))
+        grouped.setdefault(item["source_type"], []).append(item)
 
-    for source_type, non_stock_count in conn.execute(
+    non_stock_rows = conn.execute(
         """
-        SELECT source_type, COUNT(*) AS non_stock_count
+        SELECT date, etf_code, asset_name, asset_type, weight_pct, source_url,
+               source_type, extraction_method, scraped_at
         FROM etf_daily_non_stock_assets
         WHERE date = ? AND etf_code = ?
-        GROUP BY source_type
         """,
         (date_value, etf_code),
-    ).fetchall():
-        entry = grouped.setdefault(
-            source_type,
-            {
-                "source_type": source_type,
-                "stock_count": 0,
-                "non_stock_count": 0,
-                "shares_coverage": 0.0,
-                "total_weight": 0.0,
-            },
-        )
-        entry["non_stock_count"] = non_stock_count or 0
-    return list(grouped.values())
+    ).fetchall()
+    for row in non_stock_rows:
+        item = dict(zip(
+            (
+                "date", "etf_code", "asset_name", "asset_type", "weight_pct",
+                "source_url", "source_type", "extraction_method", "scraped_at",
+            ),
+            row,
+        ))
+        item.update({"stock_code": None, "stock_name": None, "shares": None})
+        grouped.setdefault(item["source_type"], []).append(item)
+    return grouped
+
+
+def _existing_snapshot_entries(conn, date_value, etf_code):
+    return [
+        _snapshot_entry(source_type, rows)
+        for source_type, rows in _existing_snapshot_rows_by_source(
+            conn, date_value, etf_code
+        ).items()
+    ]
 
 
 def _best_snapshot_entry(entries):
-    if not entries:
+    valid_entries = [entry for entry in entries if entry.get("valid")]
+    if not valid_entries:
         return None
-    return max(entries, key=_snapshot_sort_key)
+    return max(valid_entries, key=_snapshot_sort_key)
 
 
 def _snapshot_sort_key(entry):
-    total_weight = entry.get("total_weight") or 0.0
-    weight_ok = 80.0 <= total_weight <= 105.0
     return (
         source_priority(entry.get("source_type")),
         entry.get("stock_count") or 0,
         entry.get("shares_coverage") or 0.0,
-        1 if weight_ok else 0,
         entry.get("non_stock_count") or 0,
         entry.get("source_type") or "",
     )
@@ -325,4 +495,4 @@ def _insert_holdings(conn, rows):
 
 def _insert_non_stock_assets(conn, rows):
     if rows:
-        conn.executemany("INSERT OR REPLACE INTO etf_daily_non_stock_assets (date, etf_code, asset_name, asset_type, weight_pct, source_url, source_type, extraction_method, scraped_at) VALUES (:date, :etf_code, :asset_name, :asset_type, :weight_pct, :source_url, :source_type, :extraction_method, :scraped_at) VALUES (:date, :etf_code, :asset_name, :asset_type, :weight_pct, :source_url, :source_type, :extraction_method, :scraped_at)", rows)
+        conn.executemany("INSERT OR REPLACE INTO etf_daily_non_stock_assets (date, etf_code, asset_name, asset_type, weight_pct, source_url, source_type, extraction_method, scraped_at) VALUES (:date, :etf_code, :asset_name, :asset_type, :weight_pct, :source_url, :source_type, :extraction_method, :scraped_at)", rows)
