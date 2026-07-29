@@ -100,10 +100,6 @@ def test_successful_retry_rebuilds_same_target_date(tmp_path):
         return_value={"ok": True, "date": "2026-07-15", "rows": 1},
     ) as changes, patch.object(
         retry_stale_scrapes,
-        "generate_manager_intent_rollups",
-        return_value={"ok": True},
-    ) as intent, patch.object(
-        retry_stale_scrapes,
         "generate_manager_signals",
         return_value={"ok": True},
     ) as signals, patch.object(
@@ -120,7 +116,6 @@ def test_successful_retry_rebuilds_same_target_date(tmp_path):
     assert summary["missing_after"] == 0
     assert summary["improved_etfs"] == ["A"]
     changes.assert_called_once_with(current_date="2026-07-15")
-    intent.assert_called_once_with("2026-07-15")
     signals.assert_called_once_with("2026-07-15")
     reports.assert_called_once_with(
         str(db_path),

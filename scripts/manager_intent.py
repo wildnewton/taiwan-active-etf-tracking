@@ -1,22 +1,15 @@
-"""Manager-intent rollups for Taiwan active ETF holding changes.
-
-This module builds experimental rolling aggregates from ``etf_holding_changes``.
-It intentionally stays below the report layer: PR1 creates the table and metrics
-that later PRs can surface in the daily signal report.
-"""
+"""In-memory manager-intent aggregates for Taiwan active ETF holding changes."""
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Iterable
-
 import db
 from etf_universe import get_eligible_etf_codes
 
 METRIC_VERSION = "manager_intent_mvp_v1"
-DEFAULT_WINDOWS = (5, 10)
-SUPPORTED_WINDOWS = set(DEFAULT_WINDOWS)
+DEFAULT_WINDOW = 5
+SUPPORTED_WINDOWS = {5, 10}
 MIN_ELIGIBLE_DAYS = 3
 NET_TO_GROSS_DIRECTIONAL = 0.25
 CROSS_FUND_OFFSET_RATIO_THRESHOLD = 0.5
@@ -31,74 +24,30 @@ REMOVED_POSITION_SCORE = -4.0
 CONSECUTIVE_ACTIVE_ADD_SCORE = 1.5
 CONSECUTIVE_ACTIVE_REDUCE_SCORE = -1.5
 
-_INSERT_SQL = """
-INSERT OR REPLACE INTO manager_intent_rollups (
-    date, window_days, entity_level, stock_code, stock_name,
-    issuer, issuer_key, eligible_days, buy_days, sell_days,
-    buy_day_pct, sell_day_pct, cum_active_buy_score,
-    cum_active_sell_score, net_active_score, gross_active_score,
-    net_to_gross, buy_etf_count, sell_etf_count,
-    buy_issuer_count, sell_issuer_count, rotation_buy_etf_count,
-    rotation_sell_etf_count, cross_fund_offset_ratio,
-    intent_direction, primary_intent_state, intent_pattern_tags_json,
-    confidence, metric_version, evidence_json, built_at, created_at
-) VALUES (
-    :date, :window_days, :entity_level, :stock_code, :stock_name,
-    :issuer, :issuer_key, :eligible_days, :buy_days, :sell_days,
-    :buy_day_pct, :sell_day_pct, :cum_active_buy_score,
-    :cum_active_sell_score, :net_active_score, :gross_active_score,
-    :net_to_gross, :buy_etf_count, :sell_etf_count,
-    :buy_issuer_count, :sell_issuer_count, :rotation_buy_etf_count,
-    :rotation_sell_etf_count, :cross_fund_offset_ratio,
-    :intent_direction, :primary_intent_state, :intent_pattern_tags_json,
-    :confidence, :metric_version, :evidence_json, :built_at, :created_at
-)
-"""
 
-
-def generate_manager_intent_rollups(target_date: str | None = None, windows: Iterable[int] = DEFAULT_WINDOWS) -> dict:
-    """Rebuild manager-intent rollups for one date.
-
-    The rebuild uses one ``built_at`` timestamp and one transaction for the
-    delete/insert phase so report readers do not observe a half-rebuilt date.
-    """
+def build_manager_intent_rows(
+    target_date: str | None = None,
+    window_days: int = DEFAULT_WINDOW,
+) -> list[dict]:
+    """Calculate manager-intent rows without persisting a materialized table."""
     conn = db._connect()
     target_date = target_date or _latest_change_date(conn)
     if not target_date:
-        return {"ok": False, "date": None, "rows": 0, "reason": "no holding changes"}
-
-    windows = tuple(int(window) for window in windows)
-    _validate_windows(windows)
-    built_at = datetime.now(timezone.utc).isoformat()
-    rows = []
-    for window_days in windows:
-        rows.extend(_build_window_rows(conn, target_date, window_days, built_at))
-
-    with conn:
-        db._ensure_manager_intent_rollups_table(conn)
-        conn.execute("DELETE FROM manager_intent_rollups WHERE date = ?", (target_date,))
-        if rows:
-            conn.executemany(_INSERT_SQL, rows)
-
-    return {
-        "ok": True,
-        "date": target_date,
-        "windows": list(windows),
-        "rows": len(rows),
-        "built_at": built_at,
-    }
+        return []
+    window_days = int(window_days)
+    _validate_window(window_days)
+    return _build_window_rows(conn, target_date, window_days)
 
 
-def _validate_windows(windows: tuple[int, ...]) -> None:
-    unsupported = sorted({window for window in windows if window not in SUPPORTED_WINDOWS})
-    if unsupported:
+def _validate_window(window_days: int) -> None:
+    if window_days not in SUPPORTED_WINDOWS:
         raise ValueError(
-            "Unsupported manager intent window(s): "
-            f"{unsupported}. Supported windows: {sorted(SUPPORTED_WINDOWS)}"
+            f"Unsupported manager intent window: {window_days}. "
+            f"Supported windows: {sorted(SUPPORTED_WINDOWS)}"
         )
 
 
-def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) -> list[dict]:
+def _build_window_rows(conn, target_date: str, window_days: int) -> list[dict]:
     window_dates = _window_dates(conn, target_date, window_days)
     if not window_dates:
         return []
@@ -112,7 +61,7 @@ def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) 
         eligible_codes_by_date,
     )
     events = _change_events(conn, window_dates, eligible_codes_by_date)
-    candidates, stock_names, issuer_by_etf = _candidate_etf_stocks(
+    stock_names, issuer_by_etf, holding_presence = _candidate_etf_stocks(
         conn,
         window_dates,
         events,
@@ -128,10 +77,13 @@ def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) 
     if not comparable_context:
         return []
 
-    eligible_dates = _eligible_dates_by_entity(candidates, issuer_by_etf, comparable_context, window_dates)
+    eligible_dates = _eligible_dates_by_entity(
+        holding_presence,
+        issuer_by_etf,
+        comparable_context,
+    )
     metrics = _event_metrics(events, stock_names)
     rows = []
-    created_at = datetime.now(timezone.utc).isoformat()
 
     for key in sorted(set(eligible_dates) | set(metrics)):
         entity_level, stock_code, issuer_key = key
@@ -149,8 +101,6 @@ def _build_window_rows(conn, target_date: str, window_days: int, built_at: str) 
                 issuer_key=issuer_key,
                 eligible_dates=entity_dates,
                 metric=metric,
-                built_at=built_at,
-                created_at=created_at,
             )
         )
 
@@ -166,15 +116,13 @@ def _window_dates(conn, target_date: str, window_days: int) -> list[str]:
     candidate_rows = conn.execute(
         """
         SELECT date FROM (
-            SELECT DISTINCT date FROM etf_change_diagnostics WHERE date <= ?
-            UNION
             SELECT DISTINCT date FROM etf_holding_changes WHERE date <= ?
             UNION
             SELECT DISTINCT date FROM etf_daily_holdings WHERE date <= ?
         )
         ORDER BY date DESC
         """,
-        (target_date, target_date, target_date),
+        (target_date, target_date),
     ).fetchall()
     valid_dates = []
     for row in candidate_rows:
@@ -235,10 +183,14 @@ def _candidate_etf_stocks(
     events: list[dict],
     eligible_codes_by_date: dict[str, set[str]],
     canonical_sources: dict[tuple[str, str], str],
-) -> tuple[set[tuple[str, str]], dict[str, str], dict[str, str]]:
-    candidates: set[tuple[str, str]] = set()
+) -> tuple[
+    dict[str, str],
+    dict[str, str],
+    set[tuple[str, str, str]],
+]:
     stock_names: dict[str, str] = {}
     issuer_by_etf = _issuer_by_etf(conn)
+    holding_presence: set[tuple[str, str, str]] = set()
 
     for row in _holding_rows(
         conn,
@@ -248,19 +200,18 @@ def _candidate_etf_stocks(
     ):
         etf_code = row["etf_code"]
         stock_code = row["stock_code"]
-        candidates.add((etf_code, stock_code))
+        holding_presence.add((row["date"], etf_code, stock_code))
         stock_names.setdefault(stock_code, row.get("stock_name"))
 
     for event in events:
         etf_code = event["etf_code"]
         stock_code = event["stock_code"]
-        candidates.add((etf_code, stock_code))
         if event.get("stock_name"):
             stock_names.setdefault(stock_code, event.get("stock_name"))
         if event.get("issuer"):
             issuer_by_etf.setdefault(etf_code, event.get("issuer"))
 
-    return candidates, stock_names, issuer_by_etf
+    return stock_names, issuer_by_etf, holding_presence
 
 
 def _holding_rows(
@@ -291,10 +242,7 @@ def _holding_rows(
 
 
 def _issuer_by_etf(conn) -> dict[str, str]:
-    try:
-        rows = conn.execute("SELECT code, issuer FROM etf_universe").fetchall()
-    except Exception:
-        return {}
+    rows = conn.execute("SELECT code, issuer FROM etf_universe").fetchall()
     return {row[0]: row[1] for row in rows if row[1]}
 
 
@@ -304,23 +252,23 @@ def _comparable_context(
     eligible_codes_by_date: dict[str, set[str]],
     canonical_sources: dict[tuple[str, str], str],
 ) -> set[tuple[str, str]]:
-    """Return comparable ``(date, etf_code)`` pairs.
-
-    Prefer explicit included change diagnostics. For dates with no diagnostics at
-    all, fall back to available holdings rows so legacy data can still produce a
-    best-effort rollup.
-    """
+    """Return comparable ``(date, etf_code)`` pairs."""
     if not window_dates:
         return set()
-    diagnostics = _dict_rows(
-        conn,
-        f"""
-        SELECT date, etf_code, status
-        FROM etf_change_diagnostics
-        WHERE date IN ({_placeholders(window_dates)})
-        """,
-        window_dates,
-    )
+    try:
+        diagnostics = _dict_rows(
+            conn,
+            f"""
+            SELECT date, etf_code, status
+            FROM etf_change_diagnostics
+            WHERE date IN ({_placeholders(window_dates)})
+            """,
+            window_dates,
+        )
+    except sqlite3.OperationalError as exc:
+        if "no such table: etf_change_diagnostics" not in str(exc):
+            raise
+        diagnostics = []
     context = {
         (row["date"], row["etf_code"])
         for row in diagnostics
@@ -340,21 +288,19 @@ def _comparable_context(
 
 
 def _eligible_dates_by_entity(
-    candidates: set[tuple[str, str]],
+    holding_presence: set[tuple[str, str, str]],
     issuer_by_etf: dict[str, str],
     comparable_context: set[tuple[str, str]],
-    window_dates: list[str],
 ) -> dict[tuple[str, str, str], set[str]]:
     eligible = defaultdict(set)
-    for etf_code, stock_code in candidates:
+    for date, etf_code, stock_code in holding_presence:
+        if (date, etf_code) not in comparable_context:
+            continue
         issuer = issuer_by_etf.get(etf_code)
         if not issuer:
             continue
-        for date in window_dates:
-            if (date, etf_code) not in comparable_context:
-                continue
-            eligible[("issuer_stock", stock_code, issuer)].add(date)
-            eligible[("stock", stock_code, "")].add(date)
+        eligible[("issuer_stock", stock_code, issuer)].add(date)
+        eligible[("stock", stock_code, "")].add(date)
     return eligible
 
 
@@ -451,8 +397,6 @@ def _rollup_row(
     issuer_key: str,
     eligible_dates: set[str],
     metric: dict,
-    built_at: str,
-    created_at: str,
 ) -> dict:
     daily_scores = metric["daily_scores"]
     eligible_days = len(eligible_dates)
@@ -515,8 +459,6 @@ def _rollup_row(
         "confidence": classification["confidence"],
         "metric_version": METRIC_VERSION,
         "evidence_json": json.dumps(metric["evidence"][:20], ensure_ascii=False),
-        "built_at": built_at,
-        "created_at": created_at,
     }
 
 

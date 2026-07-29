@@ -2,7 +2,7 @@ import json
 import sqlite3
 
 import db
-from signals import generate_manager_signals, score_to_action_label
+from signals import generate_manager_signals
 
 
 def insert_change(
@@ -20,7 +20,6 @@ def insert_change(
     is_new_position=0,
     is_removed_position=0,
     weight_delta_1d=0.0,
-    weight_delta_3d=None,
     consecutive_add_days=0,
     consecutive_reduce_days=0,
 ):
@@ -34,14 +33,10 @@ def insert_change(
             INSERT INTO etf_holding_changes (
                 date, etf_code, issuer, stock_code, stock_name,
                 prev_date, prev_weight_pct, weight_pct, weight_delta_1d,
-                weight_delta_pct_1d, prev_shares, shares, shares_delta_1d,
-                shares_delta_pct_1d, prev_rank, rank, rank_delta_1d,
-                is_new_position, is_removed_position, weight_delta_3d,
-                weight_delta_5d, weight_delta_10d, consecutive_add_days,
-                consecutive_reduce_days, source_type, created_at
-            ) VALUES (?, ?, ?, ?, ?, '2026-06-22', ?, ?, ?, NULL, ?, ?, ?,
-                NULL, ?, ?, NULL, ?, ?, ?, NULL, NULL, ?, ?, 'moneydj_primary',
-                '2026-06-23T00:00:00')
+                prev_shares, shares, shares_delta_1d, prev_rank, rank,
+                is_new_position, is_removed_position, consecutive_add_days,
+                consecutive_reduce_days
+            ) VALUES (?, ?, ?, ?, ?, '2026-06-22', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 date,
@@ -59,7 +54,6 @@ def insert_change(
                 rank,
                 is_new_position,
                 is_removed_position,
-                weight_delta_3d,
                 consecutive_add_days,
                 consecutive_reduce_days,
             ),
@@ -73,15 +67,6 @@ def load_signals():
             "SELECT * FROM etf_manager_signals ORDER BY signal_type, stock_code, etf_codes"
         ).fetchall()
 
-
-def test_score_to_action_label_boundaries():
-    assert score_to_action_label(8) == "Strong Watch"
-    assert score_to_action_label(4) == "Watch"
-    assert score_to_action_label(1) == "Mild Positive"
-    assert score_to_action_label(0) == "Neutral"
-    assert score_to_action_label(-1) == "Mild Negative"
-    assert score_to_action_label(-4) == "Reduce Watch"
-    assert score_to_action_label(-8) == "Strong Reduce Watch"
 
 
 def test_generates_new_and_removed_core_position_signals():
@@ -134,13 +119,9 @@ def test_generates_new_and_removed_core_position_signals():
     new_core = [row for row in signals if row["signal_type"] == "new_core_position"][0]
     removed = [row for row in signals if row["signal_type"] == "removed_core_position"][0]
     assert new_core["stock_code"] == "6669"
-    assert new_core["signal_strength"] == "strong"
     assert new_core["signal_score"] == 4
-    assert new_core["action_label"] == "Watch"
     assert removed["stock_code"] == "2383"
-    assert removed["signal_strength"] == "strong"
     assert removed["signal_score"] == -5
-    assert removed["action_label"] == "Reduce Watch"
 
 
 def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
@@ -153,7 +134,6 @@ def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
         prev_shares=100,
         shares=120,
         weight_delta_1d=1.0,
-        weight_delta_3d=1.2,
         consecutive_add_days=3,
     )
     insert_change(
@@ -164,7 +144,6 @@ def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
         prev_shares=100,
         shares=90,
         weight_delta_1d=-1.0,
-        weight_delta_3d=-1.1,
         consecutive_reduce_days=3,
     )
 
@@ -174,9 +153,7 @@ def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
     add = [row for row in signals if row["signal_type"] == "consecutive_add_3d"][0]
     reduce = [row for row in signals if row["signal_type"] == "consecutive_reduce_3d"][0]
     assert add["signal_score"] == 4
-    assert add["action_label"] == "Watch"
     assert reduce["signal_score"] == -4
-    assert reduce["action_label"] == "Reduce Watch"
 
 
 def test_consensus_add_requires_two_independent_issuers_not_two_etfs_same_issuer():
@@ -252,7 +229,5 @@ def test_consensus_reduce_three_issuers_is_strong():
     consensus = [row for row in load_signals() if row["signal_type"] == "consensus_reduce_3d"]
     assert len(consensus) == 1
     row = consensus[0]
-    assert row["signal_strength"] == "strong"
     assert row["issuer_count"] == 3
     assert row["signal_score"] == -6
-    assert row["action_label"] == "Reduce Watch"

@@ -57,6 +57,9 @@ async def test_selected_retry_keeps_execution_date_separate_from_target_date():
         "pipeline.scrape_holdings_with_browser_async",
         new=scraper,
     ), patch("pipeline.init_db"), patch(
+        "pipeline.snapshot_exists",
+        return_value=False,
+    ), patch(
         "pipeline.replace_daily_snapshot",
         return_value={"inserted": True},
     ):
@@ -89,10 +92,6 @@ def test_retry_passes_target_without_overwriting_execution_date():
         retry_stale_scrapes,
         "detect_holding_changes",
         return_value={"ok": True, "date": TARGET_DATE.isoformat()},
-    ), patch.object(
-        retry_stale_scrapes,
-        "generate_manager_intent_rollups",
-        return_value={"ok": True},
     ), patch.object(
         retry_stale_scrapes,
         "generate_manager_signals",

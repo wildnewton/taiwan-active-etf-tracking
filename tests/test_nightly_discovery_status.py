@@ -46,12 +46,6 @@ NO_SKIP_CHANGES = {
     "rows": 0,
     "skipped_etfs": [],
 }
-MANAGER_INTENT_SUMMARY = {
-    "ok": True,
-    "date": "2026-06-26",
-    "windows": [5, 10],
-    "rows": 0,
-}
 
 
 def _run_main(db_path, report_dir, extra_args=None):
@@ -87,10 +81,6 @@ def _patched_nightly(discovery_summary):
             return_value=COMPLETE_SCRAPE,
         ),
         patch("changes.detect_holding_changes", return_value=NO_SKIP_CHANGES),
-        patch(
-            "manager_intent.generate_manager_intent_rollups",
-            return_value=MANAGER_INTENT_SUMMARY,
-        ),
         patch("signals.generate_manager_signals", return_value={}),
         patch("report.generate_signal_report", return_value=""),
         patch("traction_analysis.generate_traction_report", return_value=""),
@@ -104,10 +94,9 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
         patches[1],
         patches[2] as scrape,
         patches[3],
-        patches[4] as intent,
+        patches[4],
         patches[5],
         patches[6],
-        patches[7],
     ):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
@@ -115,7 +104,6 @@ def test_nightly_warns_and_continues_on_incomplete_discovery(capsys, tmp_path):
     assert "ETF universe discovery incomplete" in out
     assert "TPEx" in out
     scrape.assert_called_once()
-    intent.assert_called_once_with("2026-06-26")
 
 
 def test_nightly_surfaces_retirement_candidates_and_continues(capsys, tmp_path):
@@ -125,10 +113,9 @@ def test_nightly_surfaces_retirement_candidates_and_continues(capsys, tmp_path):
         patches[1],
         patches[2] as scrape,
         patches[3],
-        patches[4] as intent,
+        patches[4],
         patches[5],
         patches[6],
-        patches[7],
     ):
         _run_main(str(tmp_path / "t.sqlite3"), str(tmp_path / "r"))
 
@@ -136,7 +123,6 @@ def test_nightly_surfaces_retirement_candidates_and_continues(capsys, tmp_path):
     assert "retirement_candidates" in out
     assert "00980A" in out
     scrape.assert_called_once()
-    intent.assert_called_once_with("2026-06-26")
 
 
 def test_nightly_strict_mode_stops_on_incomplete_discovery(tmp_path):

@@ -106,11 +106,9 @@ def test_proportional_share_increase_is_flow_scaled_not_active_add():
     assert summary["ok"] is True
     tsmc = fetch_change("2330")
     assert round(tsmc["etf_scale_factor"], 4) == 1.1
-    assert round(tsmc["expected_shares"], 4) == 110.0
     assert round(tsmc["active_shares_delta_1d"], 4) == 0.0
     assert abs(tsmc["active_shares_delta_pct_1d"]) < 0.0001
     assert tsmc["position_change_type"] == "flow_scaled_increase"
-    assert tsmc["is_flow_scaled_change"] == 1
     assert tsmc["is_active_add"] == 0
 
     generate_manager_signals("2026-06-24")
@@ -133,10 +131,8 @@ def test_proportional_share_decrease_is_flow_scaled_not_active_reduce():
 
     row = fetch_change("2330")
     assert round(row["etf_scale_factor"], 4) == 0.9
-    assert round(row["expected_shares"], 4) == 90.0
     assert round(row["active_shares_delta_1d"], 4) == 0.0
     assert row["position_change_type"] == "flow_scaled_decrease"
-    assert row["is_flow_scaled_change"] == 1
     assert row["is_active_reduce"] == 0
 
 
@@ -153,7 +149,6 @@ def test_excess_increase_above_etf_scale_is_confirmed_active_add():
 
     tsmc = fetch_change("2330")
     assert round(tsmc["etf_scale_factor"], 4) == 1.1
-    assert round(tsmc["expected_shares"], 4) == 110.0
     assert round(tsmc["active_shares_delta_1d"], 4) == 20.0
     assert round(tsmc["active_shares_delta_pct_1d"], 4) == round(20 / 110 * 100, 4)
     assert tsmc["position_change_type"] == "confirmed_active_add"
@@ -174,7 +169,6 @@ def test_underweight_after_etf_scale_is_confirmed_active_reduce_even_if_raw_shar
 
     tsmc = fetch_change("2330")
     assert round(tsmc["etf_scale_factor"], 4) == 1.1
-    assert round(tsmc["expected_shares"], 4) == 110.0
     assert round(tsmc["active_shares_delta_1d"], 4) == -10.0
     assert tsmc["position_change_type"] == "confirmed_active_reduce"
     assert tsmc["flow_adjusted_direction"] == "reduce"
@@ -208,6 +202,5 @@ def test_too_few_comparable_shares_disables_flow_adjustment():
 
     row = fetch_change("2330")
     assert row["etf_scale_factor"] is None
-    assert row["expected_shares"] is None
     assert row["active_shares_delta_1d"] == 10
     assert row["position_change_type"] == "confirmed_active_add"

@@ -4,7 +4,7 @@ import math
 import pytest
 
 import db
-from manager_intent import generate_manager_intent_rollups
+from manager_intent import build_manager_intent_rows
 
 
 ETF_ROWS = {
@@ -18,6 +18,8 @@ ETF_ROWS = {
 }
 ETF_ISSUERS = {etf_code: row["issuer"] for etf_code, row in ETF_ROWS.items()}
 WINDOW_DATES = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26"]
+
+_generated_rows = []
 
 
 @pytest.fixture(autouse=True)
@@ -138,9 +140,9 @@ def insert_change(
                 prev_rank, rank, is_new_position, is_removed_position,
                 position_change_type, active_direction, is_active_add, is_active_reduce,
                 consecutive_active_add_days, consecutive_active_reduce_days,
-                confidence, source_type, created_at
+                confidence
             ) VALUES (?, ?, ?, ?, ?, '2026-06-21', 1.0, 2.0, 1.0, 1000, 1100,
-                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, ?, ?, 'high', 'moneydj_primary', ?)
+                100, ?, ?, 30, 20, ?, ?, ?, ?, ?, ?, ?, ?, 'high')
             """,
             (
                 date,
@@ -158,30 +160,23 @@ def insert_change(
                 is_active_reduce,
                 consecutive_active_add_days,
                 consecutive_active_reduce_days,
-                f"{date}T00:00:00",
             ),
         )
 
 
 def get_rollup(*, date="2026-06-26", window_days=5, entity_level="stock", stock_code="2330", issuer_key=""):
-    conn = db._connect()
-    old_factory = conn.row_factory
-    conn.row_factory = lambda cursor, row: {column[0]: row[index] for index, column in enumerate(cursor.description)}
-    try:
-        return conn.execute(
-            """
-            SELECT *
-            FROM manager_intent_rollups
-            WHERE date = ?
-              AND window_days = ?
-              AND entity_level = ?
-              AND stock_code = ?
-              AND issuer_key = ?
-            """,
-            (date, window_days, entity_level, stock_code, issuer_key),
-        ).fetchone()
-    finally:
-        conn.row_factory = old_factory
+    return next(
+        (
+            row
+            for row in _generated_rows
+            if row["date"] == date
+            and row["window_days"] == window_days
+            and row["entity_level"] == entity_level
+            and row["stock_code"] == stock_code
+            and row["issuer_key"] == issuer_key
+        ),
+        None,
+    )
 
 
 def setup_db():
@@ -195,10 +190,10 @@ def test_active_add_and_reduce_rows_create_buy_sell_net_and_gross_scores():
     insert_change("2026-06-25", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00982A", is_active_reduce=1)
 
-    summary = generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup()
 
-    assert summary["rows"] > 0
+    assert _generated_rows
     assert row["cum_active_buy_score"] == 2.0
     assert row["cum_active_sell_score"] == 2.0
     assert row["net_active_score"] == 0.0
@@ -211,7 +206,7 @@ def test_eligible_days_are_derived_from_comparable_context_not_action_rows_only(
     insert_eligible_history(etfs=("00980A",))
     insert_change("2026-06-26", "00980A", is_active_add=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["eligible_days"] == 5
@@ -227,7 +222,7 @@ def test_issuer_buy_day_pct_does_not_overcount_multiple_etfs_on_same_day():
     insert_change("2026-06-26", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00981A", is_active_add=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["eligible_days"] == 5
@@ -243,7 +238,7 @@ def test_accumulation_classified_when_net_positive_and_breadth_exists():
     insert_change("2026-06-25", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00982A", is_active_add=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup()
 
     assert row["net_active_score"] == 4.0
@@ -259,7 +254,7 @@ def test_distribution_classified_when_net_negative_and_breadth_exists():
     insert_change("2026-06-25", "00980A", is_active_reduce=1)
     insert_change("2026-06-26", "00982A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup()
 
     assert row["net_active_score"] == -4.0
@@ -277,7 +272,7 @@ def test_contested_classified_before_direction_when_issuer_breadth_offsets():
     insert_change("2026-06-26", "00984A", is_active_reduce=1)
     insert_change("2026-06-26", "00985A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup()
 
     assert row["buy_issuer_count"] == 2
@@ -293,29 +288,12 @@ def test_active_flag_with_missing_active_delta_fields_falls_back_to_base_score()
     insert_eligible_history(etfs=("00980A",))
     insert_change("2026-06-26", "00980A", is_active_add=1, active_delta=None, active_delta_pct=None)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["cum_active_buy_score"] == 2.0
     assert row["net_active_score"] == 2.0
 
-
-def test_rebuilt_rows_populate_one_built_at_timestamp_for_the_transaction():
-    setup_db()
-    insert_eligible_history(etfs=("00980A", "00982A"))
-    insert_change("2026-06-25", "00980A", is_active_add=1)
-    insert_change("2026-06-26", "00982A", is_active_add=1)
-
-    generate_manager_intent_rollups("2026-06-26", windows=(5, 10))
-
-    with db._connect() as conn:
-        rows = conn.execute(
-            "SELECT COUNT(*), COUNT(DISTINCT built_at), MIN(built_at) FROM manager_intent_rollups WHERE date = '2026-06-26'"
-        ).fetchone()
-
-    assert rows[0] > 0
-    assert rows[1] == 1
-    assert rows[2]
 
 
 def test_retired_etf_events_are_included_through_latest_holdings_date():
@@ -323,7 +301,7 @@ def test_retired_etf_events_are_included_through_latest_holdings_date():
     insert_eligible_history(etfs=("00998A",))
     insert_change("2026-06-26", "00998A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     stock_row = get_rollup()
 
     assert stock_row["cum_active_sell_score"] == 2.0
@@ -340,7 +318,7 @@ def test_retired_etf_events_after_latest_holdings_date_are_excluded_before_scori
     insert_change("2026-06-26", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00999A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     stock_row = get_rollup()
 
     assert stock_row["cum_active_buy_score"] == 2.0
@@ -354,7 +332,7 @@ def test_consecutive_active_add_score_replaces_base_score_instead_of_adding_bonu
     for date in ("2026-06-24", "2026-06-25", "2026-06-26"):
         insert_change(date, "00980A", is_active_add=1, consecutive_active_add_days=3)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["cum_active_buy_score"] == 4.5
@@ -366,7 +344,7 @@ def test_unsupported_window_raises_clear_error():
     insert_eligible_history(etfs=("00980A",))
 
     with pytest.raises(ValueError, match="Unsupported manager intent window"):
-        generate_manager_intent_rollups("2026-06-26", windows=(7,))
+        build_manager_intent_rows("2026-06-26", 7)
 
 
 def test_insufficient_eligible_days_classifies_as_insufficient_data():
@@ -374,7 +352,7 @@ def test_insufficient_eligible_days_classifies_as_insufficient_data():
     insert_eligible_history(etfs=("00980A",), dates=["2026-06-25", "2026-06-26"])
     insert_change("2026-06-26", "00980A", is_active_add=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["eligible_days"] == 2
@@ -387,7 +365,7 @@ def test_zero_events_for_eligible_stock_classifies_as_neutral():
     setup_db()
     insert_eligible_history(etfs=("00980A",))
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["eligible_days"] == 5
@@ -405,7 +383,7 @@ def test_high_activity_unclear_when_same_issuer_offsets_without_rotation_classif
     insert_change("2026-06-26", "00980A", is_active_reduce=1)
     insert_change("2026-06-26", "00981A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["gross_active_score"] == 8.0
@@ -421,7 +399,7 @@ def test_cross_fund_rotation_metrics_and_classification_for_balanced_same_issuer
     insert_change("2026-06-26", "00980A", is_active_add=1)
     insert_change("2026-06-26", "00981A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["rotation_buy_etf_count"] == 1
@@ -439,7 +417,7 @@ def test_cross_fund_rotation_with_positive_net_keeps_rotation_accumulation_state
     insert_change("2026-06-26", "00981A", is_active_add=1)
     insert_change("2026-06-26", "00980A", is_active_reduce=1)
 
-    generate_manager_intent_rollups("2026-06-26", windows=(5,))
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
     row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
 
     assert row["net_active_score"] == 2.0
@@ -447,3 +425,48 @@ def test_cross_fund_rotation_with_positive_net_keeps_rotation_accumulation_state
     assert row["intent_direction"] == "rotation_accumulation"
     assert row["primary_intent_state"] == "cross_fund_rotation_accumulation"
     assert json.loads(row["intent_pattern_tags_json"]) == ["cross_fund_rotation", "rotation_net_accumulation"]
+
+
+def test_new_position_history_counts_only_dates_stock_is_in_canonical_holdings():
+    setup_db()
+    insert_eligible_history(
+        stock_code="2317",
+        stock_name="鴻海",
+        etfs=("00980A", "00982A"),
+        dates=WINDOW_DATES[:-1],
+    )
+    insert_eligible_history(
+        stock_code="2330",
+        stock_name="台積電",
+        etfs=("00980A", "00982A"),
+        dates=WINDOW_DATES[-1:],
+    )
+    insert_change("2026-06-26", "00980A", is_new_position=1)
+    insert_change("2026-06-26", "00982A", is_new_position=1)
+
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
+    row = get_rollup()
+
+    assert row["eligible_days"] == 1
+    assert row["primary_intent_state"] == "insufficient_data"
+
+
+def test_removed_position_counts_only_prior_canonical_holding_dates():
+    setup_db()
+    insert_eligible_history(
+        etfs=("00980A",),
+        dates=WINDOW_DATES[:-1],
+    )
+    insert_eligible_history(
+        stock_code="2317",
+        stock_name="鴻海",
+        etfs=("00980A",),
+        dates=WINDOW_DATES[-1:],
+    )
+    insert_change("2026-06-26", "00980A", is_removed_position=1)
+
+    _generated_rows[:] = build_manager_intent_rows("2026-06-26", 5)
+    row = get_rollup(entity_level="issuer_stock", issuer_key="野村")
+
+    assert row["eligible_days"] == 4
+    assert row["cum_active_sell_score"] == 4.0

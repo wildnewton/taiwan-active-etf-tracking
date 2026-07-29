@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 
 import db
 from changes import detect_holding_changes
-from manager_intent import generate_manager_intent_rollups
 from pipeline import run_selected_scrape_with_browser
 from report import generate_signal_report
 from signals import generate_manager_signals
@@ -86,7 +85,6 @@ def retry_missing_holdings(
             f"{target_date}: {change_summary.get('reason') or change_summary}"
         )
 
-    intent_summary = generate_manager_intent_rollups(target_date)
     signal_summary = generate_manager_signals(target_date)
     quality_run_date = run_date
     report_paths = _overwrite_reports(
@@ -99,7 +97,6 @@ def retry_missing_holdings(
     summary.update({
         "reports_overwritten": True,
         "change_summary": change_summary,
-        "manager_intent_summary": intent_summary,
         "signal_summary": signal_summary,
         "report_paths": report_paths,
     })

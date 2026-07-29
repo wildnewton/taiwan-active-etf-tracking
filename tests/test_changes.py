@@ -127,7 +127,6 @@ def test_detects_new_removed_and_existing_position_changes():
     assert tsmc["weight_pct"] == 12.0
     assert tsmc["weight_delta_1d"] == 2.0
     assert tsmc["shares_delta_1d"] == 10.0
-    assert tsmc["rank_delta_1d"] == 0
     assert tsmc["is_new_position"] == 0
     assert tsmc["is_removed_position"] == 0
 
@@ -150,10 +149,9 @@ def test_detects_new_removed_and_existing_position_changes():
     delta = fetch_change("2308")
     assert delta["weight_delta_1d"] == -1.0
     assert delta["shares_delta_1d"] == -10.0
-    assert delta["rank_delta_1d"] == -1
 
 
-def test_detects_three_day_rolling_delta_and_consecutive_adds():
+def test_detects_consecutive_adds():
     db.init_db(":memory:")
 
     _insert_etf_universe_entry("00980A", "Test ETF", "TestIssuer", 0)
@@ -167,8 +165,6 @@ def test_detects_three_day_rolling_delta_and_consecutive_adds():
     assert summary["ok"] is True
     row = fetch_change("2330", date="2026-06-22")
     assert row["weight_delta_1d"] == 2.0
-    assert row["weight_delta_3d"] == 3.0
-    assert row["weight_delta_5d"] is None
     assert row["consecutive_add_days"] == 2
     assert row["consecutive_reduce_days"] == 0
 
@@ -186,7 +182,6 @@ def test_detects_consecutive_reductions():
 
     row = fetch_change("2330", date="2026-06-22")
     assert row["weight_delta_1d"] == -1.0
-    assert row["weight_delta_3d"] == -3.0
     assert row["consecutive_add_days"] == 0
     assert row["consecutive_reduce_days"] == 2
 

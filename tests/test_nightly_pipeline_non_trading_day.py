@@ -84,11 +84,6 @@ def _run_with_downstream_patches(tmp_path, scrape_summary, coverage):
                 "skipped_etfs": [],
             },
         ),
-        "rollups": patch.object(
-            nightly_pipeline,
-            "generate_manager_intent_rollups",
-            return_value={},
-        ),
         "signals": patch.object(
             nightly_pipeline,
             "generate_manager_signals",
@@ -117,7 +112,7 @@ def _run_with_downstream_patches(tmp_path, scrape_summary, coverage):
         nightly_pipeline,
         "get_latest_valid_date",
         return_value=TARGET_DATE,
-    ), patches["detect"] as detect, patches["rollups"] as rollups, patches[
+    ), patches["detect"] as detect, patches[
         "signals"
     ] as signals, patches["report"] as report, patches["traction"] as traction:
         result = nightly_pipeline.run_nightly_pipeline(
@@ -125,7 +120,7 @@ def _run_with_downstream_patches(tmp_path, scrape_summary, coverage):
             str(tmp_path / "reports"),
             skip_discovery=True,
         )
-    return result, detect, rollups, signals, report, traction
+    return result, detect, signals, report, traction
 
 
 def test_non_trading_day_with_complete_preexisting_target_is_clean_noop(tmp_path):
@@ -133,7 +128,7 @@ def test_non_trading_day_with_complete_preexisting_target_is_clean_noop(tmp_path
         preexisting_success=2,
         attempted_etf_codes=[],
     )
-    result, detect, rollups, signals, report, traction = _run_with_downstream_patches(
+    result, detect, signals, report, traction = _run_with_downstream_patches(
         tmp_path,
         summary,
         _coverage(2, []),
@@ -145,7 +140,6 @@ def test_non_trading_day_with_complete_preexisting_target_is_clean_noop(tmp_path
         "downstream_skip_reason": "target_snapshot_already_complete",
     }
     detect.assert_not_called()
-    rollups.assert_not_called()
     signals.assert_not_called()
     report.assert_not_called()
     traction.assert_not_called()
@@ -162,7 +156,7 @@ def test_historical_retired_snapshot_does_not_prevent_complete_target_noop(tmp_p
         missing_etfs=[],
     )
 
-    result, detect, rollups, signals, report, traction = _run_with_downstream_patches(
+    result, detect, signals, report, traction = _run_with_downstream_patches(
         tmp_path,
         summary,
         coverage,
@@ -171,7 +165,6 @@ def test_historical_retired_snapshot_does_not_prevent_complete_target_noop(tmp_p
     assert result["skipped_downstream"] is True
     assert result["downstream_skip_reason"] == "target_snapshot_already_complete"
     detect.assert_not_called()
-    rollups.assert_not_called()
     signals.assert_not_called()
     report.assert_not_called()
     traction.assert_not_called()
@@ -262,7 +255,7 @@ def test_non_trading_day_recovery_runs_downstream_for_target_date(tmp_path):
         moneydj_success=1,
         fresh=2,
     )
-    result, detect, rollups, signals, report, traction = _run_with_downstream_patches(
+    result, detect, signals, report, traction = _run_with_downstream_patches(
         tmp_path,
         summary,
         _coverage(2, []),
@@ -270,7 +263,6 @@ def test_non_trading_day_recovery_runs_downstream_for_target_date(tmp_path):
 
     assert result["scrape_summary"] == summary
     detect.assert_called_once_with(current_date=TARGET_DATE)
-    rollups.assert_called_once_with(TARGET_DATE)
     signals.assert_called_once_with(TARGET_DATE)
     report.assert_called_once_with(TARGET_DATE, quality_run_date=RUN_DATE)
     traction.assert_called_once()

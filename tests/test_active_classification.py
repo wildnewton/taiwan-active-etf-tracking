@@ -91,54 +91,38 @@ def insert_change(
     is_active_add=0,
     is_active_reduce=0,
     is_passive_weight_change=0,
-    is_mixed_weight_share_signal=0,
-    weight_delta_3d=0.0,
-    shares_delta_3d=0.0,
     consecutive_active_add_days=0,
     consecutive_active_reduce_days=0,
     consecutive_add_days=0,
     consecutive_reduce_days=0,
 ):
+    active_delta = 10.0 if active_direction == "add" else -10.0 if active_direction == "reduce" else 0.0
     with db._connect() as conn:
         conn.execute(
             """
             INSERT INTO etf_holding_changes (
                 date, etf_code, issuer, stock_code, stock_name,
                 prev_date, prev_weight_pct, weight_pct, weight_delta_1d,
-                weight_delta_pct_1d, prev_shares, shares, shares_delta_1d,
-                shares_delta_pct_1d, prev_rank, rank, rank_delta_1d,
-                is_new_position, is_removed_position, weight_delta_3d,
-                weight_delta_5d, weight_delta_10d, shares_delta_3d,
-                shares_delta_5d, shares_delta_10d, consecutive_add_days,
-                consecutive_reduce_days, consecutive_active_add_days,
-                consecutive_active_reduce_days, position_change_type,
-                active_direction, active_delta_source, is_active_add,
-                is_active_reduce, is_passive_weight_change,
-                is_mixed_weight_share_signal, confidence, source_type, created_at
+                prev_shares, shares, shares_delta_1d,
+                active_shares_delta_1d, active_shares_delta_pct_1d,
+                prev_rank, rank, is_new_position, is_removed_position,
+                consecutive_add_days, consecutive_reduce_days,
+                consecutive_active_add_days, consecutive_active_reduce_days,
+                position_change_type, active_direction, is_active_add,
+                is_active_reduce, is_passive_weight_change, confidence
             ) VALUES (
                 '2026-06-24', ?, ?, ?, '測試股', '2026-06-23',
-                2.0, 2.2, 0.2, NULL, 100.0, 100.0, 0.0,
-                NULL, 5, 5, 0, 0, 0, ?, NULL, NULL, ?, NULL, NULL,
-                ?, ?, ?, ?, ?, ?, 'shares', ?, ?, ?, ?, 'normal',
-                'moneydj_primary', '2026-06-24T00:00:00'
+                2.0, 2.2, 0.2, 100.0, 100.0, 0.0, ?, ?, 5, 5, 0, 0,
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal'
             )
             """,
             (
-                etf_code,
-                issuer,
-                stock_code,
-                weight_delta_3d,
-                shares_delta_3d,
-                consecutive_add_days,
-                consecutive_reduce_days,
-                consecutive_active_add_days,
-                consecutive_active_reduce_days,
-                position_change_type,
-                active_direction,
-                is_active_add,
-                is_active_reduce,
-                is_passive_weight_change,
-                is_mixed_weight_share_signal,
+                etf_code, issuer, stock_code, active_delta,
+                active_delta / 100.0 * 100.0,
+                consecutive_add_days, consecutive_reduce_days,
+                consecutive_active_add_days, consecutive_active_reduce_days,
+                position_change_type, active_direction, is_active_add,
+                is_active_reduce, is_passive_weight_change,
             ),
         )
 
@@ -190,13 +174,11 @@ def test_mixed_share_and_weight_direction_keeps_active_direction_but_marks_mixed
     assert add_mixed["position_change_type"] == "mixed_add_but_weight_down"
     assert add_mixed["active_direction"] == "add"
     assert add_mixed["is_active_add"] == 1
-    assert add_mixed["is_mixed_weight_share_signal"] == 1
 
     reduce_mixed = fetch_change("2454")
     assert reduce_mixed["position_change_type"] == "mixed_reduce_but_weight_up"
     assert reduce_mixed["active_direction"] == "reduce"
     assert reduce_mixed["is_active_reduce"] == 1
-    assert reduce_mixed["is_mixed_weight_share_signal"] == 1
 
 
 def test_consecutive_active_days_use_shares_not_weight():
@@ -211,7 +193,6 @@ def test_consecutive_active_days_use_shares_not_weight():
     row = fetch_change("2330")
     assert row["consecutive_add_days"] == 2
     assert row["consecutive_active_add_days"] == 0
-    assert row["shares_delta_3d"] == 0
 
 
 def test_signals_ignore_passive_weight_only_consensus_events():
@@ -223,8 +204,6 @@ def test_signals_ignore_passive_weight_only_consensus_events():
         position_change_type="passive_weight_increase",
         active_direction="none",
         is_passive_weight_change=1,
-        weight_delta_3d=1.2,
-        shares_delta_3d=0.0,
         consecutive_add_days=3,
         consecutive_active_add_days=0,
     )
@@ -235,8 +214,6 @@ def test_signals_ignore_passive_weight_only_consensus_events():
         position_change_type="passive_weight_increase",
         active_direction="none",
         is_passive_weight_change=1,
-        weight_delta_3d=1.1,
-        shares_delta_3d=0.0,
         consecutive_add_days=3,
         consecutive_active_add_days=0,
     )
@@ -256,8 +233,6 @@ def test_signals_use_confirmed_active_consensus_events():
         position_change_type="confirmed_active_add",
         active_direction="add",
         is_active_add=1,
-        weight_delta_3d=0.2,
-        shares_delta_3d=30.0,
         consecutive_active_add_days=3,
     )
     insert_change(
@@ -267,8 +242,6 @@ def test_signals_use_confirmed_active_consensus_events():
         position_change_type="confirmed_active_add",
         active_direction="add",
         is_active_add=1,
-        weight_delta_3d=-0.1,
-        shares_delta_3d=20.0,
         consecutive_active_add_days=3,
     )
 

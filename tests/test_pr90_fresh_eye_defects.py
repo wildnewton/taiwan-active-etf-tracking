@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import db
 import pipeline
-from manager_intent import generate_manager_intent_rollups
+from manager_intent import build_manager_intent_rows
 
 
 TARGET_DATE = "2026-07-17"
@@ -132,20 +132,12 @@ def test_manager_intent_uses_only_canonical_valid_holdings_rows():
     # B has only a structurally invalid one-row source on a date made usable by A.
     _insert_stock(TARGET_DATE, "B", "3711", 10.0, "moneydj_primary")
 
-    generate_manager_intent_rollups(TARGET_DATE, windows=(5,))
-
-    with db._connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT issuer_key, stock_code
-            FROM manager_intent_rollups
-            WHERE date = ? AND window_days = 5
-              AND entity_level = 'issuer_stock'
-              AND stock_code IN ('2330', '2454', '3711')
-            ORDER BY issuer_key, stock_code
-            """,
-            (TARGET_DATE,),
-        ).fetchall()
+    rows = [
+        (row["issuer_key"], row["stock_code"])
+        for row in build_manager_intent_rows(TARGET_DATE, 5)
+        if row["entity_level"] == "issuer_stock"
+        and row["stock_code"] in {"2330", "2454", "3711"}
+    ]
 
     assert rows == [("IssuerA", "2330")]
 
@@ -162,18 +154,12 @@ def test_manager_intent_fallback_context_excludes_invalid_etf_dates():
     # B becomes a valid candidate on the newer date.
     _insert_valid_snapshot(TARGET_DATE, "B", "3711", "moneydj_primary")
 
-    generate_manager_intent_rollups(TARGET_DATE, windows=(5,))
+    row = next(
+        row
+        for row in build_manager_intent_rows(TARGET_DATE, 5)
+        if row["entity_level"] == "issuer_stock"
+        and row["issuer_key"] == "IssuerB"
+        and row["stock_code"] == "3711"
+    )
 
-    with db._connect() as conn:
-        row = conn.execute(
-            """
-            SELECT eligible_days
-            FROM manager_intent_rollups
-            WHERE date = ? AND window_days = 5
-              AND entity_level = 'issuer_stock'
-              AND issuer_key = 'IssuerB' AND stock_code = '3711'
-            """,
-            (TARGET_DATE,),
-        ).fetchone()
-
-    assert row == (1,)
+    assert row["eligible_days"] == 1

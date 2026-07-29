@@ -82,8 +82,6 @@ def test_complete_try_run_avoids_playwright_and_preserves_production_db(tmp_path
             "skipped_etfs": [],
         },
     ), patch.object(
-        module, "generate_manager_intent_rollups", return_value={}
-    ), patch.object(
         module, "generate_manager_signals", return_value={}
     ), patch.object(
         module, "generate_signal_report", return_value="report"

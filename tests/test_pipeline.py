@@ -138,6 +138,9 @@ def test_run_daily_scrape_some_fail():
 
     with _patch_run_date(), _patch_active_etfs(), patch(
         "pipeline.scrape_holdings", side_effect=fake_scrape
+    ), patch(
+        "pipeline.get_etf_config",
+        side_effect=lambda code: {"code": code, "issuer": "TestIssuer"},
     ), patch("pipeline.init_db"), patch(
         "pipeline.replace_daily_snapshot", return_value={"inserted": True}
     ) as replace_snapshot:

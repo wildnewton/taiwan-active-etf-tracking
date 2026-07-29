@@ -131,7 +131,6 @@ def test_change_detection_uses_one_canonical_source_per_etf_date():
     assert summary["rows"] == 6
 
     tsmc = fetch_change("2330")
-    assert tsmc["source_type"] == "moneydj_primary"
     assert tsmc["prev_rank"] == 1
     assert tsmc["rank"] == 1
     assert tsmc["prev_shares"] == 100

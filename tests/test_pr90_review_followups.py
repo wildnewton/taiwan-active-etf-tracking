@@ -6,7 +6,7 @@ import db
 import report
 from changes import detect_holding_changes
 from etf_universe import get_eligible_etf_codes, get_etf_config, reconcile_discovered_universe
-from manager_intent import generate_manager_intent_rollups
+from manager_intent import build_manager_intent_rows
 from snapshot_validation import validate_snapshot_rows as real_validate_snapshot_rows
 
 
@@ -233,20 +233,14 @@ def test_ineligible_only_date_does_not_consume_manager_intent_window():
         _insert_complete_snapshot(data_date, "A", stock_weight=5.0)
     _insert_complete_snapshot(D5, "FUTURE")
 
-    generate_manager_intent_rollups(D6, windows=(5,))
-
-    with db._connect() as conn:
-        row = conn.execute(
-            """
-            SELECT eligible_days
-            FROM manager_intent_rollups
-            WHERE date = ? AND window_days = 5
-              AND entity_level = 'issuer_stock'
-              AND stock_code = '2330' AND issuer_key = 'IssuerA'
-            """,
-            (D6,),
-        ).fetchone()
-    assert row == (5,)
+    row = next(
+        row
+        for row in build_manager_intent_rows(D6, 5)
+        if row["entity_level"] == "issuer_stock"
+        and row["stock_code"] == "2330"
+        and row["issuer_key"] == "IssuerA"
+    )
+    assert row["eligible_days"] == 5
 
 
 def test_report_counts_canonical_non_stock_assets():

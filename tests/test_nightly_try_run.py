@@ -137,18 +137,10 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
             "skipped_etfs": [],
         }
 
-    def intent(target_date):
-        assert target_date == "2026-07-13"
-        with module.db._connect() as conn:
-            assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "changes"
-            conn.execute("UPDATE try_run_probe SET value = 'intent'")
-        seen.append("intent")
-        return {"ok": True, "date": target_date, "rows": 1}
-
     def signals(target_date):
         assert target_date == "2026-07-13"
         with module.db._connect() as conn:
-            assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "intent"
+            assert conn.execute("SELECT value FROM try_run_probe").fetchone()[0] == "changes"
             conn.execute("UPDATE try_run_probe SET value = 'signals'")
         seen.append("signals")
         return {"date": target_date}
@@ -173,13 +165,12 @@ def test_try_run_downstream_stages_share_the_same_disposable_state(tmp_path):
          patch.object(module, "run_daily_scrape_with_browser", side_effect=scrape), \
          patch.object(module, "get_latest_valid_date", return_value="2026-07-13"), \
          patch.object(module, "detect_holding_changes", side_effect=changes), \
-         patch.object(module, "generate_manager_intent_rollups", side_effect=intent), \
          patch.object(module, "generate_manager_signals", side_effect=signals), \
          patch.object(module, "generate_signal_report", side_effect=report), \
          patch.object(module, "generate_traction_report", side_effect=traction):
         module.run_try_run(str(production_db), str(production_reports))
 
-    assert seen == ["discovery", "scrape", "changes", "intent", "signals", "report", "traction"]
+    assert seen == ["discovery", "scrape", "changes", "signals", "report", "traction"]
     with sqlite3.connect(production_db) as conn:
         tables = {
             row[0]

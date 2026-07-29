@@ -3,32 +3,7 @@ import sqlite3
 
 import db
 from report import generate_signal_report, get_latest_signal_date
-
-
-def ensure_signal_table():
-    with db._connect() as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS etf_manager_signals (
-                date TEXT NOT NULL,
-                signal_id TEXT PRIMARY KEY,
-                signal_type TEXT NOT NULL,
-                signal_strength TEXT NOT NULL,
-                signal_score REAL NOT NULL,
-                stock_code TEXT NOT NULL,
-                stock_name TEXT,
-                etf_codes TEXT NOT NULL,
-                issuers TEXT NOT NULL,
-                etf_count INTEGER NOT NULL,
-                issuer_count INTEGER NOT NULL,
-                explanation TEXT,
-                evidence_json TEXT,
-                action_label TEXT,
-                confidence TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
+from signals import _ensure_table as ensure_signal_table
 
 
 def seed_universe(codes_with_retired):
@@ -48,13 +23,11 @@ def seed_universe(codes_with_retired):
 def insert_signal(
     date="2026-06-23",
     signal_type="new_core_position",
-    signal_strength="medium",
     signal_score=4,
     stock_code="2330",
     stock_name="台積電",
     etf_codes=None,
     issuers=None,
-    action_label="Watch",
 ):
     etf_codes = etf_codes or ["00980A"]
     issuers = issuers or ["Nomura"]
@@ -62,18 +35,15 @@ def insert_signal(
         conn.execute(
             """
             INSERT INTO etf_manager_signals (
-                date, signal_id, signal_type, signal_strength, signal_score,
+                date, signal_id, signal_type, signal_score,
                 stock_code, stock_name, etf_codes, issuers, etf_count,
-                issuer_count, explanation, evidence_json, action_label,
-                confidence, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal',
-                '2026-06-23T00:00:00')
+                issuer_count, explanation, evidence_json, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal')
             """,
             (
                 date,
                 f"{date}:{signal_type}:{stock_code}:{'-'.join(etf_codes)}",
                 signal_type,
-                signal_strength,
                 signal_score,
                 stock_code,
                 stock_name,
@@ -83,7 +53,6 @@ def insert_signal(
                 len(issuers),
                 f"{stock_code} generated {signal_type}",
                 json.dumps([{"stock_code": stock_code}], ensure_ascii=False),
-                action_label,
             ),
         )
 
@@ -145,7 +114,6 @@ def test_generate_signal_report_shows_summary_and_signals():
 
     insert_signal(
         signal_type="consensus_add_3d",
-        signal_strength="strong",
         signal_score=6,
         stock_code="2383",
         stock_name="台光電",
@@ -154,13 +122,11 @@ def test_generate_signal_report_shows_summary_and_signals():
     )
     insert_signal(
         signal_type="consensus_reduce_3d",
-        signal_strength="medium",
         signal_score=-6,
         stock_code="2454",
         stock_name="聯發科",
         etf_codes=["00980A", "00981A"],
         issuers=["Nomura", "Uni-President"],
-        action_label="Reduce Watch",
     )
 
     report = generate_signal_report("2026-06-23")

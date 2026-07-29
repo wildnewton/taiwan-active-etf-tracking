@@ -42,11 +42,11 @@ def _run_nightly(tmp_path, scrape_summary, *, latest_valid_date=TARGET_DATE, cha
         "skipped_etfs": [],
     }
     with patch.object(nightly_pipeline.db, "init_db"), \
+         patch("etf_universe.get_pending_review_etfs", return_value=[]), \
          patch.object(nightly_pipeline, "run_daily_scrape_with_browser", return_value=scrape_summary), \
          patch.object(nightly_pipeline.db, "get_target_snapshot_coverage", return_value={"actual_count": 1, "expected_count": 1, "missing_etfs": []}), \
          patch.object(nightly_pipeline, "get_latest_valid_date", return_value=latest_valid_date) as latest, \
          patch.object(nightly_pipeline, "detect_holding_changes", return_value=change_summary) as changes, \
-         patch.object(nightly_pipeline, "generate_manager_intent_rollups", return_value={}) as intent, \
          patch.object(nightly_pipeline, "generate_manager_signals", return_value={}) as signals, \
          patch.object(nightly_pipeline, "generate_signal_report", return_value="report") as report, \
          patch.object(nightly_pipeline, "generate_traction_report", return_value="traction") as traction:
@@ -55,18 +55,17 @@ def _run_nightly(tmp_path, scrape_summary, *, latest_valid_date=TARGET_DATE, cha
             str(tmp_path / "reports"),
             skip_discovery=True,
         )
-    return result, latest, changes, intent, signals, report, traction
+    return result, latest, changes, signals, report, traction
 
 
 def test_nightly_passes_one_validated_target_date_to_every_downstream_stage(tmp_path):
-    result, latest, changes, intent, signals, report, traction = _run_nightly(
+    result, latest, changes, signals, report, traction = _run_nightly(
         tmp_path,
         _scrape_summary(),
     )
 
     latest.assert_called_once_with()
     changes.assert_called_once_with(current_date=TARGET_DATE)
-    intent.assert_called_once_with(TARGET_DATE)
     signals.assert_called_once_with(TARGET_DATE)
     report.assert_called_once_with(TARGET_DATE, quality_run_date=RUN_DATE)
     traction.assert_called_once_with(
@@ -128,7 +127,6 @@ def _retry_with_improvement(target_date, change_summary):
          ), \
          patch.object(retry_stale_scrapes, "run_selected_scrape_with_browser", return_value={"date": target_date}), \
          patch.object(retry_stale_scrapes, "detect_holding_changes", return_value=change_summary) as changes, \
-         patch.object(retry_stale_scrapes, "generate_manager_intent_rollups", return_value={}) as intent, \
          patch.object(retry_stale_scrapes, "generate_manager_signals", return_value={}) as signals, \
          patch.object(retry_stale_scrapes, "_overwrite_reports", return_value={}) as reports:
         result = retry_stale_scrapes.retry_missing_holdings(
@@ -136,12 +134,12 @@ def _retry_with_improvement(target_date, change_summary):
             target_date=target_date,
             report_dir=Path("reports"),
         )
-    return result, changes, intent, signals, reports
+    return result, changes, signals, reports
 
 
 def test_historical_retry_rebuilds_every_layer_for_the_explicit_date():
     historical_date = "2026-07-10"
-    result, changes, intent, signals, reports = _retry_with_improvement(
+    result, changes, signals, reports = _retry_with_improvement(
         historical_date,
         {
             "ok": True,
@@ -152,7 +150,6 @@ def test_historical_retry_rebuilds_every_layer_for_the_explicit_date():
     )
 
     changes.assert_called_once_with(current_date=historical_date)
-    intent.assert_called_once_with(historical_date)
     signals.assert_called_once_with(historical_date)
     reports.assert_called_once_with(
         ":memory:",
