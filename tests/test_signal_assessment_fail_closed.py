@@ -87,3 +87,21 @@ def test_invalid_enabled_criterion_fields_fail_closed_with_visible_warning():
         assert "2330 台積電" not in text
         assert expected_warning in text
         assert "no enabled valid criteria" in text
+
+
+def test_any_invalid_enabled_criterion_fails_closed_even_when_another_is_valid():
+    _setup_signal()
+    with db._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO assessment_criteria (
+                criterion_key, enabled, weight, importance, parameters_json
+            ) VALUES ('unknown_evaluator', 1, 1.0, 'low', '{}')
+            """
+        )
+
+    text = report.generate_signal_report(DATE)
+
+    assert "2330 台積電" not in text
+    assert "訊號評估設定警告" in text
+    assert "unknown evaluator: unknown_evaluator" in text
