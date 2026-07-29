@@ -53,9 +53,12 @@ def assess_signal_rows(conn, rows):
         """
     ).fetchall()
     criteria, warnings = _validated_criteria(criteria_rows)
-    if not criteria:
-        warnings.append("no enabled valid criteria")
+    if warnings:
+        if not criteria:
+            warnings.append("no enabled valid criteria")
         return [], warnings
+    if not criteria:
+        return [], ["no enabled valid criteria"]
 
     assessed = []
     for row in rows:
