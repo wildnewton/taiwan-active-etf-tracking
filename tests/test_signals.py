@@ -68,8 +68,7 @@ def load_signals():
         ).fetchall()
 
 
-
-def test_generates_new_and_removed_core_position_signals():
+def test_generates_new_and_removed_core_position_signal_facts():
     db.init_db(":memory:")
     insert_change(
         stock_code="6669",
@@ -119,12 +118,12 @@ def test_generates_new_and_removed_core_position_signals():
     new_core = [row for row in signals if row["signal_type"] == "new_core_position"][0]
     removed = [row for row in signals if row["signal_type"] == "removed_core_position"][0]
     assert new_core["stock_code"] == "6669"
-    assert new_core["signal_score"] == 4
     assert removed["stock_code"] == "2383"
-    assert removed["signal_score"] == -5
+    assert new_core["signal_id"] == "2026-06-23:new_core_position:6669:00980A"
+    assert removed["signal_id"] == "2026-06-23:removed_core_position:2383:00980A"
 
 
-def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
+def test_generates_consecutive_add_and_reduce_signal_facts_with_share_confirmation():
     db.init_db(":memory:")
     insert_change(
         stock_code="2330",
@@ -148,12 +147,10 @@ def test_generates_consecutive_add_and_reduce_signals_with_share_confirmation():
     )
 
     generate_manager_signals("2026-06-23")
-    signals = load_signals()
+    signal_types = {row["signal_type"] for row in load_signals()}
 
-    add = [row for row in signals if row["signal_type"] == "consecutive_add_3d"][0]
-    reduce = [row for row in signals if row["signal_type"] == "consecutive_reduce_3d"][0]
-    assert add["signal_score"] == 4
-    assert reduce["signal_score"] == -4
+    assert "consecutive_add_3d" in signal_types
+    assert "consecutive_reduce_3d" in signal_types
 
 
 def test_consensus_add_requires_two_independent_issuers_not_two_etfs_same_issuer():
@@ -199,13 +196,11 @@ def test_consensus_add_requires_two_independent_issuers_not_two_etfs_same_issuer
     assert len(consensus) == 1
     row = consensus[0]
     assert row["stock_code"] == "2383"
-    assert row["issuer_count"] == 2
-    assert row["etf_count"] == 3
-    assert row["signal_score"] == 4
     assert json.loads(row["issuers"]) == ["Nomura", "Uni-President"]
+    assert json.loads(row["etf_codes"]) == ["00980A", "00981A", "00985A"]
 
 
-def test_consensus_reduce_three_issuers_is_strong():
+def test_consensus_reduce_preserves_three_issuer_facts_without_strength_score():
     db.init_db(":memory:")
     for etf_code, issuer in [
         ("00980A", "Nomura"),
@@ -229,5 +224,5 @@ def test_consensus_reduce_three_issuers_is_strong():
     consensus = [row for row in load_signals() if row["signal_type"] == "consensus_reduce_3d"]
     assert len(consensus) == 1
     row = consensus[0]
-    assert row["issuer_count"] == 3
-    assert row["signal_score"] == -6
+    assert json.loads(row["issuers"]) == ["Fubon", "Nomura", "Uni-President"]
+    assert json.loads(row["etf_codes"]) == ["00405A", "00980A", "00981A"]
