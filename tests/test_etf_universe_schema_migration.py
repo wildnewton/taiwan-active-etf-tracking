@@ -81,6 +81,9 @@ def _create_production_universe(db_path, *, rows=ROWS, name_sql="TEXT NOT NULL")
             )
             """
         )
+        conn.execute(
+            "CREATE INDEX idx_etf_universe_retired ON etf_universe(retired, code)"
+        )
         placeholders = ", ".join("?" for _ in TARGET_COLUMNS)
         conn.executemany(
             f"""
@@ -155,12 +158,17 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
         matching_tables = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'etf_universe%'"
         ).fetchall()
+        index = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
+            ("idx_etf_universe_retired",),
+        ).fetchone()
         row = conn.execute(
             "SELECT code, name, official_url FROM etf_universe"
         ).fetchone()
 
     assert set(PRODUCTION_LEGACY_COLUMNS) <= columns
     assert matching_tables == [("etf_universe",)]
+    assert index == ("idx_etf_universe_retired",)
     assert row == ("00999A", None, "https://example.test/00999A")
 
 
