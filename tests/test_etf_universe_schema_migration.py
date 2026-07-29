@@ -115,12 +115,39 @@ def test_init_db_rebuilds_current_production_etf_universe(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
             ("idx_etf_universe_retired",),
         ).fetchone()
+        assessment_columns = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(assessment_criteria)"
+            ).fetchall()
+        }
+        default_criterion = conn.execute(
+            """
+            SELECT criterion_key, enabled, weight, importance, parameters_json
+            FROM assessment_criteria
+            WHERE criterion_key = 'minimum_issuer_consensus'
+            """
+        ).fetchone()
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
 
     assert columns == TARGET_COLUMNS
     assert primary_key_columns == {"code": 1}
     assert rows == ROWS
     assert index == ("idx_etf_universe_retired",)
+    assert assessment_columns == {
+        "criterion_key",
+        "enabled",
+        "weight",
+        "importance",
+        "parameters_json",
+    }
+    assert default_criterion == (
+        "minimum_issuer_consensus",
+        1,
+        6.0,
+        "high",
+        '{"min_issuer_count": 3}',
+    )
     assert integrity == "ok"
 
 
@@ -162,6 +189,10 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
             "SELECT name FROM sqlite_master WHERE type = 'index' AND name = ?",
             ("idx_etf_universe_retired",),
         ).fetchone()
+        assessment_table = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+            ("assessment_criteria",),
+        ).fetchone()
         row = conn.execute(
             "SELECT code, name, official_url FROM etf_universe"
         ).fetchone()
@@ -169,6 +200,7 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
     assert set(PRODUCTION_LEGACY_COLUMNS) <= columns
     assert matching_tables == [("etf_universe",)]
     assert index == ("idx_etf_universe_retired",)
+    assert assessment_table is None
     assert row == ("00999A", None, "https://example.test/00999A")
 
 
