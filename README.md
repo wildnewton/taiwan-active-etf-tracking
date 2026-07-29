@@ -122,6 +122,8 @@ SET parameters_json = '{"min_issuer_count": 2}',
 WHERE criterion_key = 'minimum_issuer_consensus';
 ```
 
+Within the same freshness group, `importance` sorts before the sum of matched-criteria `weight`; weight is never persisted on signal rows or rendered as a score.
+
 Invalid or unavailable enabled criteria fail closed: no manager signals are promoted into the report, and the report includes a configuration warning. Adding a new criterion meaning still requires a corresponding evaluator in `scripts/signal_assessment.py`; the database stores operational parameters, not executable expressions.
 
 ## Run tests
