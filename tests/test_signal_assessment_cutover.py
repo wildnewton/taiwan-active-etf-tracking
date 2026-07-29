@@ -20,27 +20,22 @@ def test_derived_schema_cutover_preserves_operational_signal_criteria(tmp_path):
             SET enabled = 1,
                 weight = 9.5,
                 importance = 'critical',
-                parameters_json = '{"min_issuer_count": 2}',
-                description = 'custom production criterion',
-                updated_at = 'custom'
+                parameters_json = '{"min_issuer_count": 2}'
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
         )
         conn.execute(
             """
             INSERT INTO assessment_criteria (
-                criterion_key, scope, enabled, weight, importance,
-                parameters_json, description, updated_at
+                criterion_key, enabled, weight, importance, parameters_json
             ) VALUES (
-                'future_known_evaluator', 'manager_signal', 0, 2.0, 'low',
-                '{}', 'disabled custom row', 'custom-2'
+                'future_known_evaluator', 0, 2.0, 'low', '{}'
             )
             """
         )
         before = conn.execute(
             """
-            SELECT criterion_key, scope, enabled, weight, importance,
-                   parameters_json, description, updated_at
+            SELECT criterion_key, enabled, weight, importance, parameters_json
             FROM assessment_criteria
             ORDER BY criterion_key
             """
@@ -56,13 +51,19 @@ def test_derived_schema_cutover_preserves_operational_signal_criteria(tmp_path):
     with sqlite3.connect(db_path) as conn:
         after = conn.execute(
             """
-            SELECT criterion_key, scope, enabled, weight, importance,
-                   parameters_json, description, updated_at
+            SELECT criterion_key, enabled, weight, importance, parameters_json
             FROM assessment_criteria
             ORDER BY criterion_key
             """
         ).fetchall()
         assert after == before
+        assert _columns(conn, "assessment_criteria") == {
+            "criterion_key",
+            "enabled",
+            "weight",
+            "importance",
+            "parameters_json",
+        }
         assert {
             "signal_score",
             "etf_count",
