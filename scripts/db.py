@@ -3,6 +3,7 @@ from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
 
+from signal_assessment import ensure_assessment_criteria_table
 from snapshot_validation import snapshot_metrics, validate_snapshot_rows
 from source_priority import source_priority
 
@@ -67,6 +68,7 @@ def init_db(db_path):
 
     with conn:
         _create_etf_universe_table(conn)
+        ensure_assessment_criteria_table(conn)
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_holdings (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, stock_code TEXT NOT NULL, stock_name TEXT, shares REAL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, stock_code, source_type))")
         conn.execute("CREATE TABLE IF NOT EXISTS etf_daily_non_stock_assets (date TEXT NOT NULL, etf_code TEXT NOT NULL, asset_name TEXT NOT NULL, asset_type TEXT NOT NULL, weight_pct REAL NOT NULL, source_url TEXT NOT NULL, source_type TEXT NOT NULL, extraction_method TEXT NOT NULL, scraped_at TEXT NOT NULL, PRIMARY KEY (date, etf_code, asset_name, source_type))")
         # Scrape attempts are operational logs, not canonical business data.
