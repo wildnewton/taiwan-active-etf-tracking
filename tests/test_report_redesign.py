@@ -323,7 +323,7 @@ def test_manager_signal_visibility_uses_database_criterion_threshold():
         conn.execute(
             """
             UPDATE assessment_criteria
-            SET parameters_json = '{"min_issuer_count": 2}', updated_at = 'custom'
+            SET parameters_json = '{"min_issuer_count": 2}'
             WHERE criterion_key = 'minimum_issuer_consensus'
             """
         )
