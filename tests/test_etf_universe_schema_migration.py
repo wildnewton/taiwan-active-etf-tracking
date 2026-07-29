@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 import db
 
 
@@ -142,12 +144,8 @@ def test_etf_universe_rebuild_rolls_back_on_copy_failure(tmp_path):
         name_sql="TEXT",
     )
 
-    try:
+    with pytest.raises(sqlite3.IntegrityError):
         db.init_db(db_path)
-    except sqlite3.IntegrityError:
-        pass
-    else:
-        raise AssertionError("expected the compact schema copy to reject NULL name")
 
     with sqlite3.connect(db_path) as conn:
         columns = {
