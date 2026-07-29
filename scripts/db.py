@@ -12,6 +12,25 @@ _DB_PATH = DEFAULT_DB_PATH
 _MEMORY_CONN = None
 
 
+_ETF_UNIVERSE_COLUMNS = (
+    "code",
+    "name",
+    "issuer",
+    "market",
+    "isin",
+    "listing_date",
+    "retired",
+    "first_seen_date",
+    "official_url",
+    "official_method",
+    "official_logic",
+    "created_at",
+    "updated_at",
+)
+_LEGACY_ETF_UNIVERSE_COLUMNS = {
+    "last_active_date",
+    "pending_retirement_since",
+}
 _ETF_UNIVERSE_COLUMNS_SQL = """
     code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -84,6 +103,16 @@ def init_db(db_path):
 
 
 def _create_etf_universe_table(conn):
+    existing_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()
+    }
+    if existing_columns & _LEGACY_ETF_UNIVERSE_COLUMNS:
+        _rebuild_etf_universe_table(conn)
+        return
+    _create_compact_etf_universe_table(conn)
+
+
+def _create_compact_etf_universe_table(conn):
     conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS etf_universe (
@@ -91,6 +120,27 @@ def _create_etf_universe_table(conn):
         )
         """
     )
+
+
+def _rebuild_etf_universe_table(conn):
+    columns_sql = ", ".join(_ETF_UNIVERSE_COLUMNS)
+    conn.execute("SAVEPOINT rebuild_etf_universe")
+    try:
+        conn.execute("ALTER TABLE etf_universe RENAME TO etf_universe_legacy")
+        _create_compact_etf_universe_table(conn)
+        conn.execute(
+            f"""
+            INSERT INTO etf_universe ({columns_sql})
+            SELECT {columns_sql}
+            FROM etf_universe_legacy
+            """
+        )
+        conn.execute("DROP TABLE etf_universe_legacy")
+    except Exception:
+        conn.execute("ROLLBACK TO rebuild_etf_universe")
+        conn.execute("RELEASE rebuild_etf_universe")
+        raise
+    conn.execute("RELEASE rebuild_etf_universe")
 
 
 def _ensure_change_diagnostics_table(conn):
