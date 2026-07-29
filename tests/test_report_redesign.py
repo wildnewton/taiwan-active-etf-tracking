@@ -54,16 +54,13 @@ def insert_signal(
     stock_code="2330",
     stock_name="台積電",
     signal_type="consensus_add_3d",
-    signal_score=6,
-    signal_strength="strong",
-    action_label="Watch",
     freshness="new",
     reason="first reaches consensus",
     issuers=None,
     etf_codes=None,
 ):
-    issuers = issuers or ["野村", "統一"]
-    etf_codes = etf_codes or ["00980A", "00981A"]
+    issuers = issuers or ["野村", "統一", "富邦"]
+    etf_codes = etf_codes or ["00980A", "00981A", "00405A"]
     evidence = [
         {
             "date": date,
@@ -79,24 +76,19 @@ def insert_signal(
         conn.execute(
             """
             INSERT INTO etf_manager_signals (
-                date, signal_id, signal_type, signal_score,
-                stock_code, stock_name, etf_codes, issuers, etf_count,
-                issuer_count, explanation, evidence_json,
+                date, signal_id, signal_type, stock_code, stock_name,
+                etf_codes, issuers, evidence_json,
                 confidence, signal_freshness, freshness_reason
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'high', ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'high', ?, ?)
             """,
             (
                 date,
                 f"{date}:{signal_type}:{stock_code}:{'-'.join(etf_codes)}",
                 signal_type,
-                signal_score,
                 stock_code,
                 stock_name,
                 json.dumps(etf_codes, ensure_ascii=False),
                 json.dumps(issuers, ensure_ascii=False),
-                len(etf_codes),
-                len(issuers),
-                f"{stock_code} generated {signal_type}",
                 json.dumps(evidence, ensure_ascii=False),
                 freshness,
                 reason,
@@ -307,29 +299,35 @@ def test_exposure_movers_exclude_passive_and_small_active_delta_rows():
     assert "2454 聯發科" not in report
 
 
-def test_manager_signal_report_only_displays_scores_at_least_six_in_magnitude():
+def test_manager_signal_visibility_uses_database_criterion_threshold():
     db.init_db(":memory:")
     ensure_signal_table()
-    insert_signal(stock_code="2330", stock_name="台積電", signal_score=6)
-    insert_signal(stock_code="2454", stock_name="聯發科", signal_score=5)
     insert_signal(
-        stock_code="2303",
-        stock_name="聯電",
-        signal_type="consensus_reduce_3d",
-        signal_score=-6,
-        action_label="Reduce Watch",
+        stock_code="2330",
+        stock_name="台積電",
+        issuers=["野村", "統一", "富邦"],
+        etf_codes=["00980A", "00981A", "00405A"],
     )
     insert_signal(
-        stock_code="3711",
-        stock_name="日月光投控",
-        signal_type="consensus_reduce_3d",
-        signal_score=-5,
-        action_label="Reduce Watch",
+        stock_code="2454",
+        stock_name="聯發科",
+        issuers=["野村", "統一"],
+        etf_codes=["00980A", "00981A"],
     )
 
-    report = generate_signal_report("2026-06-26")
+    default_report = generate_signal_report("2026-06-26")
+    assert "2330 台積電" in default_report
+    assert "2454 聯發科" not in default_report
 
-    assert "2330 台積電" in report
-    assert "2303 聯電" in report
-    assert "2454 聯發科" not in report
-    assert "3711 日月光投控" not in report
+    with db._connect() as conn:
+        conn.execute(
+            """
+            UPDATE assessment_criteria
+            SET parameters_json = '{"min_issuer_count": 2}'
+            WHERE criterion_key = 'minimum_issuer_consensus'
+            """
+        )
+
+    configured_report = generate_signal_report("2026-06-26")
+    assert "2330 台積電" in configured_report
+    assert "2454 聯發科" in configured_report
