@@ -3,7 +3,6 @@ import math
 
 
 DEFAULT_CRITERION_KEY = "minimum_issuer_consensus"
-MANAGER_SIGNAL_SCOPE = "manager_signal"
 IMPORTANCE_ORDER = {
     "critical": 0,
     "high": 1,
@@ -17,31 +16,22 @@ def ensure_assessment_criteria_table(conn):
         """
         CREATE TABLE IF NOT EXISTS assessment_criteria (
             criterion_key TEXT PRIMARY KEY,
-            scope TEXT NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1,
             weight REAL NOT NULL,
             importance TEXT NOT NULL,
-            parameters_json TEXT NOT NULL,
-            description TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            parameters_json TEXT NOT NULL
         )
         """
     )
     conn.execute(
         """
         INSERT OR IGNORE INTO assessment_criteria (
-            criterion_key, scope, enabled, weight, importance,
-            parameters_json, description, updated_at
-        ) VALUES (
-            ?, ?, 1, 6.0, 'high', ?, ?,
-            strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        )
+            criterion_key, enabled, weight, importance, parameters_json
+        ) VALUES (?, 1, 6.0, 'high', ?)
         """,
         (
             DEFAULT_CRITERION_KEY,
-            MANAGER_SIGNAL_SCOPE,
             json.dumps({"min_issuer_count": 3}, sort_keys=True),
-            "Show consensus signals supported by at least the configured issuer count.",
         ),
     )
 
@@ -58,10 +48,9 @@ def assess_signal_rows(conn, rows):
         """
         SELECT criterion_key, weight, importance, parameters_json
         FROM assessment_criteria
-        WHERE scope = ? AND enabled = 1
+        WHERE enabled = 1
         ORDER BY criterion_key
-        """,
-        (MANAGER_SIGNAL_SCOPE,),
+        """
     ).fetchall()
     criteria, warnings = _validated_criteria(criteria_rows)
     if not criteria:
