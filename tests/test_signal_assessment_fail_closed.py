@@ -77,7 +77,7 @@ def test_invalid_enabled_criterion_fields_fail_closed_with_visible_warning():
             conn.execute(
                 f"""
                 UPDATE assessment_criteria
-                SET {assignment}, updated_at = 'invalid-test'
+                SET {assignment}
                 WHERE criterion_key = 'minimum_issuer_consensus'
                 """
             )
