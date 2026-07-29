@@ -101,16 +101,16 @@ def test_init_db_rebuilds_etf_universe_for_each_legacy_column(tmp_path, legacy_c
     db.init_db(db_path)
 
     with sqlite3.connect(db_path) as conn:
-        columns = [
-            row[1]
-            for row in conn.execute("PRAGMA table_info(etf_universe)").fetchall()
-        ]
+        table_info = conn.execute("PRAGMA table_info(etf_universe)").fetchall()
+        columns = [row[1] for row in table_info]
+        primary_key_columns = {row[1]: row[5] for row in table_info if row[5]}
         rows = conn.execute(
             f"SELECT {', '.join(TARGET_COLUMNS)} FROM etf_universe ORDER BY code"
         ).fetchall()
         integrity = conn.execute("PRAGMA integrity_check").fetchone()[0]
 
     assert columns == TARGET_COLUMNS
+    assert primary_key_columns == {"code": 1}
     assert rows == ROWS
     assert integrity == "ok"
 
