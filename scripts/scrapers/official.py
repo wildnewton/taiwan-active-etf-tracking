@@ -1161,8 +1161,10 @@ def _parser_for_issuer(issuer: str):
         raise ValueError(f"No static official parser for issuer: {issuer}") from exc
 
 
-def _parse_official_logic(logic: str) -> dict:
+def _parse_official_logic(logic: str | None) -> dict:
     internal_ids = {}
+    if not logic:
+        return internal_ids
     for part in logic.split(";"):
         if "=" not in part:
             continue
