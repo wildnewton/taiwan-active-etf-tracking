@@ -1,7 +1,7 @@
 """Tests for SinoPac (永豐) official PCF parser."""
 
 import os
-import pytest
+from unittest.mock import patch
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 SINOPAC_FIXTURE = os.path.join(FIXTURE_DIR, "sinopac_00410A_pcf.html")
@@ -62,7 +62,6 @@ class TestParseSinoPac:
 
         html = _load_fixture()
         rows = parse_sinopac(html, "00410A", "https://test")
-        # All rows should have the same date
         dates = set(r["date"] for r in rows)
         assert len(dates) == 1, f"Expected single date, got {dates}"
         assert "2026-08-05" in dates, f"Expected 2026-08-05, got {dates}"
@@ -84,13 +83,46 @@ class TestParseSinoPac:
         assert rows == []
 
 
-class TestSinoPacRegistered:
-    """SinoPac issuer should be registered in _parser_for_issuer."""
+class TestSinoPacIntegration:
+    """SinoPac config and static routing should work through the public entrypoint."""
 
     def test_sinopac_parser_registered(self):
-        """_parser_for_issuer should accept 'SinoPac'."""
-        from scripts.scrapers.official import _parser_for_issuer
+        from scripts.scrapers.official import _parser_for_issuer, parse_sinopac
 
-        parser = _parser_for_issuer("SinoPac")
-        # Should return a callable, not raise KeyError
-        assert callable(parser)
+        assert _parser_for_issuer("SinoPac") is parse_sinopac
+
+    @patch("scripts.scrapers.official.fetch_static")
+    @patch("scripts.scrapers.official.get_etf_config")
+    def test_static_entrypoint_handles_null_official_logic(
+        self,
+        mock_get_etf_config,
+        mock_fetch_static,
+    ):
+        from scripts.scrapers.official import scrape_official_static
+
+        mock_get_etf_config.return_value = {
+            "code": "00410A",
+            "issuer": "SinoPac",
+            "name": "永豐臺灣ESG永續優選主動式ETF",
+            "official_url": "https://sitc.sinopac.com/SinopacEtfs/Etfs/Pcf/00410A",
+            "official_method": "static",
+            "official_logic": None,
+        }
+        mock_fetch_static.return_value = _load_fixture()
+
+        result = scrape_official_static("00410A")
+
+        assert result["ok"] is True
+        assert len(result["stock_rows"]) == 35
+        assert {row["date"] for row in result["stock_rows"]} == {"2026-08-05"}
+
+
+class TestHeaderMatching:
+    """Shared header matching must not become broader than required for SinoPac."""
+
+    def test_generic_fund_code_is_not_treated_as_security_code(self):
+        from scripts.scrapers.official import _build_header_map
+
+        header_map = _build_header_map(["基金代碼", "證券名稱", "股數", "權重"])
+
+        assert "code" not in header_map
