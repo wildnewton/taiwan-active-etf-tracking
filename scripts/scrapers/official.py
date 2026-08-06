@@ -352,8 +352,6 @@ def parse_allianz_api(
     if not rows:
         raise ValueError("Allianz stock rows not found")
     return dedupe_rows(rows)
-
-
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
         match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
@@ -722,6 +720,7 @@ async def scrape_official_with_browser(
     if method == "playwright" and issuer == "Uni-President":
         return await scrape_uni_president_playwright(etf_code, page)
 
+
     return _failed_result(config["url"], f"No browser official scraper for {issuer} (method={method})")
 
 
@@ -916,14 +915,7 @@ def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date,
 
 def _build_header_map(headers: list[str]) -> dict:
     field_patterns = {
-        "code": (
-            "股票代號",
-            "股票代碼",
-            "證券代號",
-            "證券代碼",
-            "代號",
-            "code",
-        ),
+        "code": ("股票代號", "股票代碼", "證券代號", "證券代碼", "代號", "code"),
         "name": ("股票名稱", "證券名稱", "名稱", "name"),
         "shares": ("持有股數", "持股數", "庫存股數", "股數", "shares"),
         "weight": ("權重", "投資比例", "佔基金淨資產比例", "比例", "weight", "%"),
@@ -973,6 +965,8 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
         pane_text,
     )
     return labeled_date_match.group(1) if labeled_date_match else None
+
+
 
 
 _JPMORGAN_SHEETS = {
@@ -1129,7 +1123,7 @@ def _parse_float(value: str) -> float | None:
 
 
 def _parse_number(value: str) -> int | float | None:
-    cleaned = value.strip().replace(",", "").replace("%", "")
+    cleaned = value.strip().replace(",", "")
     if not cleaned or cleaned.upper() in {"-", "--", "N/A", "NA"}:
         return None
     number = float(cleaned)
@@ -1186,6 +1180,7 @@ def _official_weight_warning(total_weight: float) -> dict | None:
         "minimum_expected_weight": OFFICIAL_WARNING_MIN_TOTAL_WEIGHT,
         "maximum_expected_weight": OFFICIAL_WARNING_MAX_TOTAL_WEIGHT,
     }
+
 
 
 def _failed_result(source_url: str, reason: str) -> dict:
