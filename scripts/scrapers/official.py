@@ -90,6 +90,14 @@ def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
 
+def parse_sinopac(html: str, etf_code: str, source_url: str) -> list[dict]:
+    rows = _parse_official_table(html, etf_code, source_url)
+    for row in rows:
+        if row.get("date"):
+            row["date"] = row["date"].replace("/", "-")
+    return rows
+
+
 # API / text parsers
 
 def parse_capital_api(buyback_json: str, etf_code: str, source_url: str) -> list[dict]:
@@ -344,7 +352,6 @@ def parse_allianz_api(
     if not rows:
         raise ValueError("Allianz stock rows not found")
     return dedupe_rows(rows)
-
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
         match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
@@ -908,7 +915,7 @@ def _row(etf_code, stock_code, stock_name, shares, weight_pct, source_url, date,
 
 def _build_header_map(headers: list[str]) -> dict:
     field_patterns = {
-        "code": ("股票代號", "股票代碼", "證券代號", "代號", "code"),
+        "code": ("股票代號", "股票代碼", "證券代號", "證券代碼", "代號", "code"),
         "name": ("股票名稱", "證券名稱", "名稱", "name"),
         "shares": ("持有股數", "持股數", "庫存股數", "股數", "shares"),
         "weight": ("權重", "投資比例", "佔基金淨資產比例", "比例", "weight", "%"),
@@ -1124,15 +1131,22 @@ def _parse_number(value: str) -> int | float | None:
 
 
 def _parser_for_issuer(issuer: str):
-    parsers = {"Fubon": parse_fubon, "Taishin": parse_taishin, "TWSE": parse_twse}
+    parsers = {
+        "Fubon": parse_fubon,
+        "Taishin": parse_taishin,
+        "TWSE": parse_twse,
+        "SinoPac": parse_sinopac,
+    }
     try:
         return parsers[issuer]
     except KeyError as exc:
         raise ValueError(f"No static official parser for issuer: {issuer}") from exc
 
 
-def _parse_official_logic(logic: str) -> dict:
+def _parse_official_logic(logic: str | None) -> dict:
     internal_ids = {}
+    if not logic:
+        return internal_ids
     for part in logic.split(";"):
         if "=" not in part:
             continue
