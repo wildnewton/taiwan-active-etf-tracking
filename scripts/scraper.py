@@ -201,7 +201,7 @@ async def _official_fallback_with_browser(
 ) -> dict:
     config = get_etf_config(etf_code)
     if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
-        if config.get("issuer") == "JPMorgan":
+        if config.get("issuer") in {"JPMorgan", "Allianz"}:
             official_browser = await scrape_official_with_browser(
                 etf_code,
                 page,
