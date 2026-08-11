@@ -1,7 +1,7 @@
 import inspect
 import json
 from datetime import date
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 import requests
@@ -11,10 +11,14 @@ import scrapers.official as official
 
 
 ALLIANZ_URL = "https://etf.allianzgi.com.tw/list-trade"
+ANTIFORGERY_URL = (
+    "https://etf.allianzgi.com.tw/webapi/api/AntiForgery/GetAntiForgeryToken"
+)
 OPTIONS_URL = (
     "https://etf.allianzgi.com.tw/webapi/api/Category/GetFundDropdownOptions"
 )
 TRADE_URL = "https://etf.allianzgi.com.tw/webapi/api/Fund/GetFundTradeInfo"
+XSRF_TOKEN = "test-xsrf-token"
 
 
 OPTIONS_JSON = json.dumps(
@@ -112,7 +116,23 @@ class _DirectResponse:
             raise requests.HTTPError(f"HTTP {self.status_code}", response=self)
 
 
-def _direct_post_side_effect(trade_payload, *, trade_status=200):
+def _session_mock(
+    trade_payload,
+    *,
+    trade_status=200,
+    antiforgery_payload=None,
+    antiforgery_status=200,
+):
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.get.return_value = _DirectResponse(
+        ANTIFORGERY_URL,
+        {"token": XSRF_TOKEN}
+        if antiforgery_payload is None
+        else antiforgery_payload,
+        status_code=antiforgery_status,
+    )
+
     def post(url, **kwargs):
         if url == OPTIONS_URL:
             return _DirectResponse(url, json.loads(OPTIONS_JSON))
@@ -120,7 +140,8 @@ def _direct_post_side_effect(trade_payload, *, trade_status=200):
             return _DirectResponse(url, trade_payload, status_code=trade_status)
         raise AssertionError(f"unexpected POST URL: {url}")
 
-    return post
+    session.post.side_effect = post
+    return session
 
 
 async def _call_direct_handler(
@@ -129,21 +150,30 @@ async def _call_direct_handler(
     trade_payload,
     *,
     trade_status=200,
+    antiforgery_payload=None,
+    antiforgery_status=200,
 ):
+    session = _session_mock(
+        trade_payload,
+        trade_status=trade_status,
+        antiforgery_payload=antiforgery_payload,
+        antiforgery_status=antiforgery_status,
+    )
     with (
         patch("scrapers.official.get_official_config", return_value=_allianz_config()),
         patch(
+            "scrapers.official.requests.Session",
+            return_value=session,
+        ) as session_factory,
+        patch(
             "scrapers.official.requests.post",
-            side_effect=_direct_post_side_effect(
-                trade_payload,
-                trade_status=trade_status,
-            ),
-        ) as post,
+            side_effect=AssertionError("raw requests.post is forbidden"),
+        ) as raw_post,
     ):
         result = official.scrape_allianz_api(etf_code, target_date)
         if inspect.isawaitable(result):
             result = await result
-    return result, post
+    return result, session, session_factory, raw_post
 
 
 def _allianz_config():
@@ -258,8 +288,8 @@ def test_parse_allianz_api_fails_closed_on_identity_or_shape_errors(payload, mes
 
 
 @pytest.mark.asyncio
-async def test_scrape_allianz_posts_exact_fund_and_taipei_midnight_payload():
-    result, post = await _call_direct_handler(
+async def test_scrape_allianz_uses_one_xsrf_session_and_exact_trade_payload():
+    result, session, session_factory, raw_post = await _call_direct_handler(
         "00984A",
         date(2026, 7, 17),
         _trade_payload(
@@ -269,8 +299,31 @@ async def test_scrape_allianz_posts_exact_fund_and_taipei_midnight_payload():
         ),
     )
 
-    trade_calls = [call for call in post.call_args_list if call.args == (TRADE_URL,)]
+    raw_post.assert_not_called()
+    session_factory.assert_called_once_with()
+    assert [
+        (request_call[0], request_call.args[0])
+        for request_call in session.method_calls
+        if request_call[0] in {"get", "post"}
+    ] == [
+        ("get", ANTIFORGERY_URL),
+        ("post", OPTIONS_URL),
+        ("post", TRADE_URL),
+    ]
+    options_calls = [
+        request_call
+        for request_call in session.post.call_args_list
+        if request_call.args == (OPTIONS_URL,)
+    ]
+    trade_calls = [
+        request_call
+        for request_call in session.post.call_args_list
+        if request_call.args == (TRADE_URL,)
+    ]
+    assert len(options_calls) == 1
     assert len(trade_calls) == 1
+    assert options_calls[0].kwargs["headers"] == {"X-XSRF-TOKEN": XSRF_TOKEN}
+    assert trade_calls[0].kwargs["headers"] == {"X-XSRF-TOKEN": XSRF_TOKEN}
     assert trade_calls[0].kwargs["json"] == {
         "Date": "2026-07-16T16:00:00.000Z",
         "FundNo": "E0001",
@@ -401,6 +454,39 @@ def _invalid_trade_case(case):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("antiforgery_payload", "antiforgery_status"),
+    [
+        ({"token": XSRF_TOKEN}, 503),
+        ("{not-json", 200),
+        ({}, 200),
+        ({"token": ""}, 200),
+    ],
+    ids=["http_error", "invalid_json", "missing_token", "empty_token"],
+)
+async def test_scrape_allianz_fails_closed_for_invalid_antiforgery_response(
+    antiforgery_payload,
+    antiforgery_status,
+):
+    result, session, session_factory, raw_post = await _call_direct_handler(
+        "00993A",
+        date(2026, 7, 17),
+        _trade_payload(),
+        antiforgery_payload=antiforgery_payload,
+        antiforgery_status=antiforgery_status,
+    )
+
+    raw_post.assert_not_called()
+    session_factory.assert_called_once_with()
+    assert session.get.call_count == 1
+    assert session.get.call_args.args == (ANTIFORGERY_URL,)
+    session.post.assert_not_called()
+    assert result["ok"] is False
+    assert result["all_rows"] == []
+    assert result["stock_rows"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     "case",
     [
         "http_error",
@@ -417,13 +503,14 @@ def _invalid_trade_case(case):
 async def test_scrape_allianz_fails_closed_for_invalid_trade_response(case):
     trade_payload, trade_status = _invalid_trade_case(case)
 
-    result, _ = await _call_direct_handler(
+    result, _, _, raw_post = await _call_direct_handler(
         "00993A",
         date(2026, 7, 17),
         trade_payload,
         trade_status=trade_status,
     )
 
+    raw_post.assert_not_called()
     assert result["ok"] is False
     assert result["all_rows"] == []
     assert result["stock_rows"] == []
@@ -431,12 +518,13 @@ async def test_scrape_allianz_fails_closed_for_invalid_trade_response(case):
 
 @pytest.mark.asyncio
 async def test_scrape_allianz_success_preserves_downstream_shape_and_metadata():
-    result, _ = await _call_direct_handler(
+    result, _, _, raw_post = await _call_direct_handler(
         "00993A",
         date(2026, 7, 17),
         _trade_payload(),
     )
 
+    raw_post.assert_not_called()
     assert set(result) == {
         "ok",
         "reason",
