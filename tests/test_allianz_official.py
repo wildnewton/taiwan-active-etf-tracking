@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import requests
 
+import scraper
 import scrapers.official as official
 
 
@@ -331,6 +332,41 @@ async def test_dispatcher_routes_every_configured_allianz_etf_to_direct_handler(
     page.locator.assert_not_called()
     page.expect_response.assert_not_called()
     option.click.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_passes_target_date_to_allianz_official_dispatcher():
+    etf_code = "00984A"
+    page = object()
+    target_date = date(2026, 7, 17)
+    dispatcher = AsyncMock(return_value={"ok": True})
+
+    with (
+        patch(
+            "scraper.get_etf_config",
+            return_value={
+                "issuer": "Allianz",
+                "official_method": "playwright",
+            },
+        ),
+        patch("scraper.scrape_official_with_browser", new=dispatcher),
+        patch(
+            "scraper._normalize_source_result",
+            side_effect=lambda result, source_type: result,
+        ),
+    ):
+        result = await scraper._official_fallback_with_browser(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
+
+    assert result["ok"] is True
+    dispatcher.assert_awaited_once_with(
+        etf_code,
+        page,
+        target_date=target_date,
+    )
 
 
 def _invalid_trade_case(case):
