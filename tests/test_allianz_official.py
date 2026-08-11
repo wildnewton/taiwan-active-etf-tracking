@@ -271,7 +271,7 @@ async def test_scrape_allianz_posts_exact_fund_and_taipei_midnight_payload():
     trade_calls = [call for call in post.call_args_list if call.args == (TRADE_URL,)]
     assert len(trade_calls) == 1
     assert trade_calls[0].kwargs["json"] == {
-        "Date": "2026-07-16T16:00:00Z",
+        "Date": "2026-07-16T16:00:00.000Z",
         "FundNo": "E0001",
     }
     assert result["ok"] is True
