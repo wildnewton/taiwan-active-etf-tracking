@@ -1,17 +1,24 @@
+import inspect
 import json
-from unittest.mock import AsyncMock, Mock, call, patch
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+import requests
 
+import scraper
 import scrapers.official as official
 
 
 ALLIANZ_URL = "https://etf.allianzgi.com.tw/list-trade"
+ANTIFORGERY_URL = (
+    "https://etf.allianzgi.com.tw/webapi/api/AntiForgery/GetAntiForgeryToken"
+)
 OPTIONS_URL = (
     "https://etf.allianzgi.com.tw/webapi/api/Category/GetFundDropdownOptions"
 )
 TRADE_URL = "https://etf.allianzgi.com.tw/webapi/api/Fund/GetFundTradeInfo"
-COMBOBOX_SELECTOR = '[role="combobox"][aria-label*="主動安聯"]'
+XSRF_TOKEN = "test-xsrf-token"
 
 
 OPTIONS_JSON = json.dumps(
@@ -93,107 +100,80 @@ def _trade_payload(
     }
 
 
-class _FakeResponse:
-    def __init__(
-        self,
-        url,
-        payload,
-        *,
-        method="POST",
-        ok=True,
-        status=200,
-    ):
+class _DirectResponse:
+    def __init__(self, url, payload, *, status_code=200):
         self.url = url
-        self._body = json.dumps(payload)
-        self.request = Mock(method=method)
-        self.ok = ok
-        self.status = status
+        self.status_code = status_code
+        self.ok = 200 <= status_code < 300
+        self.text = payload if isinstance(payload, str) else json.dumps(payload)
+        self.content = self.text.encode()
 
-    async def text(self):
-        return self._body
+    def json(self):
+        return json.loads(self.text)
 
-
-class _ResponseInfo:
-    def __init__(self, response):
-        self._response = response
-
-    @property
-    def value(self):
-        async def resolve():
-            return self._response
-
-        return resolve()
+    def raise_for_status(self):
+        if not self.ok:
+            raise requests.HTTPError(f"HTTP {self.status_code}", response=self)
 
 
-class _ExpectResponseContext:
-    def __init__(self, response, predicate):
-        self._response = response
-        self._predicate = predicate
-
-    async def __aenter__(self):
-        assert self._predicate(self._response), self._response.url
-        return _ResponseInfo(self._response)
-
-    async def __aexit__(self, exc_type, exc, traceback):
-        return False
-
-
-class _FakeLocator:
-    def __init__(self, count=1):
-        self.count = AsyncMock(return_value=count)
-        self.click = AsyncMock()
-        self.wait_for = AsyncMock()
-
-
-def _mock_page(
-    responses,
+def _session_mock(
+    trade_payload,
     *,
-    option_code="00993A",
-    option_count=1,
-    combobox_count=1,
+    trade_status=200,
+    antiforgery_payload=None,
+    antiforgery_status=200,
 ):
-    queued = list(responses)
-    page = Mock()
-    page.goto = AsyncMock()
-    page.request = Mock()
-
-    def expect_response(predicate, timeout):
-        assert timeout == 10_000
-        assert queued, "unexpected expect_response call"
-        return _ExpectResponseContext(queued.pop(0), predicate)
-
-    page.expect_response = Mock(side_effect=expect_response)
-    combobox = _FakeLocator(combobox_count)
-    option = _FakeLocator(option_count)
-    option_selector = f'[role="option"][aria-label^="{option_code} "]'
-
-    def locator(selector):
-        if selector == COMBOBOX_SELECTOR:
-            return combobox
-        if selector == option_selector:
-            return option
-        raise AssertionError(f"unexpected locator: {selector}")
-
-    page.locator = Mock(side_effect=locator)
-    return page, combobox, option, queued
-
-
-def _options_response(*, ok=True, status=200, payload=None):
-    return _FakeResponse(
-        OPTIONS_URL,
-        payload or json.loads(OPTIONS_JSON),
-        ok=ok,
-        status=status,
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.get.return_value = _DirectResponse(
+        ANTIFORGERY_URL,
+        {"token": XSRF_TOKEN}
+        if antiforgery_payload is None
+        else antiforgery_payload,
+        status_code=antiforgery_status,
     )
 
+    def post(url, **kwargs):
+        if url == OPTIONS_URL:
+            return _DirectResponse(url, json.loads(OPTIONS_JSON))
+        if url == TRADE_URL:
+            return _DirectResponse(url, trade_payload, status_code=trade_status)
+        raise AssertionError(f"unexpected POST URL: {url}")
 
-def _trade_response(*, ok=True, status=200, **payload_kwargs):
-    return _FakeResponse(
-        TRADE_URL,
-        _trade_payload(**payload_kwargs),
-        ok=ok,
-        status=status,
+    session.post.side_effect = post
+    return session
+
+
+async def _call_direct_handler(
+    etf_code,
+    target_date,
+    trade_payload,
+    *,
+    trade_status=200,
+    antiforgery_payload=None,
+    antiforgery_status=200,
+):
+    session = _session_mock(
+        trade_payload,
+        trade_status=trade_status,
+        antiforgery_payload=antiforgery_payload,
+        antiforgery_status=antiforgery_status,
     )
+    with (
+        patch("scrapers.official.get_official_config", return_value=_allianz_config()),
+        patch(
+            "scrapers.official.requests.Session",
+            return_value=session,
+        ) as session_factory,
+        patch(
+            "scrapers.official.requests.post",
+            side_effect=AssertionError("raw requests.post is forbidden"),
+        ) as raw_post,
+    ):
+        result = official.scrape_allianz_api(etf_code, target_date)
+        if inspect.isawaitable(result):
+            result = await result
+    return result, session, session_factory, raw_post
 
 
 def _allianz_config():
@@ -307,168 +287,262 @@ def test_parse_allianz_api_fails_closed_on_identity_or_shape_errors(payload, mes
         )
 
 
-def test_allianz_response_predicates_require_post_and_exact_endpoint():
-    options = _options_response()
-    trade = _trade_response()
-
-    assert official._is_allianz_fund_options_response(options) is True
-    assert official._is_allianz_trade_info_response(trade) is True
-    assert official._is_allianz_trade_info_response(
-        _FakeResponse(TRADE_URL, _trade_payload(), method="GET")
-    ) is False
-    assert official._is_allianz_trade_info_response(
-        _FakeResponse(f"{TRADE_URL}/extra", _trade_payload())
-    ) is False
-    assert official._is_allianz_trade_info_response(
-        _FakeResponse(
-            "https://evil.example/webapi/api/Fund/GetFundTradeInfo",
-            _trade_payload(),
-        )
-    ) is False
-
-
 @pytest.mark.asyncio
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_uses_matching_initial_default_response(mock_config):
-    page, combobox, option, queued = _mock_page(
-        [
-            _options_response(),
-            _trade_response(etf_code="00984A", fund_no="E0001"),
-        ],
-        option_code="00984A",
+async def test_scrape_allianz_uses_one_xsrf_session_and_exact_trade_payload():
+    result, session, session_factory, raw_post = await _call_direct_handler(
+        "00984A",
+        date(2026, 7, 17),
+        _trade_payload(
+            etf_code="00984A",
+            fund_no="E0001",
+            pcf_date="2026-07-17T00:00:00",
+        ),
     )
 
-    result = await official.scrape_allianz_playwright("00984A", page)
-
-    assert result["ok"] is True
-    assert len(result["stock_rows"]) == 5
-    assert {row["etf_code"] for row in result["stock_rows"]} == {"00984A"}
-    assert queued == []
-    page.goto.assert_awaited_once_with(
-        ALLIANZ_URL,
-        wait_until="domcontentloaded",
-        timeout=60000,
-    )
-    page.locator.assert_not_called()
-    combobox.click.assert_not_awaited()
-    option.click.assert_not_awaited()
-    assert not page.request.method_calls
-
-
-@pytest.mark.asyncio
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_switches_by_exact_code_and_intercepts_response(mock_config):
-    page, combobox, option, queued = _mock_page(
-        [
-            _options_response(),
-            _trade_response(etf_code="00984A", fund_no="E0001"),
-            _trade_response(etf_code="00993A", fund_no="E0002"),
-        ]
-    )
-
-    result = await official.scrape_allianz_playwright("00993A", page)
-
-    assert result["ok"] is True
-    assert len(result["stock_rows"]) == 5
-    assert {row["etf_code"] for row in result["stock_rows"]} == {"00993A"}
-    assert queued == []
-    assert page.expect_response.call_count == 3
-    assert page.locator.call_args_list == [
-        call(COMBOBOX_SELECTOR),
-        call('[role="option"][aria-label^="00993A "]'),
+    raw_post.assert_not_called()
+    session_factory.assert_called_once_with()
+    assert [
+        (request_call[0], request_call.args[0])
+        for request_call in session.method_calls
+        if request_call[0] in {"get", "post"}
+    ] == [
+        ("get", ANTIFORGERY_URL),
+        ("post", OPTIONS_URL),
+        ("post", TRADE_URL),
     ]
-    combobox.count.assert_awaited_once()
-    combobox.click.assert_awaited_once()
-    option.wait_for.assert_awaited_once_with(state="visible", timeout=10_000)
-    option.count.assert_awaited_once()
-    option.click.assert_awaited_once()
-    assert not page.request.method_calls
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("option_count", [0, 2])
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_fails_when_exact_option_is_missing_or_ambiguous(
-    mock_config,
-    option_count,
-):
-    page, _, option, queued = _mock_page(
-        [
-            _options_response(),
-            _trade_response(etf_code="00984A", fund_no="E0001"),
-        ],
-        option_count=option_count,
-    )
-
-    result = await official.scrape_allianz_playwright("00993A", page)
-
-    assert result["ok"] is False
-    assert result["all_rows"] == []
-    assert "00993A" in result["reason"]
-    assert queued == []
-    option.click.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_rejects_mismatched_switched_response(mock_config):
-    page, _, _, queued = _mock_page(
-        [
-            _options_response(),
-            _trade_response(etf_code="00984A", fund_no="E0001"),
-            _trade_response(etf_code="00984A", fund_no="E0001"),
-        ]
-    )
-
-    result = await official.scrape_allianz_playwright("00993A", page)
-
-    assert result["ok"] is False
-    assert result["all_rows"] == []
-    assert "mismatch" in result["reason"].lower()
-    assert queued == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("failed_response", ["options", "initial_trade", "switched_trade"])
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_scrape_allianz_fails_closed_on_intercepted_http_error(
-    mock_config,
-    failed_response,
-):
-    options = _options_response()
-    initial = _trade_response(etf_code="00984A", fund_no="E0001")
-    switched = _trade_response(etf_code="00993A", fund_no="E0002")
-    if failed_response == "options":
-        options = _options_response(ok=False, status=503)
-    elif failed_response == "initial_trade":
-        initial = _trade_response(ok=False, status=503)
-    else:
-        switched = _trade_response(ok=False, status=503)
-
-    page, _, _, queued = _mock_page([options, initial, switched])
-
-    result = await official.scrape_allianz_playwright("00993A", page)
-
-    assert result["ok"] is False
-    assert result["all_rows"] == []
-    assert "HTTP 503" in result["reason"]
-    if failed_response != "switched_trade":
-        assert len(queued) == 1
+    options_calls = [
+        request_call
+        for request_call in session.post.call_args_list
+        if request_call.args == (OPTIONS_URL,)
+    ]
+    trade_calls = [
+        request_call
+        for request_call in session.post.call_args_list
+        if request_call.args == (TRADE_URL,)
+    ]
+    assert len(options_calls) == 1
+    assert len(trade_calls) == 1
+    assert options_calls[0].kwargs["headers"] == {"X-XSRF-TOKEN": XSRF_TOKEN}
+    assert trade_calls[0].kwargs["headers"] == {"X-XSRF-TOKEN": XSRF_TOKEN}
+    assert trade_calls[0].kwargs["json"] == {
+        "Date": "2026-07-16T16:00:00.000Z",
+        "FundNo": "E0001",
+    }
+    assert result["ok"] is True
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("etf_code", ["00984A", "00993A"])
-@patch("scrapers.official.get_official_config", return_value=_allianz_config())
-async def test_dispatcher_routes_allianz_codes_to_handler(mock_config, etf_code):
+async def test_dispatcher_routes_every_configured_allianz_etf_to_direct_handler(
+    etf_code,
+):
+    target_date = date(2026, 7, 17)
     sentinel = {"ok": True, "stock_rows": [{"etf_code": etf_code}]}
+
+    class AwaitableResult(dict):
+        def __await__(self):
+            async def resolve():
+                return self
+
+            return resolve().__await__()
+
+    handler_result = AwaitableResult(sentinel)
+    direct_handler = Mock(return_value=handler_result)
+    legacy_handler = AsyncMock(return_value={"ok": False, "reason": "legacy path"})
     page = Mock()
+    page.goto = AsyncMock()
+    page.locator = Mock()
+    page.expect_response = Mock()
+    option = Mock()
+    option.click = AsyncMock()
+    page.locator.return_value = option
 
-    with patch.object(
-        official,
-        "scrape_allianz_playwright",
-        new=AsyncMock(return_value=sentinel),
-    ) as handler:
-        result = await official.scrape_official_with_browser(etf_code, page)
+    with (
+        patch("scrapers.official.get_official_config", return_value=_allianz_config()),
+        patch.object(
+            official,
+            "scrape_allianz_api",
+            new=direct_handler,
+            create=True,
+        ),
+        patch.object(
+            official,
+            "scrape_allianz_playwright",
+            new=legacy_handler,
+            create=True,
+        ),
+    ):
+        result = await official.scrape_official_with_browser(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
 
-    assert result is sentinel
-    handler.assert_awaited_once_with(etf_code, page)
+    assert result is handler_result
+    direct_handler.assert_called_once_with(etf_code, target_date)
+    legacy_handler.assert_not_awaited()
+    page.goto.assert_not_awaited()
+    page.locator.assert_not_called()
+    page.expect_response.assert_not_called()
+    option.click.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_passes_target_date_to_allianz_official_dispatcher():
+    etf_code = "00984A"
+    page = object()
+    target_date = date(2026, 7, 17)
+    dispatcher = AsyncMock(return_value={"ok": True})
+
+    with (
+        patch(
+            "scraper.get_etf_config",
+            return_value={
+                "issuer": "Allianz",
+                "official_method": "playwright",
+            },
+        ),
+        patch("scraper.scrape_official_with_browser", new=dispatcher),
+        patch(
+            "scraper._normalize_source_result",
+            side_effect=lambda result, source_type: result,
+        ),
+    ):
+        result = await scraper._official_fallback_with_browser(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
+
+    assert result["ok"] is True
+    dispatcher.assert_awaited_once_with(
+        etf_code,
+        page,
+        target_date=target_date,
+    )
+
+
+def _invalid_trade_case(case):
+    if case == "http_error":
+        return _trade_payload(), 503
+    if case == "api_error":
+        payload = _trade_payload()
+        payload["StatusCode"] = 500
+        return payload, 200
+    if case == "empty_entries":
+        return {"StatusCode": 0, "Entries": {}}, 200
+    if case == "empty_stock_rows":
+        payload = _trade_payload()
+        payload["Entries"]["DynamicTableData"][0]["Rows"] = []
+        return payload, 200
+    if case == "invalid_json":
+        return "{not-json", 200
+    if case == "schema_change":
+        payload = _trade_payload()
+        payload["Entries"]["DynamicTableData"][0]["Columns"] = [
+            {"Name": "未知欄位"}
+        ]
+        return payload, 200
+    if case == "fund_mismatch":
+        return _trade_payload(fund_no="E0001"), 200
+    if case == "etf_mismatch":
+        return _trade_payload(etf_code="00984A"), 200
+    if case == "date_mismatch":
+        return _trade_payload(pcf_date="2026-07-18T00:00:00"), 200
+    raise AssertionError(f"unknown case: {case}")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("antiforgery_payload", "antiforgery_status"),
+    [
+        ({"token": XSRF_TOKEN}, 503),
+        ("{not-json", 200),
+        ({}, 200),
+        ({"token": ""}, 200),
+    ],
+    ids=["http_error", "invalid_json", "missing_token", "empty_token"],
+)
+async def test_scrape_allianz_fails_closed_for_invalid_antiforgery_response(
+    antiforgery_payload,
+    antiforgery_status,
+):
+    result, session, session_factory, raw_post = await _call_direct_handler(
+        "00993A",
+        date(2026, 7, 17),
+        _trade_payload(),
+        antiforgery_payload=antiforgery_payload,
+        antiforgery_status=antiforgery_status,
+    )
+
+    raw_post.assert_not_called()
+    session_factory.assert_called_once_with()
+    assert session.get.call_count == 1
+    assert session.get.call_args.args == (ANTIFORGERY_URL,)
+    session.post.assert_not_called()
+    assert result["ok"] is False
+    assert result["all_rows"] == []
+    assert result["stock_rows"] == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case",
+    [
+        "http_error",
+        "api_error",
+        "empty_entries",
+        "empty_stock_rows",
+        "invalid_json",
+        "schema_change",
+        "fund_mismatch",
+        "etf_mismatch",
+        "date_mismatch",
+    ],
+)
+async def test_scrape_allianz_fails_closed_for_invalid_trade_response(case):
+    trade_payload, trade_status = _invalid_trade_case(case)
+
+    result, _, _, raw_post = await _call_direct_handler(
+        "00993A",
+        date(2026, 7, 17),
+        trade_payload,
+        trade_status=trade_status,
+    )
+
+    raw_post.assert_not_called()
+    assert result["ok"] is False
+    assert result["all_rows"] == []
+    assert result["stock_rows"] == []
+
+
+@pytest.mark.asyncio
+async def test_scrape_allianz_success_preserves_downstream_shape_and_metadata():
+    result, _, _, raw_post = await _call_direct_handler(
+        "00993A",
+        date(2026, 7, 17),
+        _trade_payload(),
+    )
+
+    raw_post.assert_not_called()
+    assert set(result) == {
+        "ok",
+        "reason",
+        "all_rows",
+        "stock_rows",
+        "non_stock_rows",
+        "source_url",
+        "source_type",
+        "total_weight_all_rows",
+        "total_weight_stock_rows",
+    }
+    assert result["ok"] is True
+    assert result["reason"] == "ok"
+    assert result["source_type"] == "official_fallback"
+    assert result["source_url"] == ALLIANZ_URL
+    assert result["non_stock_rows"] == []
+    assert result["all_rows"] == result["stock_rows"]
+    assert len(result["stock_rows"]) == 5
+    assert {
+        row["extraction_method"] for row in result["stock_rows"]
+    } == {"playwright_api_intercept"}
