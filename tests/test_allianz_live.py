@@ -1,3 +1,4 @@
+import os
 from datetime import date
 
 import pytest
@@ -5,6 +6,17 @@ import pytest
 import etf_universe
 from scrapers.official import scrape_allianz_api
 from snapshot_validation import validate_snapshot_rows
+
+
+@pytest.fixture
+def allianz_live_date() -> date:
+    raw_date = os.getenv("ALLIANZ_LIVE_DATE")
+    if not raw_date:
+        pytest.skip("set ALLIANZ_LIVE_DATE=YYYY-MM-DD to run Allianz live smoke")
+    try:
+        return date.fromisoformat(raw_date)
+    except ValueError:
+        pytest.fail("ALLIANZ_LIVE_DATE must use YYYY-MM-DD format")
 
 
 @pytest.mark.live
