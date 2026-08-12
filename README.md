@@ -1,94 +1,8 @@
 # Taiwan Active ETF Tracking
 
-Taiwan Active ETF Tracking is a Python/SQLite pipeline for tracking the daily actual portfolios of Taiwan-listed active ETFs whose investment universe is Taiwan stocks. It turns validated holdings snapshots into day-over-day holding changes, manager-action signals, manager-intent rollups, and traction-analysis data.
+Taiwan Active ETF Tracking is a Python pipeline for tracking Taiwan-listed active ETFs whose investment universe is Taiwan stocks.
 
 The operational ETF universe, official scraper configuration, and holdings snapshots are stored in SQLite. Holdings tables are the source of truth for completeness and retry decisions; scrape-attempt status is not persisted.
-
-## What this project is for
-
-The project is built to answer four practical research questions:
-
-1. Which stocks are active ETFs adding or newly establishing positions in?
-2. Which stocks are active ETFs reducing or removing?
-3. Which stocks show agreement across multiple ETF managers or issuers?
-4. How are those actions changing across recent trading days?
-
-The goal is to surface evidence about active-manager positioning that can be used in money-flow and stock-direction research. The pipeline itself does not treat every holding-weight change as a manager trade, and its derived signals are analytical heuristics rather than direct transaction records or price forecasts.
-
-## Data and signal layers
-
-The project deliberately separates observed data from derived interpretation:
-
-1. **Holdings snapshots** — source holdings for each ETF/date, with source URL, source type, extraction method, and scrape timestamp.
-2. **Holding changes** — day-over-day comparisons produced only for ETF/date source pairs considered comparable.
-3. **Manager signals** — rule-based events derived from holding changes, including important new/removed positions, consecutive active adds/reduces, and cross-issuer consensus.
-4. **Manager Intent Radar** — a multi-day in-memory rollup that classifies patterns such as accumulation, distribution, same-issuer cross-fund rotation, contested activity, or high-activity/unclear behavior.
-5. **Traction analysis** — a rolling summary of confirmed active-add and active-reduce actions. The nightly workflow writes this as raw analysis data for downstream review or AI analysis.
-
-A key interpretation rule is:
-
-> **Exposure movement is not the same thing as active manager trading.**
-
-A stock's portfolio weight can move because of price action or ETF-level scale changes. `scripts/changes.py` therefore tracks shares, estimates ETF scale factors where possible, distinguishes active from passive movement, and records source-comparability diagnostics before downstream signals are generated.
-
-## Data flow
-
-```text
-TWSE / TPEx discovery
-        ↓
-SQLite etf_universe + scraper configuration
-        ↓
-MoneyDJ / official-source scraping
-        ↓
-snapshot validation + source arbitration
-        ↓
-etf_daily_holdings / etf_daily_non_stock_assets
-        ↓
-source-pair diagnostics + holding change detection
-        ↓
-etf_holding_changes
-        ↓
-manager signals ───────────────┐
-        ↓                      │
-etf_manager_signals            │
-        ↓                      │
-5-day Manager Intent (memory)  │
-        └──────────┬───────────┘
-                   ↓
-           daily signal report
-
-etf_holding_changes
-        ↓
-rolling traction analysis
-        ↓
-traction raw report
-```
-
-## Primary outputs
-
-The nightly pipeline writes two kinds of text output under `reports/`:
-
-- `taiwan_active_etf_signal_report_<data-date>.txt`: the current primary signal report for a holdings date.
-- `taiwan_active_etf_signal_report_<timestamp>.txt`: timestamped archive of that signal report.
-- `traction_raw_<data-date>.txt`: the current rolling traction-analysis data for the holdings date.
-- `traction_raw_<timestamp>.txt`: timestamped archive of the traction data.
-
-The signal report includes data-quality/coverage status, manager signals, Manager Intent Radar, exposure movers, important new/removed positions, high-consensus holdings, and concise observations. Partial holdings coverage is explicitly marked provisional so incomplete data is not presented as full-universe evidence.
-
-The traction report is intentionally closer to raw analytical data. It summarizes confirmed active actions over the configured rolling window and excludes passive weight changes from its active-add/reduce counts.
-
-## Core SQLite data model
-
-The operational database is intentionally compact:
-
-- `etf_universe`: runtime ETF universe plus official scraper configuration.
-- `etf_daily_holdings`: validated stock holdings snapshots.
-- `etf_daily_non_stock_assets`: validated non-stock assets from the same snapshots.
-- `etf_change_diagnostics`: whether consecutive ETF snapshots are comparable for change detection and why a pair was included or skipped.
-- `etf_holding_changes`: recomputable day-over-day holding changes and active/passive classifications.
-- `etf_manager_signals`: recomputable rule-based manager signals.
-
-Manager-intent rows are calculated in memory when needed rather than stored as another materialized derived table.
 
 ## Nightly workflow
 
@@ -110,8 +24,6 @@ Key entry points:
 - `scripts/etf_universe.py`: DB-backed universe and eligibility helpers.
 - `scripts/retry_stale_scrapes.py`: target-date holdings-gap retry.
 - `scripts/backfill_changes.py`: rebuild changes and derived layers.
-- `scripts/traction_analysis.py`: rolling active-add/reduce traction analysis.
-- `scripts/manager_intent.py`: in-memory multi-day manager-intent rollups.
 - `scripts/scrapers/`: source-specific scraper implementations.
 
 Runtime data under `data/`, `logs/`, and `reports/` is not committed.
@@ -224,7 +136,6 @@ Important semantics:
 - `retired = 1` preserves the ETF for historical lookup but excludes it from current nightly fetches.
 - Permanent scope exclusion is distinct from retirement and is evaluated by the canonical universe helpers.
 - `listing_date` excludes an ETF before it was listed.
-- A missing `listing_date` leaves a discovered ETF pending review and excluded from nightly scraping until the date is supplied.
 - `first_seen_date` records initial discovery unless explicitly supplied by another writer.
 
 ## Scraper source order
@@ -237,8 +148,6 @@ Important semantics:
 4. Official static fallback.
 
 Source-specific implementations live under `scripts/scrapers/`.
-
-`FinMind`'s `TaiwanStockHoldingSharesPer` dataset is intentionally not used as an ETF-holdings source because it represents shareholder-distribution data rather than an ETF's investment portfolio.
 
 ## Forced selected scrape
 
