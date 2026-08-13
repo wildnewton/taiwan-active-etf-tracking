@@ -13,6 +13,7 @@ def test_live_collection_uses_production_active_universe(monkeypatch):
         lambda requested_date: pytest.fail(
             "historical analysis universe must not drive live scraper collection"
         ),
+        raising=False,
     )
     monkeypatch.setattr(
         live,
@@ -50,9 +51,13 @@ def test_db_unchanged_hash_covers_non_snapshot_tables(monkeypatch):
     conn.commit()
 
     monkeypatch.setattr(live.db, "_connect", lambda: conn)
-    hashes = getattr(live, "_operational_db_table_hashes", live._snapshot_table_hashes)
+    hashes = getattr(live, "_operational_db_table_hashes", None)
+    if hashes is None:
+        hashes = live._snapshot_table_hashes
 
     before = hashes()
+    assert "etf_universe" in before
+
     conn.execute("UPDATE etf_universe SET issuer = 'Issuer B' WHERE code = '0001A'")
     conn.commit()
     after = hashes()
