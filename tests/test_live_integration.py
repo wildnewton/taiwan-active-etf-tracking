@@ -1,3 +1,4 @@
+import asyncio
 import ast
 import hashlib
 import json
@@ -9,7 +10,11 @@ import pytest
 from scripts import db
 from scripts.etf_universe import get_eligible_etf_codes, get_etf_config
 from scripts.scrapers.moneydj import scrape_moneydj
-from scripts.scrapers.official import get_official_config, scrape_official_static
+from scripts.scrapers.official import (
+    get_official_config,
+    scrape_official_static,
+    scrape_official_with_browser,
+)
 from scripts.snapshot_validation import validate_snapshot_rows
 
 
@@ -185,12 +190,69 @@ def _row_date(value) -> date | None:
         return None
 
 
+def _run_browser_official(etf_code: str, page, live_date: date) -> dict:
+    """Run the production browser-based official scraper for non-static methods."""
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return pool.submit(
+                asyncio.run,
+                scrape_official_with_browser(etf_code, page, target_date=live_date),
+            ).result()
+    return loop.run_until_complete(
+        scrape_official_with_browser(etf_code, page, target_date=live_date)
+    )
+
+
+def _scrape_official_by_method(
+    etf_code: str, config: dict, page, live_date: date
+) -> dict:
+    """Dispatch to the correct official scraper based on the ETF's method config."""
+    method = config["method"]
+    if method == "static":
+        return scrape_official_static(etf_code)
+    if method in ("api", "stealth_api", "playwright", "browser"):
+        return _run_browser_official(etf_code, page, live_date)
+    pytest.fail(
+        _diagnostic(
+            etf_code,
+            config.get("issuer"),
+            "official",
+            method,
+            f"unsupported official method: {method}",
+        ),
+        pytrace=False,
+    )
+
+
+@pytest.fixture(scope="session")
+def _playwright_page():
+    """Provide a real Playwright page for browser-based official scrapers."""
+    from playwright.async_api import async_playwright
+
+    async def _launch():
+        pw = await async_playwright().start()
+        browser = await pw.chromium.launch(headless=True)
+        page = await browser.new_page()
+        return pw, browser, page
+
+    loop = asyncio.new_event_loop()
+    pw, browser, page = loop.run_until_complete(_launch())
+    yield page
+    loop.run_until_complete(browser.close())
+    loop.run_until_complete(pw.stop())
+    loop.close()
+
+
 @pytest.mark.live
 def test_live_scraper_returns_requested_valid_snapshot(
     etf_code: str,
     source: str,
     live_date: date,
     operational_db_is_unchanged,
+    _playwright_page,
 ):
     if source == "official":
         try:
@@ -208,7 +270,9 @@ def test_live_scraper_returns_requested_valid_snapshot(
             )
         issuer = config.get("issuer")
         method = config.get("method")
-        result = scrape_official_static(etf_code)
+        result = _scrape_official_by_method(
+            etf_code, config, _playwright_page, live_date
+        )
     else:
         try:
             config = get_etf_config(etf_code)
@@ -418,3 +482,35 @@ def test_live_marker_opt_in(monkeypatch):
     assert cases[0].values == (None, None)
     assert cases[0].marks[0].name == "skip"
     assert "-m live" in cases[0].marks[0].kwargs["reason"]
+
+
+def test_official_dispatch_static_vs_browser(monkeypatch):
+    """Verify static method dispatches to scrape_official_static and browser methods to scrape_official_with_browser."""
+    dispatched = []
+
+    def fake_static(code):
+        dispatched.append(("static", code))
+        return {"ok": True, "all_rows": [], "stock_rows": []}
+
+    def fake_run_browser(code, page, live_date):
+        dispatched.append(("browser", code))
+        return {"ok": True, "all_rows": [], "stock_rows": []}
+
+    current_module = sys.modules[__name__]
+    monkeypatch.setattr(current_module, "scrape_official_static", fake_static)
+    monkeypatch.setattr(current_module, "_run_browser_official", fake_run_browser)
+
+    fake_page = object()
+    config = {"method": "static", "issuer": "TestIssuer"}
+    result = _scrape_official_by_method("0001A", config, fake_page, date(2026, 8, 12))
+    assert dispatched == [("static", "0001A")]
+
+    dispatched.clear()
+    config = {"method": "api", "issuer": "JPMorgan"}
+    _scrape_official_by_method("0001A", config, fake_page, date(2026, 8, 12))
+    assert dispatched == [("browser", "0001A")]
+
+    dispatched.clear()
+    config = {"method": "playwright", "issuer": "Uni-President"}
+    _scrape_official_by_method("0001A", config, fake_page, date(2026, 8, 12))
+    assert dispatched == [("browser", "0001A")]
