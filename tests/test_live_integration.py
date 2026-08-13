@@ -395,10 +395,13 @@ def test_live_scraper_returns_requested_valid_snapshot(
     )
 
     source_url = result.get("source_url")
+    from urllib.parse import urlparse as _urlparse
+    _parsed_url = _urlparse(source_url or "")
     assert (
         isinstance(source_url, str)
         and bool(source_url)
-        and source_url.startswith("http")
+        and _parsed_url.scheme in ("http", "https")
+        and bool(_parsed_url.netloc)
     ), _diagnostic(
         etf_code,
         issuer,
@@ -451,6 +454,42 @@ def test_live_scraper_returns_requested_valid_snapshot(
         source,
         method,
         f"all_rows contain empty/missing extraction_method at indices: {missing_extraction[:10]}",
+    )
+
+    # Validate extraction_method matches production source contract
+    from scripts.scrapers.moneydj import EXTRACTION_METHOD as _MONEYDJ_EXTRACTION
+    _OFFICIAL_EXTRACTIONS = frozenset((
+        "requests_bs4",           # EXTRACTION_METHOD_STATIC
+        "playwright_api_intercept",  # EXTRACTION_METHOD_API
+        "requests_xlsx",          # EXTRACTION_METHOD_EXCEL
+        "playwright_table_parse", # EXTRACTION_METHOD_PLAYWRIGHT
+        "stealth_playwright_api",  # EXTRACTION_METHOD_STEALTH
+    ))
+    if source == "moneydj":
+        _allowed = frozenset((_MONEYDJ_EXTRACTION,))
+    else:
+        _allowed = _OFFICIAL_EXTRACTIONS
+    unexpected_methods = [
+        (i, row.get("extraction_method"))
+        for i, row in enumerate(all_rows)
+        if row.get("extraction_method") not in _allowed
+    ]
+    assert not unexpected_methods, _diagnostic(
+        etf_code,
+        issuer,
+        source,
+        method,
+        f"extraction_method not in production set {_allowed}: "
+        f"{unexpected_methods[:5]}",
+    )
+    # All rows must use the same extraction_method within a snapshot
+    extraction_methods = {row.get("extraction_method") for row in all_rows}
+    assert len(extraction_methods) == 1, _diagnostic(
+        etf_code,
+        issuer,
+        source,
+        method,
+        f"inconsistent extraction_methods in snapshot: {extraction_methods}",
     )
 
     wrong_codes = [
