@@ -3,6 +3,24 @@ from unittest.mock import patch
 import pytest
 
 
+def pytest_addoption(parser):
+    live_group = parser.getgroup("live integration")
+    live_group.addoption(
+        "--live-date",
+        action="store",
+        default=None,
+        metavar="YYYY-MM-DD",
+        help="requested holdings date for opt-in live integration tests",
+    )
+    live_group.addoption(
+        "--live-source",
+        action="store",
+        choices=("moneydj", "official", "both"),
+        default="both",
+        help="live scraper source to exercise (default: both)",
+    )
+
+
 _PIPELINE_SCRAPE_UNIT_MODULES = {
     "test_pipeline",
     "test_pipeline_isolation_regression",
