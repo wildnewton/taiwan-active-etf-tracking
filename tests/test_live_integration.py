@@ -18,10 +18,24 @@ from scripts.scrapers.official import (
 from scripts.snapshot_validation import validate_snapshot_rows
 
 
+def _assert_pytest_fail(test_func, *args, **kwargs):
+    """Call test_func, expect pytest.fail. Verify diagnostic fields in message."""
+    import re
+    try:
+        test_func(*args, **kwargs)
+        raise AssertionError("expected pytest.fail but no exception raised")
+    except BaseException as exc:
+        assert type(exc).__name__ == "Failed", (
+            f"expected pytest.fail (Failed) but got {type(exc).__name__}: {exc}"
+        )
+        return str(exc)
+
+
 _EXPECTED_SOURCE_TYPES = {
     "moneydj": "moneydj_primary",
     "official": "official_fallback",
 }
+
 
 _SNAPSHOT_TABLES = (
     "etf_daily_holdings",
@@ -458,12 +472,19 @@ def test_live_scraper_returns_requested_valid_snapshot(
 
     # Validate extraction_method matches production source contract
     from scripts.scrapers.moneydj import EXTRACTION_METHOD as _MONEYDJ_EXTRACTION
+    from scripts.scrapers.official import (
+        EXTRACTION_METHOD_STATIC,
+        EXTRACTION_METHOD_API,
+        EXTRACTION_METHOD_EXCEL,
+        EXTRACTION_METHOD_PLAYWRIGHT,
+        EXTRACTION_METHOD_STEALTH,
+    )
     _OFFICIAL_EXTRACTIONS = frozenset((
-        "requests_bs4",           # EXTRACTION_METHOD_STATIC
-        "playwright_api_intercept",  # EXTRACTION_METHOD_API
-        "requests_xlsx",          # EXTRACTION_METHOD_EXCEL
-        "playwright_table_parse", # EXTRACTION_METHOD_PLAYWRIGHT
-        "stealth_playwright_api",  # EXTRACTION_METHOD_STEALTH
+        EXTRACTION_METHOD_STATIC,
+        EXTRACTION_METHOD_API,
+        EXTRACTION_METHOD_EXCEL,
+        EXTRACTION_METHOD_PLAYWRIGHT,
+        EXTRACTION_METHOD_STEALTH,
     ))
     if source == "moneydj":
         _allowed = frozenset((_MONEYDJ_EXTRACTION,))
@@ -664,35 +685,53 @@ def test_official_dispatch_static_vs_browser(monkeypatch):
 
 
 def test_official_config_validation(monkeypatch):
-    """Verify _validate_official_config catches missing/invalid fields."""
-
+    """Verify _validate_official_config catches missing/invalid fields with diagnostic."""
     # Code mismatch
-    with pytest.raises(BaseException, match="config code mismatch"):
-        _validate_official_config("0001A", {"code": "0002A", "issuer": "X", "url": "http://x", "method": "static"})
+    msg = _assert_pytest_fail(
+        _validate_official_config, "0001A",
+        {"code": "0002A", "issuer": "X", "url": "http://x", "method": "static"},
+    )
+    assert "ETF=0001A" in msg and "source=official" in msg
 
     # Empty issuer
-    with pytest.raises(BaseException, match="empty issuer"):
-        _validate_official_config("0001A", {"code": "0001A", "issuer": "", "url": "http://x", "method": "static"})
+    msg = _assert_pytest_fail(
+        _validate_official_config, "0001A",
+        {"code": "0001A", "issuer": "", "url": "http://x", "method": "static"},
+    )
+    assert "ETF=0001A" in msg and "empty issuer" in msg
 
     # Invalid URL (no scheme or netloc)
-    with pytest.raises(BaseException, match="url is invalid"):
-        _validate_official_config("0001A", {"code": "0001A", "issuer": "X", "url": "not-a-url", "method": "static"})
+    msg = _assert_pytest_fail(
+        _validate_official_config, "0001A",
+        {"code": "0001A", "issuer": "X", "url": "not-a-url", "method": "static"},
+    )
+    assert "url is invalid" in msg
 
     # Empty method
-    with pytest.raises(BaseException, match="empty method"):
-        _validate_official_config("0001A", {"code": "0001A", "issuer": "X", "url": "http://x", "method": ""})
+    msg = _assert_pytest_fail(
+        _validate_official_config, "0001A",
+        {"code": "0001A", "issuer": "X", "url": "http://x", "method": ""},
+    )
+    assert "empty method" in msg
 
     # Valid config should not fail
     _validate_official_config("0001A", {"code": "0001A", "issuer": "X", "url": "http://example.com", "method": "static"})
 
 
-def test_unsupported_official_method_fails(monkeypatch):
-    """Verify unsupported method fails with diagnostic."""
+def test_unsupported_official_method_fails():
+    """Verify unsupported method fails with full diagnostic."""
     fake_page = object()
     fake_loop = object()
     config = {"method": "quantum", "issuer": "FutureCorp", "code": "0001A"}
-    with pytest.raises(BaseException, match="unsupported official method"):
-        _scrape_official_by_method("0001A", config, fake_page, date(2026, 8, 12), fake_loop)
+    msg = _assert_pytest_fail(
+        _scrape_official_by_method, "0001A", config,
+        fake_page, date(2026, 8, 12), fake_loop,
+    )
+    assert "ETF=0001A" in msg
+    assert "issuer=FutureCorp" in msg
+    assert "source=official" in msg
+    assert "method=quantum" in msg
+    assert "unsupported official method" in msg
 
 
 def test_moneydj_and_static_official_do_not_require_browser():
