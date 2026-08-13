@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 from scripts import db
-from scripts.etf_universe import get_eligible_etf_codes, get_etf_config
+from scripts.etf_universe import get_active_etfs, get_etf_config
 from scripts.scrapers.moneydj import scrape_moneydj
 from scripts.scrapers.official import (
     get_official_config,
@@ -35,12 +35,6 @@ _EXPECTED_SOURCE_TYPES = {
     "moneydj": "moneydj_primary",
     "official": "official_fallback",
 }
-
-
-_SNAPSHOT_TABLES = (
-    "etf_daily_holdings",
-    "etf_daily_non_stock_assets",
-)
 
 
 def _parse_live_date(raw_date: str) -> date:
@@ -130,8 +124,8 @@ def pytest_generate_tests(metafunc):
 
     live_date = _parse_live_date(raw_date)
     cases = [
-        pytest.param(etf_code, source, id=f"{etf_code}-{source}")
-        for etf_code in get_eligible_etf_codes(live_date)
+        pytest.param(etf["code"], source, id=f"{etf['code']}-{source}")
+        for etf in get_active_etfs(live_date)
         for source in _selected_sources(metafunc.config)
     ]
     metafunc.parametrize(("etf_code", "source"), cases)
@@ -169,23 +163,43 @@ def _table_content_hash(conn, table: str) -> str:
     return digest.hexdigest()
 
 
-def _snapshot_table_hashes() -> dict[str, str]:
+def _operational_db_table_hashes() -> dict[str, str]:
     with db._connect() as conn:
+        schema_rows = conn.execute(
+            """
+            SELECT type, name, tbl_name, sql
+            FROM sqlite_master
+            WHERE name NOT LIKE 'sqlite_%'
+            ORDER BY type, name
+            """
+        ).fetchall()
+        schema_digest = hashlib.sha256(
+            json.dumps(
+                schema_rows,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        tables = [row[1] for row in schema_rows if row[0] == "table"]
         return {
-            table: _table_content_hash(conn, table)
-            for table in _SNAPSHOT_TABLES
+            "__schema__": schema_digest,
+            **{
+                table: _table_content_hash(conn, table)
+                for table in tables
+            },
         }
 
 
 @pytest.fixture(scope="session")
 def operational_db_is_unchanged(pytestconfig):
-    before = _snapshot_table_hashes()
+    before = _operational_db_table_hashes()
     yield
-    after = _snapshot_table_hashes()
+    after = _operational_db_table_hashes()
     source = pytestconfig.getoption("--live-source")
     method = "n/a" if source == "moneydj" else "various"
     assert after == before, _diagnostic(
-        "all eligible ETFs",
+        "all active ETFs",
         "multiple",
         source,
         method,
@@ -595,12 +609,12 @@ def _guard_offline_scope(monkeypatch) -> None:
 
 def test_live_collection_count(monkeypatch):
     _guard_offline_scope(monkeypatch)
-    eligible_etfs = ("0001A", "0002A", "0003A")
+    active_etfs = ({"code": "0001A"}, {"code": "0002A"}, {"code": "0003A"})
     current_module = sys.modules[__name__]
     monkeypatch.setattr(
         current_module,
-        "get_eligible_etf_codes",
-        lambda requested_date: eligible_etfs,
+        "get_active_etfs",
+        lambda requested_date: active_etfs,
     )
     config = _OfflineConfig(live_date="2026-08-12")
     metafunc = _OfflineMetafunc(config)
@@ -610,7 +624,7 @@ def test_live_collection_count(monkeypatch):
     assert metafunc.generated is not None
     argnames, cases = metafunc.generated
     assert argnames == ("etf_code", "source")
-    assert len(cases) == len(eligible_etfs) * len(_selected_sources(config))
+    assert len(cases) == len(active_etfs) * len(_selected_sources(config))
 
 
 def test_live_date_required(monkeypatch):
@@ -633,7 +647,7 @@ def test_live_marker_opt_in(monkeypatch):
     current_module = sys.modules[__name__]
     monkeypatch.setattr(
         current_module,
-        "get_eligible_etf_codes",
+        "get_active_etfs",
         _fail_if_live_source_is_called,
     )
     metafunc = _OfflineMetafunc(
