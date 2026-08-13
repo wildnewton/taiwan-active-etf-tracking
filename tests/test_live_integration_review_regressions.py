@@ -19,7 +19,6 @@ def test_live_collection_uses_production_active_universe(monkeypatch):
         live,
         "get_active_etfs",
         lambda as_of_date: [{"code": "0001A"}, {"code": "0002A"}],
-        raising=False,
     )
 
     config = live._OfflineConfig(live_date="2026-08-12")
@@ -51,15 +50,12 @@ def test_db_unchanged_hash_covers_non_snapshot_tables(monkeypatch):
     conn.commit()
 
     monkeypatch.setattr(live.db, "_connect", lambda: conn)
-    hashes = getattr(live, "_operational_db_table_hashes", None)
-    if hashes is None:
-        hashes = live._snapshot_table_hashes
 
-    before = hashes()
+    before = live._operational_db_table_hashes()
     assert "etf_universe" in before
 
     conn.execute("UPDATE etf_universe SET issuer = 'Issuer B' WHERE code = '0001A'")
     conn.commit()
-    after = hashes()
+    after = live._operational_db_table_hashes()
 
     assert before != after
