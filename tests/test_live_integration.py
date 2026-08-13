@@ -1,3 +1,7 @@
+import ast
+import hashlib
+import json
+import sys
 from datetime import date
 
 import pytest
@@ -9,12 +13,15 @@ from scripts.scrapers.official import get_official_config, scrape_official_stati
 from scripts.snapshot_validation import validate_snapshot_rows
 
 
-pytestmark = pytest.mark.live
-
 _EXPECTED_SOURCE_TYPES = {
     "moneydj": "moneydj_primary",
     "official": "official_fallback",
 }
+
+_SNAPSHOT_TABLES = (
+    "etf_daily_holdings",
+    "etf_daily_non_stock_assets",
+)
 
 
 def _parse_live_date(raw_date: str) -> date:
@@ -45,24 +52,60 @@ def _selected_sources(config: pytest.Config) -> tuple[str, ...]:
     return (selected,)
 
 
+def _live_marker_selected(config: pytest.Config) -> bool:
+    expression = (config.getoption("markexpr") or "").strip()
+    if not expression:
+        return False
+
+    try:
+        parsed = ast.parse(expression, mode="eval")
+    except SyntaxError:
+        return False
+
+    def contains_positive_live(node: ast.AST, negated: bool = False) -> bool:
+        if isinstance(node, ast.Expression):
+            return contains_positive_live(node.body, negated)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return contains_positive_live(node.operand, not negated)
+        if isinstance(node, ast.BoolOp):
+            return any(contains_positive_live(value, negated) for value in node.values)
+        return isinstance(node, ast.Name) and node.id == "live" and not negated
+
+    return contains_positive_live(parsed)
+
+
+def _parametrize_skipped_live_case(metafunc, reason: str, case_id: str) -> None:
+    metafunc.parametrize(
+        ("etf_code", "source"),
+        [
+            pytest.param(
+                None,
+                None,
+                marks=pytest.mark.skip(reason=reason),
+                id=case_id,
+            )
+        ],
+    )
+
+
 def pytest_generate_tests(metafunc):
     if not {"etf_code", "source"}.issubset(metafunc.fixturenames):
         return
 
+    if not _live_marker_selected(metafunc.config):
+        _parametrize_skipped_live_case(
+            metafunc,
+            "live integration suite requires explicit selection with -m live",
+            "live-marker-required",
+        )
+        return
+
     raw_date = metafunc.config.getoption("--live-date")
     if raw_date is None:
-        metafunc.parametrize(
-            ("etf_code", "source"),
-            [
-                pytest.param(
-                    None,
-                    None,
-                    marks=pytest.mark.skip(
-                        reason="live integration suite requires --live-date YYYY-MM-DD"
-                    ),
-                    id="live-date-required",
-                )
-            ],
+        _parametrize_skipped_live_case(
+            metafunc,
+            "live integration suite requires --live-date YYYY-MM-DD",
+            "live-date-required",
         )
         return
 
@@ -83,22 +126,43 @@ def live_date(pytestconfig) -> date:
     return _parse_live_date(raw_date)
 
 
-def _snapshot_table_counts() -> dict[str, int]:
+def _table_content_hash(conn, table: str) -> str:
+    columns = tuple(
+        row[1] for row in conn.execute(f'PRAGMA table_info("{table}")').fetchall()
+    )
+    order_by = ", ".join(f'"{column}"' for column in columns)
+    rows = conn.execute(f'SELECT * FROM "{table}" ORDER BY {order_by}')
+
+    digest = hashlib.sha256()
+    digest.update(
+        json.dumps(columns, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+    for row in rows:
+        digest.update(b"\n")
+        digest.update(
+            json.dumps(
+                row,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                default=str,
+            ).encode("utf-8")
+        )
+    return digest.hexdigest()
+
+
+def _snapshot_table_hashes() -> dict[str, str]:
     with db._connect() as conn:
         return {
-            table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in (
-                "etf_daily_holdings",
-                "etf_daily_non_stock_assets",
-            )
+            table: _table_content_hash(conn, table)
+            for table in _SNAPSHOT_TABLES
         }
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def operational_db_is_unchanged(pytestconfig):
-    before = _snapshot_table_counts()
+    before = _snapshot_table_hashes()
     yield
-    after = _snapshot_table_counts()
+    after = _snapshot_table_hashes()
     source = pytestconfig.getoption("--live-source")
     method = "n/a" if source == "moneydj" else "various"
     assert after == before, _diagnostic(
@@ -106,7 +170,7 @@ def operational_db_is_unchanged(pytestconfig):
         "multiple",
         source,
         method,
-        f"operational DB row counts changed: before={before}, after={after}",
+        f"operational DB content hashes changed: before={before}, after={after}",
     )
 
 
@@ -121,10 +185,12 @@ def _row_date(value) -> date | None:
         return None
 
 
+@pytest.mark.live
 def test_live_scraper_returns_requested_valid_snapshot(
     etf_code: str,
     source: str,
     live_date: date,
+    operational_db_is_unchanged,
 ):
     if source == "official":
         try:
@@ -171,6 +237,19 @@ def test_live_scraper_returns_requested_valid_snapshot(
         etf_code, issuer, source, method, "scraper returned no stock rows"
     )
 
+    source_url = result.get("source_url")
+    assert (
+        isinstance(source_url, str)
+        and bool(source_url)
+        and source_url.startswith("http")
+    ), _diagnostic(
+        etf_code,
+        issuer,
+        source,
+        method,
+        f"invalid result source_url: {source_url!r}",
+    )
+
     expected_source_type = _EXPECTED_SOURCE_TYPES[source]
     actual_source_type = result.get("source_type")
     assert actual_source_type == expected_source_type, _diagnostic(
@@ -180,6 +259,27 @@ def test_live_scraper_returns_requested_valid_snapshot(
         method,
         f"unexpected result source_type: expected={expected_source_type}, "
         f"actual={actual_source_type}",
+    )
+
+    all_rows = result.get("all_rows") or []
+    inconsistent_source_rows = [
+        (
+            index,
+            row.get("source_type"),
+            row.get("source_url"),
+        )
+        for index, row in enumerate(all_rows)
+        if row.get("source_type") != expected_source_type
+        or row.get("source_url") != source_url
+    ]
+    assert not inconsistent_source_rows, _diagnostic(
+        etf_code,
+        issuer,
+        source,
+        method,
+        "all_rows contain inconsistent source metadata: "
+        f"expected=({expected_source_type!r}, {source_url!r}), "
+        f"actual={inconsistent_source_rows[:5]}",
     )
 
     wrong_codes = [
@@ -209,7 +309,7 @@ def test_live_scraper_returns_requested_valid_snapshot(
         f"actual={wrong_dates}",
     )
 
-    valid, validation_reason = validate_snapshot_rows(result.get("all_rows") or [])
+    valid, validation_reason = validate_snapshot_rows(all_rows)
     assert valid is True, _diagnostic(
         etf_code,
         issuer,
@@ -217,3 +317,104 @@ def test_live_scraper_returns_requested_valid_snapshot(
         method,
         f"snapshot validation failed: {validation_reason}",
     )
+
+
+class _OfflineConfig:
+    def __init__(
+        self,
+        *,
+        live_date: str | None,
+        live_source: str = "both",
+        markexpr: str = "live",
+    ) -> None:
+        self._options = {
+            "--live-date": live_date,
+            "--live-source": live_source,
+            "markexpr": markexpr,
+        }
+
+    def getoption(self, name: str):
+        return self._options[name]
+
+
+class _OfflineMetafunc:
+    fixturenames = ("etf_code", "source")
+
+    def __init__(self, config: _OfflineConfig) -> None:
+        self.config = config
+        self.generated = None
+
+    def parametrize(self, argnames, argvalues) -> None:
+        self.generated = (argnames, list(argvalues))
+
+
+def _fail_if_live_source_is_called(*args, **kwargs):
+    pytest.fail("offline collection/configuration tests must not call scrapers")
+
+
+def _guard_offline_scope(monkeypatch) -> None:
+    current_module = sys.modules[__name__]
+    monkeypatch.setattr(current_module, "scrape_moneydj", _fail_if_live_source_is_called)
+    monkeypatch.setattr(
+        current_module,
+        "scrape_official_static",
+        _fail_if_live_source_is_called,
+    )
+
+
+def test_live_collection_count(monkeypatch):
+    _guard_offline_scope(monkeypatch)
+    eligible_etfs = ("0001A", "0002A", "0003A")
+    current_module = sys.modules[__name__]
+    monkeypatch.setattr(
+        current_module,
+        "get_eligible_etf_codes",
+        lambda requested_date: eligible_etfs,
+    )
+    config = _OfflineConfig(live_date="2026-08-12")
+    metafunc = _OfflineMetafunc(config)
+
+    pytest_generate_tests(metafunc)
+
+    assert metafunc.generated is not None
+    argnames, cases = metafunc.generated
+    assert argnames == ("etf_code", "source")
+    assert len(cases) == len(eligible_etfs) * len(_selected_sources(config))
+
+
+def test_live_date_required(monkeypatch):
+    _guard_offline_scope(monkeypatch)
+    metafunc = _OfflineMetafunc(_OfflineConfig(live_date=None))
+
+    pytest_generate_tests(metafunc)
+
+    assert metafunc.generated is not None
+    _, cases = metafunc.generated
+    assert len(cases) == 1
+    assert cases[0].id == "live-date-required"
+    assert cases[0].values == (None, None)
+    assert cases[0].marks[0].name == "skip"
+    assert "--live-date" in cases[0].marks[0].kwargs["reason"]
+
+
+def test_live_marker_opt_in(monkeypatch):
+    _guard_offline_scope(monkeypatch)
+    current_module = sys.modules[__name__]
+    monkeypatch.setattr(
+        current_module,
+        "get_eligible_etf_codes",
+        _fail_if_live_source_is_called,
+    )
+    metafunc = _OfflineMetafunc(
+        _OfflineConfig(live_date="2026-08-12", markexpr="")
+    )
+
+    pytest_generate_tests(metafunc)
+
+    assert metafunc.generated is not None
+    _, cases = metafunc.generated
+    assert len(cases) == 1
+    assert cases[0].id == "live-marker-required"
+    assert cases[0].values == (None, None)
+    assert cases[0].marks[0].name == "skip"
+    assert "-m live" in cases[0].marks[0].kwargs["reason"]
