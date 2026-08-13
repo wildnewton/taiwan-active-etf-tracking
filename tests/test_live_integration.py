@@ -202,6 +202,8 @@ def _run_browser_official(etf_code: str, page, live_date: date, loop) -> dict:
 
 def _validate_official_config(etf_code: str, config: dict) -> None:
     """Validate official config fields before scraping. Fails on missing/invalid."""
+    from urllib.parse import urlparse
+
     if config.get("code") != etf_code:
         pytest.fail(
             _diagnostic(
@@ -224,8 +226,9 @@ def _validate_official_config(etf_code: str, config: dict) -> None:
             ),
             pytrace=False,
         )
-    url = config.get("url")
-    if not (isinstance(url, str) and url.startswith("http")):
+    url = config.get("url", "")
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
         pytest.fail(
             _diagnostic(
                 etf_code,
@@ -318,9 +321,17 @@ def test_live_scraper_returns_requested_valid_snapshot(
     source: str,
     live_date: date,
     operational_db_is_unchanged,
-    _browser_context,
+    request,
 ):
-    page, loop = _browser_context
+    """Live integration test: scrape one ETF from one source, validate result.
+
+    MoneyDJ cases: never touch Playwright.
+    Official static cases: never touch Playwright.
+    Official browser cases (api/stealth_api/playwright/browser):
+      lazy-load _browser_context fixture via request.getfixturevalue.
+    """
+    page = None
+    loop = None
     if source == "official":
         try:
             config = get_official_config(etf_code)
@@ -338,6 +349,20 @@ def test_live_scraper_returns_requested_valid_snapshot(
         _validate_official_config(etf_code, config)
         issuer = config.get("issuer")
         method = config.get("method")
+        if method in _BROWSER_METHODS:
+            try:
+                page, loop = request.getfixturevalue("_browser_context")
+            except Exception as exc:
+                pytest.fail(
+                    _diagnostic(
+                        etf_code,
+                        issuer,
+                        source,
+                        method,
+                        f"Playwright setup failed: {exc}",
+                    ),
+                    pytrace=False,
+                )
         result = _scrape_official_by_method(
             etf_code, config, page, live_date, loop
         )
@@ -601,9 +626,6 @@ def test_official_dispatch_static_vs_browser(monkeypatch):
 
 def test_official_config_validation(monkeypatch):
     """Verify _validate_official_config catches missing/invalid fields."""
-    import pytest as _pytest
-
-    _Failed = _pytest.failed.Exception if hasattr(_pytest, "failed") else BaseException
 
     # Code mismatch
     with pytest.raises(BaseException, match="config code mismatch"):
@@ -613,7 +635,7 @@ def test_official_config_validation(monkeypatch):
     with pytest.raises(BaseException, match="empty issuer"):
         _validate_official_config("0001A", {"code": "0001A", "issuer": "", "url": "http://x", "method": "static"})
 
-    # Invalid URL
+    # Invalid URL (no scheme or netloc)
     with pytest.raises(BaseException, match="url is invalid"):
         _validate_official_config("0001A", {"code": "0001A", "issuer": "X", "url": "not-a-url", "method": "static"})
 
@@ -632,3 +654,22 @@ def test_unsupported_official_method_fails(monkeypatch):
     config = {"method": "quantum", "issuer": "FutureCorp", "code": "0001A"}
     with pytest.raises(BaseException, match="unsupported official method"):
         _scrape_official_by_method("0001A", config, fake_page, date(2026, 8, 12), fake_loop)
+
+
+def test_moneydj_and_static_official_do_not_require_browser():
+    """Prove MoneyDJ and static official cases never need browser fixture.
+
+    This validates the source isolation contract: only browser-method
+    official cases should request _browser_context via getfixturevalue.
+    """
+    from scripts.scrapers.official import scrape_official_static
+
+    # MoneyDJ — direct call, no page/loop needed
+    result = scrape_moneydj.__code__.co_varnames
+    assert "page" not in result
+    assert "loop" not in result
+
+    # scrape_official_static — direct call, no page/loop needed
+    result = scrape_official_static.__code__.co_varnames
+    assert "page" not in result
+    assert "loop" not in result
