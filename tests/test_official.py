@@ -32,9 +32,6 @@ NOMURA_URL = (
     "https://www.nomurafunds.com.tw/ETFWEB/product-description"
     "?fundNo=00980A&tab=Shareholding"
 )
-TWSE_00980A_URL = (
-    "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?00980A="
-)
 
 
 # ── Static HTML fixtures (Fubon, Taishin) ──
@@ -108,13 +105,13 @@ VALID_FUBON_HTML = """
 """
 
 
-TWSE_HTML = """
+VALID_TAISHIN_HTML = """
 <html>
   <body>
-    <span>資料日期：2026/06/18</span>
+    <p>日期：2026/06/18</p>
     <table>
       <thead>
-        <tr><th>證券代號</th><th>證券名稱</th><th>持有股數</th><th>權重</th></tr>
+        <tr><th>股票代碼</th><th>名稱</th><th>持股數</th><th>佔基金淨資產比例(%)</th></tr>
       </thead>
       <tbody>
         <tr><td>2330</td><td>台積電</td><td>100,000</td><td>20%</td></tr>
@@ -400,6 +397,20 @@ def insert_official_config(code, *, name, issuer, url, method, logic):
     )
 
 
+def assert_failed_official_static_result(result, *, reason, source_url):
+    assert result == {
+        "ok": False,
+        "reason": reason,
+        "all_rows": [],
+        "stock_rows": [],
+        "non_stock_rows": [],
+        "source_url": source_url,
+        "source_type": "official_fallback",
+        "total_weight_all_rows": 0.0,
+        "total_weight_stock_rows": 0.0,
+    }
+
+
 # ── Config tests ──
 
 def test_get_official_config_returns_config():
@@ -593,27 +604,134 @@ def test_scrape_official_static_fubon():
     assert result["total_weight_all_rows"] == 90.0
 
 
-def test_scrape_official_static_falls_back_to_twse():
-    insert_official_config(
-        "00980A",
-        name="主動野村臺灣優選",
-        issuer="Nomura",
-        url=NOMURA_URL,
-        method="stealth_api",
-        logic="fundNo=00980A",
-    )
-    response = Mock()
-    response.text = TWSE_HTML
-    response.raise_for_status.return_value = None
-
-    with patch("scrapers.official.requests.get", return_value=response) as mock_get:
+def test_scrape_official_static_rejects_configured_non_static_issuer():
+    config = {
+        "url": NOMURA_URL,
+        "method": "stealth_api",
+        "issuer": "Nomura",
+    }
+    with patch("scrapers.official.get_official_config", return_value=config), patch(
+        "scrapers.official.fetch_static"
+    ) as mock_fetch_static:
         result = scrape_official_static("00980A")
 
+    assert_failed_official_static_result(
+        result,
+        reason="no_official_scraper_for_issuer:Nomura",
+        source_url=NOMURA_URL,
+    )
+    mock_fetch_static.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("config", "expected_issuer"),
+    [
+        (
+            {
+                "url": "https://example.com/unsupported",
+                "method": "static",
+                "issuer": "UnsupportedIssuer",
+            },
+            "UnsupportedIssuer",
+        ),
+        (
+            {
+                "url": "https://example.com/empty-issuer",
+                "method": "static",
+                "issuer": "",
+            },
+            "unknown",
+        ),
+        (
+            {
+                "url": "https://example.com/missing-issuer",
+                "method": "static",
+            },
+            "unknown",
+        ),
+    ],
+    ids=["unsupported", "empty", "missing"],
+)
+def test_scrape_official_static_rejects_unsupported_or_unknown_issuer(
+    config,
+    expected_issuer,
+):
+    with patch("scrapers.official.get_official_config", return_value=config), patch(
+        "scrapers.official.fetch_static"
+    ) as mock_fetch_static:
+        result = scrape_official_static("00999A")
+
+    assert_failed_official_static_result(
+        result,
+        reason=f"no_official_scraper_for_issuer:{expected_issuer}",
+        source_url=config["url"],
+    )
+    mock_fetch_static.assert_not_called()
+
+
+def test_scrape_official_static_reports_missing_config_without_fetching():
+    with patch(
+        "scrapers.official.get_official_config",
+        side_effect=KeyError("00998A"),
+    ), patch("scrapers.official.fetch_static") as mock_fetch_static:
+        result = scrape_official_static("00998a")
+
+    assert_failed_official_static_result(
+        result,
+        reason="official_config_not_found:00998A",
+        source_url="",
+    )
+    mock_fetch_static.assert_not_called()
+
+
+def test_scrape_official_static_reports_config_error_without_fetching():
+    with patch(
+        "scrapers.official.get_official_config",
+        side_effect=RuntimeError("database unavailable"),
+    ), patch("scrapers.official.fetch_static") as mock_fetch_static:
+        result = scrape_official_static("00997a")
+
+    assert_failed_official_static_result(
+        result,
+        reason="official_config_error:00997A:RuntimeError:database unavailable",
+        source_url="",
+    )
+    mock_fetch_static.assert_not_called()
+
+
+def test_scrape_official_static_taishin_uses_only_configured_url():
+    config = {
+        "url": TAISHIN_URL,
+        "method": "static",
+        "issuer": "Taishin",
+    }
+    with patch("scrapers.official.get_official_config", return_value=config), patch(
+        "scrapers.official.fetch_static",
+        return_value=VALID_TAISHIN_HTML,
+    ) as mock_fetch_static:
+        result = scrape_official_static("00987A")
+
+    mock_fetch_static.assert_called_once_with(TAISHIN_URL)
+    assert set(result) == {
+        "ok",
+        "reason",
+        "all_rows",
+        "stock_rows",
+        "non_stock_rows",
+        "source_url",
+        "source_type",
+        "total_weight_all_rows",
+        "total_weight_stock_rows",
+    }
     assert result["ok"] is True
-    assert result["source_url"] == TWSE_00980A_URL
-    assert result["source_type"] == "official_fallback"
+    assert result["reason"] == "ok"
+    assert result["all_rows"] == result["stock_rows"]
     assert len(result["stock_rows"]) == 5
-    mock_get.assert_called_once()
+    assert result["non_stock_rows"] == []
+    assert result["source_url"] == TAISHIN_URL
+    assert result["source_type"] == "official_fallback"
+    assert result["total_weight_all_rows"] == 90.0
+    assert result["total_weight_stock_rows"] == 90.0
 
 
 # ── Async browser scraper tests ──
