@@ -37,10 +37,6 @@ _ALLIANZ_FUND_OPTIONS_PATH = "/webapi/api/Category/GetFundDropdownOptions"
 _ALLIANZ_TRADE_INFO_PATH = "/webapi/api/Fund/GetFundTradeInfo"
 _TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 
-TWSE_URL_TEMPLATE = (
-    "https://www.twse.com.tw/zh/products/securities/etf/products/content.html?{code}="
-)
-
 
 def get_official_config(etf_code: str) -> dict:
     etf = get_etf_config(etf_code.upper())
@@ -85,10 +81,6 @@ def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
 
 
 def parse_taishin(html: str, etf_code: str, source_url: str) -> list[dict]:
-    return _parse_official_table(html, etf_code, source_url)
-
-
-def parse_twse(html: str, etf_code: str, source_url: str) -> list[dict]:
     return _parse_official_table(html, etf_code, source_url)
 
 
@@ -636,25 +628,43 @@ async def scrape_uni_president_playwright(etf_code: str, page) -> dict:
 
 def scrape_official_static(etf_code: str) -> dict:
     etf_code = etf_code.upper()
-    source_url = _build_twse_url(etf_code)
 
     try:
         config = get_official_config(etf_code)
-        if config["method"] == "static":
-            source_url = config["url"]
-            parser = _parser_for_issuer(config["issuer"])
-        else:
-            parser = parse_twse
+    except KeyError:
+        return _failed_result("", f"official_config_not_found:{etf_code}")
+    except Exception as exc:
+        return _failed_result(
+            "",
+            f"official_config_error:{etf_code}:{type(exc).__name__}:{exc}",
+        )
+
+    source_url = config.get("url") or ""
+    issuer = config.get("issuer") or "unknown"
+    if config.get("method") != "static":
+        return _failed_result(
+            source_url,
+            f"no_official_scraper_for_issuer:{issuer}",
+        )
+
+    try:
+        parser = _parser_for_issuer(issuer)
+    except ValueError:
+        return _failed_result(
+            source_url,
+            f"no_official_scraper_for_issuer:{issuer}",
+        )
+
+    if not source_url:
+        return _failed_result(
+            "",
+            f"official_config_error:{etf_code}:missing_official_url",
+        )
+
+    try:
         html = fetch_static(source_url)
         all_rows = dedupe_rows(parser(html, etf_code, source_url))
         return _build_result(all_rows, source_url, EXTRACTION_METHOD_STATIC)
-    except KeyError:
-        try:
-            html = fetch_static(source_url)
-            all_rows = dedupe_rows(parse_twse(html, etf_code, source_url))
-            return _build_result(all_rows, source_url, EXTRACTION_METHOD_STATIC)
-        except Exception as exc:
-            return _failed_result(source_url, str(exc))
     except Exception as exc:
         return _failed_result(source_url, str(exc))
 
@@ -1069,7 +1079,6 @@ def _parser_for_issuer(issuer: str):
     parsers = {
         "Fubon": parse_fubon,
         "Taishin": parse_taishin,
-        "TWSE": parse_twse,
         "SinoPac": parse_sinopac,
     }
     try:
@@ -1088,10 +1097,6 @@ def _parse_official_logic(logic: str | None) -> dict:
         key, value = part.split("=", 1)
         internal_ids[key.strip()] = value.strip()
     return internal_ids
-
-
-def _build_twse_url(etf_code: str) -> str:
-    return TWSE_URL_TEMPLATE.format(code=etf_code.upper())
 
 
 def _sum_weights(rows: list) -> float:
