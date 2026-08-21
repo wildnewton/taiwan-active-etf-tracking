@@ -13,6 +13,7 @@ from scrapers.official import (
     parse_taishin,
     scrape_ctbc_playwright,
     scrape_mega_playwright,
+    scrape_official_static,
     scrape_official_with_browser,
 )
 
@@ -24,6 +25,12 @@ MEGA_PAGE_URL = "https://www.megafunds.com.tw/MEGA/etf/etf_product.aspx?id=23"
 TARGET_DATE = date(2026, 8, 20)
 TARGET_DATE_TEXT = "2026/08/20"
 FIXTURES = Path(__file__).parent / "fixtures"
+TAISHIN_NAV_INPUT = (
+    '<input type="hidden" name="NAV_DATE" value="2026/8/20 上午 12:00:00">'
+)
+TAISHIN_INVALID_ROW = (
+    "<tr><td>0000</td><td>非持股項目</td><td>0</td><td>－</td></tr>"
+)
 
 
 _STOCKS = [
@@ -155,8 +162,22 @@ def test_ctbc_response_predicate_fails_closed(response):
     assert _is_ctbc_holdings_response(response) is False
 
 
-def test_taishin_parser_skips_fullwidth_dash_row_without_losing_holdings():
+def _taishin_html(*, nav_date="2026/8/20 上午 12:00:00", include_dash_row=True):
     html = (FIXTURES / "taishin_fullwidth_dash.html").read_text(encoding="utf-8")
+    if nav_date is None:
+        html = html.replace(TAISHIN_NAV_INPUT, "")
+    else:
+        html = html.replace(
+            TAISHIN_NAV_INPUT,
+            f'<input type="hidden" name="NAV_DATE" value="{nav_date}">',
+        )
+    if not include_dash_row:
+        html = html.replace(TAISHIN_INVALID_ROW, "")
+    return html
+
+
+def test_taishin_parser_uses_normalized_nav_date_and_skips_fullwidth_dash_row():
+    html = _taishin_html()
 
     rows = parse_taishin(html, "00987A", TAISHIN_PAGE_URL)
 
@@ -176,6 +197,64 @@ def test_taishin_parser_skips_fullwidth_dash_row_without_losing_holdings():
         }
         for code, name, shares, weight in _STOCKS
     ]
+
+
+@pytest.mark.parametrize(
+    ("nav_date", "expected_message"),
+    [
+        (None, "Taishin NAV_DATE is missing"),
+        ("not-a-date", "Taishin NAV_DATE is invalid"),
+        ("2026/2/30", "Taishin NAV_DATE is invalid"),
+    ],
+    ids=["missing", "malformed", "calendar-invalid"],
+)
+def test_taishin_parser_rejects_missing_or_invalid_nav_date(
+    nav_date,
+    expected_message,
+):
+    html = _taishin_html(nav_date=nav_date, include_dash_row=False)
+
+    with pytest.raises(ValueError, match=f"^{expected_message}$"):
+        parse_taishin(html, "00987A", TAISHIN_PAGE_URL)
+
+
+@pytest.mark.parametrize(
+    ("nav_date", "expected_reason"),
+    [
+        (None, "Taishin NAV_DATE is missing"),
+        ("not-a-date", "Taishin NAV_DATE is invalid"),
+        ("2026/2/30", "Taishin NAV_DATE is invalid"),
+    ],
+    ids=["missing", "malformed", "calendar-invalid"],
+)
+def test_taishin_static_scraper_returns_clean_failure_for_invalid_nav_date(
+    nav_date,
+    expected_reason,
+):
+    html = _taishin_html(nav_date=nav_date, include_dash_row=False)
+    config = {
+        "url": TAISHIN_PAGE_URL,
+        "method": "static",
+        "issuer": "Taishin",
+    }
+
+    with patch("scrapers.official.get_official_config", return_value=config), patch(
+        "scrapers.official.fetch_static",
+        return_value=html,
+    ):
+        result = scrape_official_static("00987A")
+
+    assert result == {
+        "ok": False,
+        "reason": expected_reason,
+        "all_rows": [],
+        "stock_rows": [],
+        "non_stock_rows": [],
+        "source_url": TAISHIN_PAGE_URL,
+        "source_type": "official_fallback",
+        "total_weight_all_rows": 0.0,
+        "total_weight_stock_rows": 0.0,
+    }
 
 
 def test_shared_official_table_parser_preserves_fubon_numeric_rows():
