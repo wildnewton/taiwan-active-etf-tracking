@@ -64,6 +64,7 @@ TAISHIN_HTML = """
 <html>
   <body>
     <p>日期：2026/06/18</p>
+    <input type="hidden" name="NAV_DATE" value="2026/6/18 上午 12:00:00">
     <table>
       <thead>
         <tr>
@@ -499,6 +500,7 @@ def test_parse_taishin_rows():
     assert_stock_row(rows[0], "00987A", "2330", "台積電", 620000, 10.10)
     assert_stock_row(rows[2], "00987A", "3711", "日月光投控", 330000, 2.90)
     assert rows[0]["source_url"] == TAISHIN_URL
+    assert {row["date"] for row in rows} == {"2026/06/18"}
 
 
 # ── API parser tests (Capital, Nomura) ──
