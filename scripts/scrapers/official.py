@@ -655,6 +655,12 @@ def scrape_official_static(etf_code: str) -> dict:
             f"no_official_scraper_for_issuer:{issuer}",
         )
 
+    if not source_url:
+        return _failed_result(
+            "",
+            f"official_config_error:{etf_code}:missing_official_url",
+        )
+
     try:
         html = fetch_static(source_url)
         all_rows = dedupe_rows(parser(html, etf_code, source_url))
