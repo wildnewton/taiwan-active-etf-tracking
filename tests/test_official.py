@@ -110,6 +110,7 @@ VALID_TAISHIN_HTML = """
 <html>
   <body>
     <p>日期：2026/06/18</p>
+    <input type="hidden" name="NAV_DATE" value="2026/6/18 上午 12:00:00">
     <table>
       <thead>
         <tr><th>股票代碼</th><th>名稱</th><th>持股數</th><th>佔基金淨資產比例(%)</th></tr>
@@ -734,6 +735,29 @@ def test_scrape_official_static_taishin_uses_only_configured_url():
     assert result["source_type"] == "official_fallback"
     assert result["total_weight_all_rows"] == 90.0
     assert result["total_weight_stock_rows"] == 90.0
+    assert [
+        (
+            row["stock_code"],
+            row["stock_name"],
+            row["shares"],
+            row["weight_pct"],
+        )
+        for row in result["all_rows"]
+    ] == [
+        ("2330", "台積電", 100000, 20.0),
+        ("2308", "台達電", 100000, 20.0),
+        ("2454", "聯發科", 100000, 20.0),
+        ("2317", "鴻海", 100000, 20.0),
+        ("2382", "廣達", 100000, 10.0),
+    ]
+    assert {row["date"] for row in result["all_rows"]} == {"2026/06/18"}
+    assert {row["source_url"] for row in result["all_rows"]} == {TAISHIN_URL}
+    assert {row["source_type"] for row in result["all_rows"]} == {
+        "official_fallback"
+    }
+    assert {row["extraction_method"] for row in result["all_rows"]} == {
+        "requests_bs4"
+    }
 
 
 # ── Async browser scraper tests ──
