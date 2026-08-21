@@ -81,7 +81,23 @@ def parse_fubon(html: str, etf_code: str, source_url: str) -> list[dict]:
 
 
 def parse_taishin(html: str, etf_code: str, source_url: str) -> list[dict]:
-    return _parse_official_table(html, etf_code, source_url)
+    soup = BeautifulSoup(html, "lxml")
+    holdings_date = _parse_taishin_nav_date(soup)
+    for cell in soup.find_all(["th", "td"]):
+        if cell.get_text(" ", strip=True) == "－":
+            cell.string = "-"
+
+    rows = []
+    for table in soup.find_all("table"):
+        rows.extend(
+            _parse_table_rows(
+                table,
+                etf_code.upper(),
+                source_url,
+                holdings_date,
+            )
+        )
+    return rows
 
 
 def parse_sinopac(html: str, etf_code: str, source_url: str) -> list[dict]:
@@ -343,10 +359,11 @@ def parse_allianz_api(
     if not rows:
         raise ValueError("Allianz stock rows not found")
     return dedupe_rows(rows)
+
+
 def parse_mega_text(body_text: str, etf_code: str, source_url: str, date: str | None = None) -> list[dict]:
     if not date:
-        match = re.search(r"(\d{4}/\d{2}/\d{2})", body_text)
-        date = match.group(1) if match else None
+        date = _parse_mega_holdings_date(body_text)
 
     rows = []
     lines = [line.strip() for line in body_text.splitlines() if line.strip()]
@@ -569,7 +586,11 @@ def scrape_allianz_api(etf_code: str, target_date: date) -> dict:
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_API)
 
 
-async def scrape_mega_playwright(etf_code: str, page) -> dict:
+async def scrape_mega_playwright(
+    etf_code: str,
+    page,
+    target_date: date | None = None,
+) -> dict:
     etf_code = etf_code.upper()
     config = get_official_config(etf_code)
     source_url = config["url"]
@@ -578,7 +599,20 @@ async def scrape_mega_playwright(etf_code: str, page) -> dict:
     await page.wait_for_timeout(3000)
     body_text = await page.locator("body").inner_text()
 
-    all_rows = dedupe_rows(parse_mega_text(body_text, etf_code, source_url))
+    holdings_date = _parse_mega_holdings_date(body_text)
+    if not holdings_date:
+        return _failed_result(source_url, "Mega holdings date not found")
+    if target_date is not None:
+        expected_date = target_date.strftime("%Y/%m/%d")
+        if holdings_date != expected_date:
+            return _failed_result(
+                source_url,
+                f"Mega holdings date mismatch: expected {expected_date}, got {holdings_date}",
+            )
+
+    all_rows = dedupe_rows(
+        parse_mega_text(body_text, etf_code, source_url, date=holdings_date)
+    )
     return _build_result(all_rows, source_url, EXTRACTION_METHOD_PLAYWRIGHT)
 
 
@@ -695,7 +729,11 @@ async def scrape_official_with_browser(
             return _failed_result(config["url"], "target_date is required for Allianz")
         return await asyncio.to_thread(scrape_allianz_api, etf_code, target_date)
     if method == "playwright" and issuer == "Mega":
-        return await scrape_mega_playwright(etf_code, page)
+        return await scrape_mega_playwright(
+            etf_code,
+            page,
+            target_date=target_date,
+        )
     if method == "playwright" and issuer == "Uni-President":
         return await scrape_uni_president_playwright(etf_code, page)
 
@@ -764,7 +802,7 @@ def _is_ctbc_holdings_response(response) -> bool:
         response,
         "ctbcinvestments.com.tw",
         "/api/etf/etfholdingweight",
-        "GET",
+        "POST",
     )
 
 
@@ -910,6 +948,33 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
         pane_text,
     )
     return labeled_date_match.group(1) if labeled_date_match else None
+
+
+def _parse_taishin_nav_date(soup: BeautifulSoup) -> str:
+    nav_date_input = soup.find("input", attrs={"name": "NAV_DATE"})
+    raw_value = nav_date_input.get("value") if nav_date_input else None
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        raise ValueError("Taishin NAV_DATE is missing")
+
+    match = re.fullmatch(
+        r"\s*(\d{4}/\d{1,2}/\d{1,2})(?:\s+(?:上午|下午)\s+\d{1,2}:\d{2}:\d{2})?\s*",
+        raw_value,
+    )
+    if not match:
+        raise ValueError("Taishin NAV_DATE is invalid")
+    try:
+        parsed_date = datetime.strptime(match.group(1), "%Y/%m/%d").date()
+    except ValueError as exc:
+        raise ValueError("Taishin NAV_DATE is invalid") from exc
+    return parsed_date.strftime("%Y/%m/%d")
+
+
+def _parse_mega_holdings_date(body_text: str) -> str | None:
+    match = re.search(
+        r"資料來源\s*[:：]\s*兆豐投信\s*[，,]\s*(\d{4}/\d{2}/\d{2})",
+        body_text,
+    )
+    return match.group(1) if match else None
 
 
 
