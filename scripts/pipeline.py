@@ -27,6 +27,11 @@ TAIPEI_TIMEZONE = ZoneInfo("Asia/Taipei")
 DATA_AVAILABILITY_CUTOFF = time(15, 0)
 _ASYNC_SCRAPE_CONCURRENCY = 3
 
+PRODUCTION_BROWSER_CONTEXT_OPTIONS = {
+    "locale": "zh-TW",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+}
+
 
 def run_daily_scrape(db_path: str = "data/active_etf_holdings.sqlite") -> dict:
     return _run_daily_scrape_sync(db_path, scrape_holdings)
@@ -81,7 +86,7 @@ async def run_daily_scrape_with_browser_async(
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         try:
-            context = await browser.new_context(locale="zh-TW")
+            context = await browser.new_context(**PRODUCTION_BROWSER_CONTEXT_OPTIONS)
             try:
                 return await _execute_scrape_async_with_pages(
                     etfs_to_scrape,
@@ -136,7 +141,7 @@ async def run_selected_scrape_with_browser_async(
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=True)
         try:
-            context = await browser.new_context(locale="zh-TW")
+            context = await browser.new_context(**PRODUCTION_BROWSER_CONTEXT_OPTIONS)
             try:
                 browser_page = await context.new_page()
                 return await _execute_scrape_async(
