@@ -3,6 +3,7 @@ import ast
 import hashlib
 import json
 import sys
+import time
 from datetime import date
 
 import pytest
@@ -17,6 +18,108 @@ from scripts.scrapers.official import (
     scrape_official_with_browser,
 )
 from scripts.snapshot_validation import validate_snapshot_rows
+
+
+class _TraceRecorder:
+    """Capture structured network/page events before navigation."""
+
+    def __init__(self, page, etf_code: str, mode: str, run_number: int):
+        self.page = page
+        self.etf_code = etf_code
+        self.mode = mode
+        self.run_number = run_number
+        self.events = []
+        self._start_time = time.monotonic()
+        self._listeners_attached = []
+
+        page.on("request", self._on_request)
+        self._listeners_attached.append("request")
+        page.on("response", self._on_response)
+        self._listeners_attached.append("response")
+        page.on("requestfailed", self._on_requestfailed)
+        self._listeners_attached.append("requestfailed")
+        page.on("console", self._on_console)
+        self._listeners_attached.append("console")
+        page.on("pageerror", self._on_pageerror)
+        self._listeners_attached.append("pageerror")
+
+    def _elapsed_ms(self) -> float:
+        return (time.monotonic() - self._start_time) * 1000
+
+    def _on_request(self, request):
+        self.events.append({
+            "type": "request",
+            "elapsed_ms": self._elapsed_ms(),
+            "url": request.url,
+            "method": request.method,
+            "resource_type": request.resource_type,
+            "post_data": request.post_data,
+        })
+
+    def _on_response(self, response):
+        request = response.request
+        self.events.append({
+            "type": "response",
+            "elapsed_ms": self._elapsed_ms(),
+            "url": response.url,
+            "status": response.status,
+            "method": request.method,
+        })
+
+    def _on_requestfailed(self, request):
+        self.events.append({
+            "type": "requestfailed",
+            "elapsed_ms": self._elapsed_ms(),
+            "url": request.url,
+            "method": request.method,
+            "failure": request.failure,
+        })
+
+    def _on_console(self, msg):
+        self.events.append({
+            "type": "console",
+            "elapsed_ms": self._elapsed_ms(),
+            "level": msg.type,
+            "text": msg.text,
+        })
+
+    def _on_pageerror(self, error):
+        self.events.append({
+            "type": "pageerror",
+            "elapsed_ms": self._elapsed_ms(),
+            "message": str(error),
+        })
+
+    async def capture_navigation_state(self) -> dict:
+        try:
+            url = self.page.url
+        except Exception:
+            url = "unavailable"
+        try:
+            title = await self.page.title()
+        except Exception:
+            title = "unavailable"
+        return {"final_url": url, "title": title}
+
+    def detach(self):
+        for listener in self._listeners_attached:
+            try:
+                self.page.remove_listener(listener, getattr(self, f"_on_{listener}"))
+            except Exception:
+                pass
+
+    def summary(self) -> dict:
+        ctbc_requests = [e for e in self.events if e["type"] == "request" and "ETFHoldingWeight" in e.get("url", "")]
+        ctbc_responses = [e for e in self.events if e["type"] == "response" and "ETFHoldingWeight" in e.get("url", "")]
+        return {
+            "etf_code": self.etf_code,
+            "mode": self.mode,
+            "run_number": self.run_number,
+            "total_events": len(self.events),
+            "ctbc_requests": len(ctbc_requests),
+            "ctbc_responses": len(ctbc_responses),
+            "events": self.events,
+        }
 
 
 def _assert_pytest_fail(test_func, *args, **kwargs):
@@ -344,6 +447,45 @@ def _browser_context():
         loop.run_until_complete(pw.stop())
     finally:
         loop.close()
+
+
+@pytest.fixture(scope="session")
+def _browser_context_fresh_page():
+    """Provide a shared context + event loop, but create a fresh page per case.
+
+    Returns (context, loop) or (None, None) if Playwright is unavailable.
+    Each test case creates and closes its own page within the shared context.
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        yield None, None
+        return
+
+    loop = asyncio.new_event_loop()
+    try:
+        async def _launch():
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(
+                **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
+            )
+            return pw, browser, context
+
+        pw, browser, context = loop.run_until_complete(_launch())
+        yield context, loop
+        loop.run_until_complete(context.close())
+        loop.run_until_complete(browser.close())
+        loop.run_until_complete(pw.stop())
+    finally:
+        loop.close()
+
+
+def _run_browser_official(etf_code: str, page, live_date: date, loop) -> dict:
+    """Run the production browser-based official scraper on a given event loop."""
+    return loop.run_until_complete(
+        scrape_official_with_browser(etf_code, page, target_date=live_date)
+    )
 
 
 @pytest.mark.live
@@ -768,3 +910,162 @@ def test_moneydj_and_static_official_do_not_require_browser():
     result = scrape_official_static.__code__.co_varnames
     assert "page" not in result
     assert "loop" not in result
+
+
+@pytest.mark.live
+def test_ctbc_page_reuse_diagnostic(live_date, request):
+    """Diagnostic test to identify if page reuse causes CTBC live test failures.
+
+    This test runs CTBC ETFs (00406A, 00995A) and control (00980A) in two modes:
+    1. Shared-page mode: reuses the same page across all ETFs (current behavior)
+    2. Fresh-page mode: creates a new page for each ETF
+
+    The test captures trace data for both modes to compare network behavior
+    and identify if page state/reuse is causing the interception failures.
+    """
+    from playwright.async_api import async_playwright
+    from scripts.scrapers.official import scrape_official_with_browser
+
+    etf_codes = ["00406A", "00995A", "00980A"]  # CTBC, CTBC, Nomura (control)
+
+    # Mode 1: Shared-page mode (current behavior)
+    shared_mode_results = []
+    loop = asyncio.new_event_loop()
+    try:
+        async def run_shared_mode():
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(
+                **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
+            )
+            page = await context.new_page()
+
+            results = []
+            for etf_code in etf_codes:
+                recorder = _TraceRecorder(page, etf_code, "shared", 1)
+                try:
+                    result = await scrape_official_with_browser(
+                        etf_code, page, target_date=live_date
+                    )
+                    nav_state = await recorder.capture_navigation_state()
+                    results.append({
+                        "etf_code": etf_code,
+                        "mode": "shared",
+                        "success": result.get("ok", False),
+                        "reason": result.get("reason", "unknown"),
+                        "trace": recorder.summary(),
+                        "navigation": nav_state,
+                    })
+                except Exception as e:
+                    results.append({
+                        "etf_code": etf_code,
+                        "mode": "shared",
+                        "success": False,
+                        "reason": str(e),
+                        "trace": recorder.summary(),
+                        "navigation": {},
+                    })
+                finally:
+                    recorder.detach()
+
+            await page.close()
+            await context.close()
+            await browser.close()
+            await pw.stop()
+            return results
+
+        shared_mode_results = loop.run_until_complete(run_shared_mode())
+    finally:
+        loop.close()
+
+    # Mode 2: Fresh-page mode (new behavior)
+    fresh_mode_results = []
+    loop = asyncio.new_event_loop()
+    try:
+        async def run_fresh_mode():
+            pw = await async_playwright().start()
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(
+                **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
+            )
+
+            results = []
+            for etf_code in etf_codes:
+                page = await context.new_page()
+                recorder = _TraceRecorder(page, etf_code, "fresh", 1)
+                try:
+                    result = await scrape_official_with_browser(
+                        etf_code, page, target_date=live_date
+                    )
+                    nav_state = await recorder.capture_navigation_state()
+                    results.append({
+                        "etf_code": etf_code,
+                        "mode": "fresh",
+                        "success": result.get("ok", False),
+                        "reason": result.get("reason", "unknown"),
+                        "trace": recorder.summary(),
+                        "navigation": nav_state,
+                    })
+                except Exception as e:
+                    results.append({
+                        "etf_code": etf_code,
+                        "mode": "fresh",
+                        "success": False,
+                        "reason": str(e),
+                        "trace": recorder.summary(),
+                        "navigation": {},
+                    })
+                finally:
+                    recorder.detach()
+                    await page.close()
+
+            await context.close()
+            await browser.close()
+            await pw.stop()
+            return results
+
+        fresh_mode_results = loop.run_until_complete(run_fresh_mode())
+    finally:
+        loop.close()
+
+    # Output diagnostic data
+    print("\n" + "=" * 80)
+    print("CTBC PAGE REUSE DIAGNOSTIC")
+    print("=" * 80)
+
+    print("\n--- SHARED-PAGE MODE ---")
+    for result in shared_mode_results:
+        print(f"\n{result['etf_code']}: {'✓' if result['success'] else '✗'} {result['reason']}")
+        print(f"  CTBC API requests: {result['trace']['ctbc_requests']}")
+        print(f"  CTBC API responses: {result['trace']['ctbc_responses']}")
+        print(f"  Final URL: {result['navigation'].get('final_url', 'N/A')}")
+        if result['trace']['ctbc_requests'] > 0:
+            ctbc_req = [e for e in result['trace']['events']
+                       if e['type'] == 'request' and 'ETFHoldingWeight' in e.get('url', '')][0]
+            print(f"  First request elapsed: {ctbc_req['elapsed_ms']:.2f}ms")
+
+    print("\n--- FRESH-PAGE MODE ---")
+    for result in fresh_mode_results:
+        print(f"\n{result['etf_code']}: {'✓' if result['success'] else '✗'} {result['reason']}")
+        print(f"  CTBC API requests: {result['trace']['ctbc_requests']}")
+        print(f"  CTBC API responses: {result['trace']['ctbc_responses']}")
+        print(f"  Final URL: {result['navigation'].get('final_url', 'N/A')}")
+        if result['trace']['ctbc_requests'] > 0:
+            ctbc_req = [e for e in result['trace']['events']
+                       if e['type'] == 'request' and 'ETFHoldingWeight' in e.get('url', '')][0]
+            print(f"  First request elapsed: {ctbc_req['elapsed_ms']:.2f}ms")
+
+    # Compare modes
+    print("\n--- COMPARISON ---")
+    for etf_code in etf_codes:
+        shared = next((r for r in shared_mode_results if r['etf_code'] == etf_code), None)
+        fresh = next((r for r in fresh_mode_results if r['etf_code'] == etf_code), None)
+        if shared and fresh:
+            match = "✓" if shared['success'] == fresh['success'] else "✗"
+            print(f"{etf_code}: shared={shared['success']}, fresh={fresh['success']} {match}")
+
+    print("=" * 80 + "\n")
+
+    # This test is diagnostic only - don't assert anything
+    # The goal is to see the output and compare modes
+    assert True, "Diagnostic test completed - see output above"
