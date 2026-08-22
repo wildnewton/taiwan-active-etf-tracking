@@ -346,13 +346,6 @@ def _browser_context():
         loop.close()
 
 
-def _run_browser_official(etf_code: str, page, live_date: date, loop) -> dict:
-    """Run the production browser-based official scraper on a given event loop."""
-    return loop.run_until_complete(
-        scrape_official_with_browser(etf_code, page, target_date=live_date)
-    )
-
-
 @pytest.mark.live
 def test_live_scraper_returns_requested_valid_snapshot(
     etf_code: str,
