@@ -7,6 +7,7 @@ from datetime import date
 
 import pytest
 
+import pipeline as production_pipeline
 from scripts import db
 from scripts.etf_universe import get_active_etfs, get_etf_config
 from scripts.scrapers.moneydj import scrape_moneydj
@@ -333,12 +334,7 @@ def _browser_context():
             pw = await async_playwright().start()
             browser = await pw.chromium.launch(headless=True)
             page = await browser.new_page(
-                user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/126.0.0.0 Safari/537.36"
-                ),
-                locale="zh-TW",
+                **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
             )
             return pw, browser, page
 
