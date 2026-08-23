@@ -199,6 +199,33 @@ def test_taishin_parser_uses_normalized_nav_date_and_skips_fullwidth_dash_row():
     ]
 
 
+def test_taishin_parser_ignores_visible_nav_date_decoy_before_hidden_input():
+    visible_decoy = '<input name="NAV_DATE" value="2026/8/19">'
+    html = _taishin_html().replace(
+        TAISHIN_NAV_INPUT,
+        f"{visible_decoy}{TAISHIN_NAV_INPUT}",
+    )
+
+    rows = parse_taishin(html, "00987A", TAISHIN_PAGE_URL)
+
+    assert rows == [
+        {
+            "date": TARGET_DATE_TEXT,
+            "etf_code": "00987A",
+            "asset_name": f"{name}({code}.TW)",
+            "asset_type": "stock",
+            "stock_code": code,
+            "stock_name": name,
+            "shares": shares,
+            "weight_pct": weight,
+            "source_url": TAISHIN_PAGE_URL,
+            "source_type": "official_fallback",
+            "extraction_method": "requests_bs4",
+        }
+        for code, name, shares, weight in _STOCKS
+    ]
+
+
 @pytest.mark.parametrize(
     ("nav_date", "expected_message"),
     [
