@@ -951,10 +951,7 @@ def _parse_uni_president_holdings_date(pane_text: str) -> str | None:
 
 
 def _parse_taishin_nav_date(soup: BeautifulSoup) -> str:
-    # Prefer hidden input over visible input with same name
     nav_date_input = soup.find("input", attrs={"name": "NAV_DATE", "type": "hidden"})
-    if not nav_date_input:
-        nav_date_input = soup.find("input", attrs={"name": "NAV_DATE"})
     raw_value = nav_date_input.get("value") if nav_date_input else None
     if not isinstance(raw_value, str) or not raw_value.strip():
         raise ValueError("Taishin NAV_DATE is missing")
