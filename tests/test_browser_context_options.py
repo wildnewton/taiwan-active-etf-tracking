@@ -1,4 +1,3 @@
-import asyncio
 from datetime import date
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -193,29 +192,15 @@ def test_live_browser_page_consumes_production_owned_options(monkeypatch):
         sentinel_options,
         raising=False,
     )
-    observed_loops = []
-
-    def observe_return(value=None):
-        async def observed(*args, **kwargs):
-            observed_loops.append(asyncio.get_running_loop())
-            return value
-
-        return observed
-
-    page = Mock()
-    page.close = AsyncMock(side_effect=observe_return())
-    context = Mock()
-    page.context = context
-    context.new_page = AsyncMock(side_effect=observe_return(page))
-    context.close = AsyncMock(side_effect=observe_return())
+    page = object()
     browser = Mock()
-    browser.new_context = AsyncMock(side_effect=observe_return(context))
-    browser.close = AsyncMock(side_effect=observe_return())
+    browser.new_page = AsyncMock(return_value=page)
+    browser.close = AsyncMock()
     playwright = Mock()
-    playwright.chromium.launch = AsyncMock(side_effect=observe_return(browser))
-    playwright.stop = AsyncMock(side_effect=observe_return())
+    playwright.chromium.launch = AsyncMock(return_value=browser)
+    playwright.stop = AsyncMock()
     starter = Mock()
-    starter.start = AsyncMock(side_effect=observe_return(playwright))
+    starter.start = AsyncMock(return_value=playwright)
 
     with patch(
         "playwright.async_api.async_playwright",
@@ -226,16 +211,7 @@ def test_live_browser_page_consumes_production_owned_options(monkeypatch):
         try:
             assert actual_page is page
             assert loop is not None
-            browser.new_context.assert_awaited_once_with(**sentinel_options)
-            context.new_page.assert_awaited_once_with()
-            assert actual_page.context is context
+            browser.new_page.assert_awaited_once_with(**sentinel_options)
         finally:
             with pytest.raises(StopIteration):
                 next(fixture)
-
-    page.close.assert_awaited_once_with()
-    context.close.assert_awaited_once_with()
-    browser.close.assert_awaited_once_with()
-    playwright.stop.assert_awaited_once_with()
-    assert observed_loops
-    assert set(observed_loops) == {loop}

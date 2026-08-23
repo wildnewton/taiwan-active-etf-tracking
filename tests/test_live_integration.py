@@ -3,9 +3,7 @@ import ast
 import hashlib
 import json
 import sys
-import time
 from datetime import date
-from urllib.parse import urlparse
 
 import pytest
 
@@ -14,7 +12,6 @@ from scripts import db
 from scripts.etf_universe import get_active_etfs, get_etf_config
 from scripts.scrapers.moneydj import scrape_moneydj
 from scripts.scrapers.official import (
-    _is_ctbc_holdings_response,
     get_official_config,
     scrape_official_static,
     scrape_official_with_browser,
@@ -223,280 +220,6 @@ def _row_date(value) -> date | None:
 
 
 _BROWSER_METHODS = frozenset(("api", "stealth_api", "playwright", "browser"))
-_CTBC_API_DOMAIN = "ctbcinvestments.com.tw"
-_CTBC_API_PATH = "/api/etf/etfholdingweight"
-_TRACE_TYPES = frozenset(("document", "fetch", "xhr"))
-_TRACE_OBJECTS = []
-_TRACE_IDS = {}
-
-
-def _trace_id(prefix: str, value) -> str:
-    key = id(value)
-    if key not in _TRACE_IDS:
-        _TRACE_OBJECTS.append(value)
-        number = sum(v.startswith(f"{prefix}-") for v in _TRACE_IDS.values()) + 1
-        _TRACE_IDS[key] = f"{prefix}-{number}"
-    return _TRACE_IDS[key]
-
-
-def _request_value(request, name: str, default=None):
-    try:
-        value = getattr(request, name, default)
-        return value() if callable(value) else value
-    except Exception:
-        return default
-
-
-def _ctbc_mismatch(response) -> str | None:
-    parsed = urlparse(str(getattr(response, "url", "")))
-    host = (parsed.hostname or "").lower()
-    if host != _CTBC_API_DOMAIN and not host.endswith(f".{_CTBC_API_DOMAIN}"):
-        return "domain"
-    if parsed.path.rstrip("/").lower() != _CTBC_API_PATH:
-        return "path"
-    if getattr(response, "ok", False) is not True:
-        return "status"
-    method = _request_value(getattr(response, "request", None), "method")
-    if not isinstance(method, str) or method.upper() != "POST":
-        return "method"
-    return None
-
-
-def _ctbc_candidate(url: str) -> bool:
-    parsed = urlparse(url)
-    host = (parsed.hostname or "").lower()
-    return (
-        host == _CTBC_API_DOMAIN
-        or host.endswith(f".{_CTBC_API_DOMAIN}")
-        or "etfholdingweight" in parsed.path.lower()
-    )
-
-
-def _relevant_request(request) -> bool:
-    url = str(_request_value(request, "url", ""))
-    host = (urlparse(url).hostname or "").lower()
-    issuer_host = "ctbcinvestments.com" in host or "nomurafunds.com.tw" in host
-    return (
-        bool(_request_value(request, "is_navigation_request", False))
-        or _ctbc_candidate(url)
-        or (issuer_host and _request_value(request, "resource_type") in _TRACE_TYPES)
-    )
-
-
-def _redirect_chain(request) -> list[str]:
-    chain = []
-    while request is not None:
-        chain.append(str(_request_value(request, "url", "")))
-        request = _request_value(request, "redirected_from")
-    return list(reversed(chain))
-
-
-def _db_digest(state: dict[str, str]) -> str:
-    payload = json.dumps(state, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-class _LiveTraceRecorder:
-    def __init__(self, *, run: int, mode: str, etf: str, page, loop) -> None:
-        self.page = page
-        self.loop = loop
-        self.etf = etf
-        self.started = time.monotonic()
-        self.events = []
-        self.navigation = []
-        self.console_errors = []
-        self.page_errors = []
-        self.result = None
-        self.db_before = _operational_db_table_hashes()
-        self.record = {
-            "record_type": "issue160_live_trace",
-            "run": run,
-            "mode": mode,
-            "etf": etf,
-        }
-        self.handlers = {
-            "request": self._on_request,
-            "response": self._on_response,
-            "requestfailed": self._on_request_failed,
-            "console": self._on_console,
-            "pageerror": self._on_page_error,
-        }
-        self.attached_events = []
-
-    async def attach(self) -> None:
-        self.record.update({
-            "context_id": _trace_id("context", self.page.context),
-            "page_id": _trace_id("page", self.page),
-        })
-        for event, handler in self.handlers.items():
-            self.page.on(event, handler)
-            self.attached_events.append(event)
-        await asyncio.sleep(0)
-
-    async def detach(self) -> None:
-        for event in reversed(self.attached_events):
-            self.page.remove_listener(event, self.handlers[event])
-        self.attached_events.clear()
-        await asyncio.sleep(0)
-
-    def _elapsed(self) -> float:
-        return round((time.monotonic() - self.started) * 1000, 3)
-
-    def _request_fields(self, request) -> dict:
-        return {
-            "url": str(_request_value(request, "url", "")),
-            "method": _request_value(request, "method"),
-            "post_payload": _request_value(request, "post_data"),
-            "resource_type": _request_value(request, "resource_type"),
-        }
-
-    def _on_request(self, request) -> None:
-        if _relevant_request(request):
-            self.events.append({
-                "event": "request",
-                "elapsed_ms": self._elapsed(),
-                **self._request_fields(request),
-            })
-
-    def _on_response(self, response) -> None:
-        request = getattr(response, "request", None)
-        if request is None or not _relevant_request(request):
-            return
-        elapsed = self._elapsed()
-        event = {
-            "event": "response",
-            "elapsed_ms": elapsed,
-            **self._request_fields(request),
-            "status": getattr(response, "status", None),
-        }
-        if _ctbc_candidate(event["url"]):
-            event.update({
-                "ctbc_predicate": (
-                    "accepted" if _is_ctbc_holdings_response(response) else "rejected"
-                ),
-                "ctbc_mismatch": _ctbc_mismatch(response),
-                "candidate_arrived_after_10s": elapsed > 10_000,
-            })
-        self.events.append(event)
-        if bool(_request_value(request, "is_navigation_request", False)):
-            self.navigation.append({
-                "status": getattr(response, "status", None),
-                "redirect_chain": _redirect_chain(request),
-            })
-
-    def _on_request_failed(self, request) -> None:
-        if _relevant_request(request):
-            self.events.append({
-                "event": "requestfailed",
-                "elapsed_ms": self._elapsed(),
-                **self._request_fields(request),
-                "failure": _request_value(request, "failure"),
-            })
-
-    def _on_console(self, message) -> None:
-        if _request_value(message, "type", "") == "error":
-            self.console_errors.append({
-                "elapsed_ms": self._elapsed(),
-                "text": str(_request_value(message, "text", "")),
-            })
-
-    def _on_page_error(self, error) -> None:
-        self.page_errors.append({"elapsed_ms": self._elapsed(), "text": str(error)})
-
-    def record_result(self, result: dict) -> None:
-        self.result = {
-            "ok": result.get("ok"),
-            "reason": result.get("reason"),
-            "source_url": result.get("source_url"),
-            "source_type": result.get("source_type"),
-            "row_count": len(result.get("all_rows") or []),
-            "stock_row_count": len(result.get("stock_rows") or []),
-        }
-
-    async def _page_state(self) -> dict:
-        title = ""
-        body = ""
-        errors = []
-        try:
-            title = await self.page.title()
-        except Exception as exc:
-            errors.append(f"title: {exc}")
-        try:
-            body = await self.page.locator("body").inner_text(timeout=1_000)
-        except Exception as exc:
-            errors.append(f"body: {exc}")
-        searchable = f"{title}\n{body}".lower()
-        block_terms = (
-            "access denied", "captcha", "forbidden", "robot", "驗證碼", "存取遭拒"
-        )
-        return {
-            "final_url": self.page.url,
-            "title": title,
-            "block_signal": [term for term in block_terms if term in searchable],
-            "state_errors": errors,
-        }
-
-    async def finish(self, report) -> None:
-        await self.detach()
-        db_after = _operational_db_table_hashes()
-        candidates = [
-            event for event in self.events if "ctbc_predicate" in event
-        ]
-        if self.etf in {"00406A", "00995A"}:
-            ctbc_summary = {
-                "candidate_count": len(candidates),
-                "accepted": any(e["ctbc_predicate"] == "accepted" for e in candidates),
-                "mismatches": [e["ctbc_mismatch"] for e in candidates if e["ctbc_mismatch"]],
-                "candidate_arrived_after_10s": (
-                    any(e["candidate_arrived_after_10s"] for e in candidates)
-                    if candidates else None
-                ),
-            }
-        else:
-            ctbc_summary = "not_applicable"
-        failure = None
-        if report is not None and report.failed:
-            failure = str(report.longrepr)[:2_000]
-        self.record.update({
-            "events": self.events,
-            "navigation": self.navigation,
-            **await self._page_state(),
-            "console_errors": self.console_errors,
-            "page_errors": self.page_errors,
-            "ctbc_predicate_summary": ctbc_summary,
-            "scraper_result": self.result or {
-                "ok": None, "reason": "scraper did not return", "row_count": 0
-            },
-            "assertion_result": getattr(report, "outcome", "not_run"),
-            "assertion_failure": failure,
-            "db_hash_before": _db_digest(self.db_before),
-            "db_hash_after": _db_digest(db_after),
-            "db_hash_outcome": "unchanged" if db_after == self.db_before else "changed",
-        })
-        encoded = json.dumps(self.record, ensure_ascii=False, separators=(",", ":"))
-        print(f"\n{encoded}", flush=True)
-
-
-@pytest.fixture
-def _live_diagnostic_lifecycle(request):
-    state = {}
-    yield state
-    recorder = state.get("recorder")
-    if recorder is None:
-        return
-    try:
-        recorder.loop.run_until_complete(
-            recorder.finish(getattr(request.node, "rep_call", None))
-        )
-    finally:
-        if state.get("close_page"):
-            recorder.loop.run_until_complete(recorder.page.close())
-
-
-def _diagnostic_page(mode: str, shared_page, loop):
-    if mode == "fresh":
-        return loop.run_until_complete(shared_page.context.new_page()), True
-    return shared_page, False
 
 
 def _run_browser_official(etf_code: str, page, live_date: date, loop) -> dict:
@@ -610,28 +333,15 @@ def _browser_context():
         async def _launch():
             pw = await async_playwright().start()
             browser = await pw.chromium.launch(headless=True)
-            context = await browser.new_context(
+            page = await browser.new_page(
                 **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
             )
-            page = await context.new_page()
-            return pw, browser, context, page
+            return pw, browser, page
 
-        pw, browser, context, page = loop.run_until_complete(_launch())
+        pw, browser, page = loop.run_until_complete(_launch())
         yield page, loop
-
-        async def _close():
-            try:
-                await page.close()
-            finally:
-                try:
-                    await context.close()
-                finally:
-                    try:
-                        await browser.close()
-                    finally:
-                        await pw.stop()
-
-        loop.run_until_complete(_close())
+        loop.run_until_complete(browser.close())
+        loop.run_until_complete(pw.stop())
     finally:
         loop.close()
 
@@ -642,7 +352,6 @@ def test_live_scraper_returns_requested_valid_snapshot(
     source: str,
     live_date: date,
     operational_db_is_unchanged,
-    _live_diagnostic_lifecycle,
     request,
 ):
     """Live integration test: scrape one ETF from one source, validate result.
@@ -654,13 +363,6 @@ def test_live_scraper_returns_requested_valid_snapshot(
     """
     page = None
     loop = None
-    recorder = None
-    diagnostic_mode = request.config.getoption("--live-diagnostic-mode")
-    diagnostic_run = request.config.getoption("--live-diagnostic-run")
-    if diagnostic_mode != "off" and diagnostic_run < 1:
-        raise pytest.UsageError(
-            "--live-diagnostic-run must be positive when diagnostics are enabled"
-        )
     if source == "official":
         try:
             config = get_official_config(etf_code)
@@ -692,24 +394,9 @@ def test_live_scraper_returns_requested_valid_snapshot(
                     ),
                     pytrace=False,
                 )
-            page, close_page = _diagnostic_page(diagnostic_mode, page, loop)
-            if close_page:
-                _live_diagnostic_lifecycle["close_page"] = True
-            if diagnostic_mode != "off":
-                recorder = _LiveTraceRecorder(
-                    run=diagnostic_run,
-                    mode=diagnostic_mode,
-                    etf=etf_code,
-                    page=page,
-                    loop=loop,
-                )
-                _live_diagnostic_lifecycle["recorder"] = recorder
-                loop.run_until_complete(recorder.attach())
         result = _scrape_official_by_method(
             etf_code, config, page, live_date, loop
         )
-        if recorder is not None:
-            recorder.record_result(result)
     else:
         try:
             config = get_etf_config(etf_code)
@@ -1081,158 +768,3 @@ def test_moneydj_and_static_official_do_not_require_browser():
     result = scrape_official_static.__code__.co_varnames
     assert "page" not in result
     assert "loop" not in result
-
-
-class _TraceRequest:
-    def __init__(self, url, method):
-        self.url = url
-        self.method = method
-
-
-class _TraceResponse:
-    def __init__(self, url, method, ok):
-        self.url = url
-        self.request = _TraceRequest(url, method)
-        self.ok = ok
-
-
-@pytest.mark.parametrize(
-    ("url", "method", "ok", "mismatch"),
-    [
-        ("https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight", "POST", True, None),
-        ("https://bad.example/API/etf/ETFHoldingWeight", "POST", True, "domain"),
-        ("https://www.ctbcinvestments.com.tw/API/etf/Other", "POST", True, "path"),
-        ("https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight", "POST", False, "status"),
-        ("https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight", "GET", True, "method"),
-    ],
-)
-def test_trace_mismatch_agrees_with_production_predicate(url, method, ok, mismatch):
-    response = _TraceResponse(url, method, ok)
-    assert _ctbc_mismatch(response) == mismatch
-    assert _is_ctbc_holdings_response(response) is (mismatch is None)
-
-
-def test_fresh_diagnostic_page_uses_shared_context():
-    class CreatedPage:
-        def __init__(self, expected_loop):
-            self.expected_loop = expected_loop
-            self.closed = False
-
-        async def close(self):
-            assert asyncio.get_running_loop() is self.expected_loop
-            self.closed = True
-
-    class Context:
-        def __init__(self, expected_loop):
-            self.expected_loop = expected_loop
-            self.created = CreatedPage(expected_loop)
-
-        async def new_page(self):
-            assert asyncio.get_running_loop() is self.expected_loop
-            return self.created
-
-    loop = asyncio.new_event_loop()
-    shared = type("Page", (), {"context": Context(loop)})()
-    try:
-        page, close_page = _diagnostic_page("fresh", shared, loop)
-        loop.run_until_complete(page.close())
-    finally:
-        loop.close()
-    assert page is shared.context.created
-    assert close_page is True
-    assert page.closed is True
-
-
-def test_trace_recorder_emits_result_assertion_and_db_outcomes(monkeypatch, capsys):
-    class Locator:
-        def __init__(self, expected_loop):
-            self.expected_loop = expected_loop
-
-        async def inner_text(self, timeout):
-            assert asyncio.get_running_loop() is self.expected_loop
-            assert timeout == 1_000
-            return "holdings"
-
-    class Page:
-        def __init__(self, expected_loop):
-            self.expected_loop = expected_loop
-            self._context = object()
-            self.handlers = {}
-
-        @property
-        def context(self):
-            assert asyncio.get_running_loop() is self.expected_loop
-            return self._context
-
-        @property
-        def url(self):
-            assert asyncio.get_running_loop() is self.expected_loop
-            return "https://www.ctbcinvestments.com/result"
-
-        def on(self, event, handler):
-            assert asyncio.get_running_loop() is self.expected_loop
-            self.handlers[event] = handler
-
-        def remove_listener(self, event, handler):
-            assert asyncio.get_running_loop() is self.expected_loop
-            assert self.handlers.pop(event) is handler
-
-        async def title(self):
-            assert asyncio.get_running_loop() is self.expected_loop
-            return "holdings"
-
-        def locator(self, selector):
-            assert asyncio.get_running_loop() is self.expected_loop
-            assert selector == "body"
-            return Locator(self.expected_loop)
-
-    class Request(_TraceRequest):
-        post_data = '{"fund":"00406A"}'
-        resource_type = "xhr"
-        redirected_from = None
-
-        def is_navigation_request(self):
-            return False
-
-    loop = asyncio.new_event_loop()
-    page = Page(loop)
-    request = Request(
-        "https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight", "POST"
-    )
-    response = _TraceResponse(request.url, request.method, True)
-    response.request = request
-    response.status = 200
-    db_state = {"__schema__": "same"}
-    monkeypatch.setattr(
-        sys.modules[__name__], "_operational_db_table_hashes", lambda: db_state
-    )
-    try:
-        recorder = _LiveTraceRecorder(
-            run=2, mode="shared", etf="00406A", page=page, loop=loop
-        )
-
-        async def exercise_recorder():
-            await recorder.attach()
-            page.handlers["request"](request)
-            page.handlers["response"](response)
-            recorder.record_result({
-                "ok": True,
-                "reason": "ok",
-                "source_url": "https://www.ctbcinvestments.com/result",
-                "source_type": "official_fallback",
-                "all_rows": [{}],
-                "stock_rows": [{}],
-            })
-            report = type("Report", (), {"outcome": "passed", "failed": False})()
-            await recorder.finish(report)
-
-        loop.run_until_complete(exercise_recorder())
-    finally:
-        loop.close()
-
-    record = json.loads(capsys.readouterr().out.strip())
-    assert record["events"][-1]["ctbc_predicate"] == "accepted"
-    assert record["events"][-1]["post_payload"] == '{"fund":"00406A"}'
-    assert record["scraper_result"]["row_count"] == 1
-    assert record["assertion_result"] == "passed"
-    assert record["db_hash_outcome"] == "unchanged"

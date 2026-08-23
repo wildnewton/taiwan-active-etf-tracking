@@ -19,30 +19,6 @@ def pytest_addoption(parser):
         default="both",
         help="live scraper source to exercise (default: both)",
     )
-    live_group.addoption(
-        "--live-diagnostic-mode",
-        action="store",
-        choices=("off", "shared", "fresh"),
-        default="off",
-        help=(
-            "opt-in issue-160 trace mode: reuse the session page or create a "
-            "fresh page in its existing browser context"
-        ),
-    )
-    live_group.addoption(
-        "--live-diagnostic-run",
-        action="store",
-        type=int,
-        default=0,
-        help="positive run number included in issue-160 JSONL trace records",
-    )
-
-
-@pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
-    outcome = yield
-    report = outcome.get_result()
-    setattr(item, f"rep_{report.when}", report)
 
 
 _PIPELINE_SCRAPE_UNIT_MODULES = {
