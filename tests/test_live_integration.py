@@ -313,8 +313,6 @@ class _LiveTraceRecorder:
             "run": run,
             "mode": mode,
             "etf": etf,
-            "context_id": _trace_id("context", page.context),
-            "page_id": _trace_id("page", page),
         }
         self.handlers = {
             "request": self._on_request,
@@ -323,8 +321,23 @@ class _LiveTraceRecorder:
             "console": self._on_console,
             "pageerror": self._on_page_error,
         }
+        self.attached_events = []
+
+    async def attach(self) -> None:
+        self.record.update({
+            "context_id": _trace_id("context", self.page.context),
+            "page_id": _trace_id("page", self.page),
+        })
         for event, handler in self.handlers.items():
-            page.on(event, handler)
+            self.page.on(event, handler)
+            self.attached_events.append(event)
+        await asyncio.sleep(0)
+
+    async def detach(self) -> None:
+        for event in reversed(self.attached_events):
+            self.page.remove_listener(event, self.handlers[event])
+        self.attached_events.clear()
+        await asyncio.sleep(0)
 
     def _elapsed(self) -> float:
         return round((time.monotonic() - self.started) * 1000, 3)
@@ -424,8 +437,7 @@ class _LiveTraceRecorder:
         }
 
     async def finish(self, report) -> None:
-        for event, handler in self.handlers.items():
-            self.page.remove_listener(event, handler)
+        await self.detach()
         db_after = _operational_db_table_hashes()
         candidates = [
             event for event in self.events if "ctbc_predicate" in event
@@ -679,6 +691,7 @@ def test_live_scraper_returns_requested_valid_snapshot(
                     loop=loop,
                 )
                 _live_diagnostic_lifecycle["recorder"] = recorder
+                loop.run_until_complete(recorder.attach())
         result = _scrape_official_by_method(
             etf_code, config, page, live_date, loop
         )
@@ -1087,47 +1100,78 @@ def test_trace_mismatch_agrees_with_production_predicate(url, method, ok, mismat
 
 
 def test_fresh_diagnostic_page_uses_shared_context():
+    class CreatedPage:
+        def __init__(self, expected_loop):
+            self.expected_loop = expected_loop
+            self.closed = False
+
+        async def close(self):
+            assert asyncio.get_running_loop() is self.expected_loop
+            self.closed = True
+
     class Context:
-        created = object()
+        def __init__(self, expected_loop):
+            self.expected_loop = expected_loop
+            self.created = CreatedPage(expected_loop)
 
         async def new_page(self):
+            assert asyncio.get_running_loop() is self.expected_loop
             return self.created
 
-    shared = type("Page", (), {"context": Context()})()
     loop = asyncio.new_event_loop()
+    shared = type("Page", (), {"context": Context(loop)})()
     try:
         page, close_page = _diagnostic_page("fresh", shared, loop)
+        loop.run_until_complete(page.close())
     finally:
         loop.close()
     assert page is shared.context.created
     assert close_page is True
+    assert page.closed is True
 
 
 def test_trace_recorder_emits_result_assertion_and_db_outcomes(monkeypatch, capsys):
     class Locator:
+        def __init__(self, expected_loop):
+            self.expected_loop = expected_loop
+
         async def inner_text(self, timeout):
+            assert asyncio.get_running_loop() is self.expected_loop
             assert timeout == 1_000
             return "holdings"
 
     class Page:
-        context = object()
-        url = "https://www.ctbcinvestments.com/result"
-
-        def __init__(self):
+        def __init__(self, expected_loop):
+            self.expected_loop = expected_loop
+            self._context = object()
             self.handlers = {}
 
+        @property
+        def context(self):
+            assert asyncio.get_running_loop() is self.expected_loop
+            return self._context
+
+        @property
+        def url(self):
+            assert asyncio.get_running_loop() is self.expected_loop
+            return "https://www.ctbcinvestments.com/result"
+
         def on(self, event, handler):
+            assert asyncio.get_running_loop() is self.expected_loop
             self.handlers[event] = handler
 
         def remove_listener(self, event, handler):
+            assert asyncio.get_running_loop() is self.expected_loop
             assert self.handlers.pop(event) is handler
 
         async def title(self):
+            assert asyncio.get_running_loop() is self.expected_loop
             return "holdings"
 
         def locator(self, selector):
+            assert asyncio.get_running_loop() is self.expected_loop
             assert selector == "body"
-            return Locator()
+            return Locator(self.expected_loop)
 
     class Request(_TraceRequest):
         post_data = '{"fund":"00406A"}'
@@ -1137,7 +1181,8 @@ def test_trace_recorder_emits_result_assertion_and_db_outcomes(monkeypatch, caps
         def is_navigation_request(self):
             return False
 
-    page = Page()
+    loop = asyncio.new_event_loop()
+    page = Page(loop)
     request = Request(
         "https://www.ctbcinvestments.com.tw/API/etf/ETFHoldingWeight", "POST"
     )
@@ -1148,23 +1193,27 @@ def test_trace_recorder_emits_result_assertion_and_db_outcomes(monkeypatch, caps
     monkeypatch.setattr(
         sys.modules[__name__], "_operational_db_table_hashes", lambda: db_state
     )
-    loop = asyncio.new_event_loop()
     try:
         recorder = _LiveTraceRecorder(
             run=2, mode="shared", etf="00406A", page=page, loop=loop
         )
-        page.handlers["request"](request)
-        page.handlers["response"](response)
-        recorder.record_result({
-            "ok": True,
-            "reason": "ok",
-            "source_url": page.url,
-            "source_type": "official_fallback",
-            "all_rows": [{}],
-            "stock_rows": [{}],
-        })
-        report = type("Report", (), {"outcome": "passed", "failed": False})()
-        loop.run_until_complete(recorder.finish(report))
+
+        async def exercise_recorder():
+            await recorder.attach()
+            page.handlers["request"](request)
+            page.handlers["response"](response)
+            recorder.record_result({
+                "ok": True,
+                "reason": "ok",
+                "source_url": "https://www.ctbcinvestments.com/result",
+                "source_type": "official_fallback",
+                "all_rows": [{}],
+                "stock_rows": [{}],
+            })
+            report = type("Report", (), {"outcome": "passed", "failed": False})()
+            await recorder.finish(report)
+
+        loop.run_until_complete(exercise_recorder())
     finally:
         loop.close()
 
