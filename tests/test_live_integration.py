@@ -610,15 +610,28 @@ def _browser_context():
         async def _launch():
             pw = await async_playwright().start()
             browser = await pw.chromium.launch(headless=True)
-            page = await browser.new_page(
+            context = await browser.new_context(
                 **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
             )
-            return pw, browser, page
+            page = await context.new_page()
+            return pw, browser, context, page
 
-        pw, browser, page = loop.run_until_complete(_launch())
+        pw, browser, context, page = loop.run_until_complete(_launch())
         yield page, loop
-        loop.run_until_complete(browser.close())
-        loop.run_until_complete(pw.stop())
+
+        async def _close():
+            try:
+                await page.close()
+            finally:
+                try:
+                    await context.close()
+                finally:
+                    try:
+                        await browser.close()
+                    finally:
+                        await pw.stop()
+
+        loop.run_until_complete(_close())
     finally:
         loop.close()
 
