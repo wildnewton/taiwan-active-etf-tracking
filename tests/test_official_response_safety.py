@@ -180,7 +180,7 @@ class _ResponsePage:
             scrape_ctbc_playwright,
             "00406A",
             {"url": CTBC_PAGE_URL, "method": "browser", "issuer": "CTBC"},
-            _Response(CTBC_API_URL, _ctbc_payload()),
+            _Response(CTBC_API_URL, _ctbc_payload(), method="POST"),
         ),
     ],
 )
@@ -204,7 +204,7 @@ async def test_response_wait_playwright_error_after_navigation_returns_failure(
 @pytest.mark.asyncio
 async def test_response_wait_playwright_error_continues_to_static_fallback():
     page = _ResponsePage(
-        _Response(CTBC_API_URL, _ctbc_payload()),
+        _Response(CTBC_API_URL, _ctbc_payload(), method="POST"),
         PlaywrightError("page closed"),
     )
     static_result = {"ok": True, "reason": "static sentinel"}
@@ -285,7 +285,7 @@ def test_ctbc_parser_preserves_exact_holding_values():
             _is_ctbc_holdings_response,
             CTBC_API_URL,
             "https://evilctbcinvestments.com.tw/API/etf/ETFHoldingWeight",
-            "GET",
+            "POST",
         ),
     ],
 )
@@ -308,7 +308,7 @@ def test_api_response_predicates_require_expected_endpoint_and_method(
     [
         (_is_capital_buyback_response, CAPITAL_API_URL, "POST"),
         (_is_nomura_assets_response, NOMURA_API_URL, "POST"),
-        (_is_ctbc_holdings_response, CTBC_API_URL, "GET"),
+        (_is_ctbc_holdings_response, CTBC_API_URL, "POST"),
     ],
 )
 def test_api_response_predicates_fail_closed_without_string_method(

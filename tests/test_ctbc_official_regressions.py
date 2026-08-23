@@ -70,7 +70,7 @@ class _Response:
     def __init__(self, body):
         self.url = API_URL
         self.ok = True
-        self.request = _Request("GET")
+        self.request = _Request("POST")
         self._body = body
 
     async def text(self):

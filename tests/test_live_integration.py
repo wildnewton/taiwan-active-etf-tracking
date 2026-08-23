@@ -7,6 +7,7 @@ from datetime import date
 
 import pytest
 
+import pipeline as production_pipeline
 from scripts import db
 from scripts.etf_universe import get_active_etfs, get_etf_config
 from scripts.scrapers.moneydj import scrape_moneydj
@@ -332,7 +333,9 @@ def _browser_context():
         async def _launch():
             pw = await async_playwright().start()
             browser = await pw.chromium.launch(headless=True)
-            page = await browser.new_page()
+            page = await browser.new_page(
+                **production_pipeline.PRODUCTION_BROWSER_CONTEXT_OPTIONS
+            )
             return pw, browser, page
 
         pw, browser, page = loop.run_until_complete(_launch())
