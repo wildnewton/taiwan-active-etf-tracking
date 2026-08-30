@@ -23,7 +23,6 @@ def seed_universe(codes_with_retired):
 def insert_signal(
     date="2026-06-23",
     signal_type="new_core_position",
-    signal_score=4,
     stock_code="2330",
     stock_name="台積電",
     etf_codes=None,
@@ -35,23 +34,18 @@ def insert_signal(
         conn.execute(
             """
             INSERT INTO etf_manager_signals (
-                date, signal_id, signal_type, signal_score,
-                stock_code, stock_name, etf_codes, issuers, etf_count,
-                issuer_count, explanation, evidence_json, confidence
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal')
+                date, signal_id, signal_type, stock_code, stock_name,
+                etf_codes, issuers, evidence_json, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'normal')
             """,
             (
                 date,
                 f"{date}:{signal_type}:{stock_code}:{'-'.join(etf_codes)}",
                 signal_type,
-                signal_score,
                 stock_code,
                 stock_name,
                 json.dumps(etf_codes, ensure_ascii=False),
                 json.dumps(issuers, ensure_ascii=False),
-                len(etf_codes),
-                len(issuers),
-                f"{stock_code} generated {signal_type}",
                 json.dumps([{"stock_code": stock_code}], ensure_ascii=False),
             ),
         )
@@ -100,12 +94,10 @@ def test_get_latest_signal_date_returns_most_recent_date():
     assert get_latest_signal_date() == "2026-06-23"
 
 
-def test_generate_signal_report_shows_summary_and_signals():
-    """New report format: summary + changes + signals."""
+def test_generate_signal_report_shows_summary_and_default_significant_consensus():
     db.init_db(":memory:")
     ensure_signal_table()
 
-    # Insert holdings so report has data_date
     insert_holding("2026-06-23", "00980A", "2383", "台光電", 5.0)
     insert_holding("2026-06-23", "00981A", "2383", "台光電", 3.0)
     insert_holding("2026-06-23", "00405A", "2383", "台光電", 4.0)
@@ -114,7 +106,6 @@ def test_generate_signal_report_shows_summary_and_signals():
 
     insert_signal(
         signal_type="consensus_add_3d",
-        signal_score=6,
         stock_code="2383",
         stock_name="台光電",
         etf_codes=["00980A", "00981A", "00405A"],
@@ -122,7 +113,6 @@ def test_generate_signal_report_shows_summary_and_signals():
     )
     insert_signal(
         signal_type="consensus_reduce_3d",
-        signal_score=-6,
         stock_code="2454",
         stock_name="聯發科",
         etf_codes=["00980A", "00981A"],
@@ -131,22 +121,20 @@ def test_generate_signal_report_shows_summary_and_signals():
 
     report = generate_signal_report("2026-06-23")
 
-    # New format checks
     assert "📊 台灣主動 ETF 每日報告" in report
     assert "═══ 摘要 ═══" in report
-    # Signals section should appear when signals exist without pinning presentation details.
     assert "管理人訊號" in report
     assert "2383 台光電" in report
-    assert "2454 聯發科" in report
+    assert "2454 聯發科" not in report
+    assert "criteria=minimum_issuer_consensus" in report
+    assert "score=" not in report
 
 
 def test_generate_signal_report_uses_latest_holdings_date():
-    """Report should use latest holdings date."""
     db.init_db(":memory:")
     ensure_signal_table()
     seed_universe([("00980A", 0)])
 
-    # Insert holdings for two dates
     insert_holding("2026-06-21", "00980A", "2330", "台積電", 10.0)
     insert_holding("2026-06-23", "00980A", "2383", "台光電", 5.0)
     insert_signal(date="2026-06-21", stock_code="2330", stock_name="台積電")
@@ -154,24 +142,20 @@ def test_generate_signal_report_uses_latest_holdings_date():
 
     report = generate_signal_report()
 
-    # Report should mention data date from holdings (2026-06-23)
     assert "2026-06-23" in report
     assert "摘要" in report
 
 
 def test_generate_signal_report_handles_no_signals():
-    """Report should still work when no signals exist (e.g., <3 days of data)."""
     db.init_db(":memory:")
 
     report = generate_signal_report("2026-06-23")
 
     assert "📊 台灣主動 ETF 每日報告" in report
-    # No signals section when there are none
     assert "管理人訊號" not in report
 
 
 def test_report_warns_when_etfs_missing():
-    """⚠️ Report should warn when holdings have < 19 ETFs for latest date."""
     db.init_db(":memory:")
     ensure_signal_table()
     seed_universe([
@@ -182,7 +166,6 @@ def test_report_warns_when_etfs_missing():
         ("00995A", 0), ("00996A", 0), ("00999A", 0),
     ])
 
-    # Insert holdings for only 13 of the 19 eligible ETFs.
     covered_codes = [
         "00400A", "00401A", "00403A", "00404A", "00405A",
         "00406A", "00980A", "00981A", "00982A", "00984A",
@@ -200,11 +183,9 @@ def test_report_warns_when_etfs_missing():
 
 
 def test_report_no_warning_when_all_etfs_present():
-    """No missing-ETF warning when all 19 ETFs have holdings data."""
     db.init_db(":memory:")
     ensure_signal_table()
 
-    # Insert holdings for all 19 ETFs with realistic weights
     codes = ["00400A", "00401A", "00403A", "00404A", "00405A",
              "00406A", "00980A", "00981A", "00982A", "00984A",
              "00985A", "00987A", "00991A", "00992A", "00993A",
@@ -214,7 +195,6 @@ def test_report_no_warning_when_all_etfs_present():
 
     report = generate_signal_report("2026-06-26")
 
-    # Should NOT have the missing-ETF warning
     assert "預期" not in report, f"Unexpected missing-ETF warning:\n{report}"
 
 

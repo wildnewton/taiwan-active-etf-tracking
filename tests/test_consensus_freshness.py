@@ -58,8 +58,7 @@ def fetch_consensus(date, signal_type="consensus_add_3d", stock_code="2330"):
     try:
         return conn.execute(
             """
-            SELECT signal_type, signal_freshness, freshness_reason,
-                   issuer_count, etf_count
+            SELECT signal_type, signal_freshness, freshness_reason
             FROM etf_manager_signals
             WHERE date = ? AND signal_type = ? AND stock_code = ?
             """,
@@ -142,4 +141,3 @@ def test_consensus_direction_reversal_is_labeled_reversal():
 
     assert row["signal_freshness"] == "reversal"
     assert "opposite consensus" in row["freshness_reason"]
-

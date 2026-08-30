@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 
 import db
+from signal_assessment import assess_signal_rows, importance_rank
 from changes import (
     _select_canonical_sources,
     get_latest_valid_date,
@@ -23,7 +24,6 @@ _CORE_POSITION_WEIGHT = 2.0
 _TOP_RANK_CUTOFF = 20
 _MIN_NEW_POSITION_ETF_COUNT = 2
 _MIN_EXPOSURE_ACTIVE_DELTA_PCT = 10.0
-_SIGNIFICANT_SIGNAL_SCORE = 6.0
 _MANAGER_INTENT_WINDOW = 5
 _MANAGER_INTENT_LIMIT = 8
 _EXCLUDED_MANAGER_INTENT_STATES = {"neutral", "insufficient_data"}
@@ -81,7 +81,8 @@ def generate_signal_report(signal_date=None, quality_run_date=None) -> str:
 
     stats = _get_summary_stats(data_date)
     changes = _get_change_summary(data_date)
-    signals = _get_signals(data_date)
+    signals, assessment_warnings = _get_signals(data_date)
+    lines.extend(_render_signal_assessment_warnings(assessment_warnings))
 
     lines.append("═══ 摘要 ═══")
     lines.append(f"ETF 數量: {stats['etf_count']} | 股票檔數: {stats['stock_count']} | 非股票資產: {stats['non_stock_count']}")
@@ -191,8 +192,16 @@ def _render_data_quality(quality: dict) -> list[str]:
     return lines
 
 
+def _render_signal_assessment_warnings(warnings: list[str]) -> list[str]:
+    if not warnings:
+        return []
+    lines = ["═══ ⚠️ 訊號評估設定警告 ═══"]
+    lines.extend(f"  {warning}" for warning in warnings)
+    lines.append("")
+    return lines
+
+
 def _render_manager_signals(signals: list[dict]) -> list[str]:
-    signals = [row for row in signals if _is_significant_signal(row)]
     sections = [
         ("🔥 Fresh consensus", lambda row: _is_consensus(row) and _freshness(row) == "new"),
         ("🔁 Reversals", lambda row: _freshness(row) == "reversal"),
@@ -814,21 +823,22 @@ def _get_data_warnings(data_date):
 
 def _get_signals(data_date):
     if not data_date:
-        return []
+        return [], []
     try:
         with _using_row_factory(_dict_factory) as conn:
-            rows = conn.execute("SELECT * FROM etf_manager_signals WHERE date = ?", (data_date,)).fetchall()
-        return sorted([row for row in rows if _is_significant_signal(row)], key=_signal_sort_key)
+            rows = conn.execute(
+                "SELECT * FROM etf_manager_signals WHERE date = ?", (data_date,)
+            ).fetchall()
+            try:
+                assessed_rows, warnings = assess_signal_rows(conn, rows)
+            except sqlite3.OperationalError as exc:
+                return [], [f"assessment criteria unavailable: {exc}"]
+        return sorted(assessed_rows, key=_signal_sort_key), warnings
     except sqlite3.OperationalError:
-        return []
-
-
-def _is_significant_signal(row: dict) -> bool:
-    return abs(row.get("signal_score") or 0) >= _SIGNIFICANT_SIGNAL_SCORE
+        return [], []
 
 
 def _signal_summary(signals: list[dict]) -> dict:
-    signals = [row for row in signals if _is_significant_signal(row)]
     return {
         "fresh_consensus": sum(1 for row in signals if _is_consensus(row) and _freshness(row) == "new"),
         "reversals": sum(1 for row in signals if _freshness(row) == "reversal"),
@@ -840,7 +850,8 @@ def _signal_summary(signals: list[dict]) -> dict:
 def _signal_sort_key(row: dict):
     return (
         FRESHNESS_ORDER.get(_freshness(row), 9),
-        -abs(row.get("signal_score") or 0),
+        importance_rank(row.get("assessment_importance")),
+        -(row.get("assessment_weight") or 0),
         row.get("stock_code") or "",
     )
 
@@ -855,29 +866,30 @@ def _freshness(row: dict) -> str:
 
 def _format_signal_line(row: dict) -> str:
     freshness = FRESHNESS_LABELS.get(_freshness(row), _freshness(row))
-    issuer_count = row.get("issuer_count") or len(_json_list(row.get("issuers")))
-    etf_count = row.get("etf_count") or len(_json_list(row.get("etf_codes")))
+    issuer_count = len(_json_list(row.get("issuers")))
+    etf_count = len(_json_list(row.get("etf_codes")))
     direction = _signal_direction(row)
     avg_active = _avg_active_delta_pct(row)
     avg_active_text = f" | avg activeΔ {avg_active:+.2f}%" if avg_active is not None else ""
-    reason = row.get("freshness_reason") or row.get("explanation") or ""
+    reason = row.get("freshness_reason") or ""
     reason_text = f" | {reason}" if reason else ""
-    score = row.get("signal_score") or 0
+    criteria = ",".join(row.get("matched_criteria") or [])
+    importance = row.get("assessment_importance") or "unknown"
     return (
         f"{direction} {row.get('stock_code')} {row.get('stock_name') or ''} "
         f"| {row.get('signal_type')} | {freshness} | "
         f"{issuer_count} issuers/{etf_count} ETF | "
-        f"score={score:+.0f} | conf={row.get('confidence') or 'normal'}"
+        f"importance={importance} | criteria={criteria} | "
+        f"conf={row.get('confidence') or 'normal'}"
         f"{avg_active_text}{reason_text}"
     )
 
 
 def _signal_direction(row: dict) -> str:
     signal_type = row.get("signal_type") or ""
-    score = row.get("signal_score") or 0
-    if "reduce" in signal_type or score < 0:
+    if "reduce" in signal_type or "removed" in signal_type:
         return "REDUCE"
-    if "add" in signal_type or "new" in signal_type or score > 0:
+    if "add" in signal_type or "new" in signal_type:
         return "ADD"
     return "NEUTRAL"
 

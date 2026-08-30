@@ -16,14 +16,10 @@ def _ensure_table():
             date TEXT NOT NULL,
             signal_id TEXT PRIMARY KEY,
             signal_type TEXT NOT NULL,
-            signal_score REAL NOT NULL,
             stock_code TEXT NOT NULL,
             stock_name TEXT,
             etf_codes TEXT NOT NULL,
             issuers TEXT NOT NULL,
-            etf_count INTEGER NOT NULL,
-            issuer_count INTEGER NOT NULL,
-            explanation TEXT,
             evidence_json TEXT,
             confidence TEXT,
             signal_freshness TEXT DEFAULT 'current',
@@ -187,7 +183,6 @@ def _evidence(rows):
 def _signal(
     date,
     signal_type,
-    score,
     row,
     rows,
     signal_freshness="current",
@@ -200,14 +195,10 @@ def _signal(
         "date": date,
         "signal_id": signal_id,
         "signal_type": signal_type,
-        "signal_score": score,
         "stock_code": row["stock_code"],
         "stock_name": row.get("stock_name"),
         "etf_codes": json.dumps(etfs, ensure_ascii=False),
         "issuers": json.dumps(issuers, ensure_ascii=False),
-        "etf_count": len(etfs),
-        "issuer_count": len(issuers),
-        "explanation": signal_type,
         "evidence_json": json.dumps(_evidence(rows), ensure_ascii=False),
         "confidence": row.get("confidence") or "normal",
         "signal_freshness": signal_freshness,
@@ -223,7 +214,6 @@ def _single_signals(date, rows):
                 _signal(
                     date,
                     "new_core_position",
-                    4,
                     row,
                     [row],
                     "current",
@@ -235,7 +225,6 @@ def _single_signals(date, rows):
                 _signal(
                     date,
                     "removed_core_position",
-                    -5,
                     row,
                     [row],
                     "current",
@@ -247,7 +236,6 @@ def _single_signals(date, rows):
                 _signal(
                     date,
                     "consecutive_add_3d",
-                    4,
                     row,
                     [row],
                     "current",
@@ -259,7 +247,6 @@ def _single_signals(date, rows):
                 _signal(
                     date,
                     "consecutive_reduce_3d",
-                    -4,
                     row,
                     [row],
                     "current",
@@ -326,13 +313,9 @@ def _consensus(date):
             previous_date, opposite_predicate
         )
         for stock_code, events in grouped.items():
-            issuer_count = len(_issuers(events))
             representative = sorted(
                 events, key=lambda event: (event["date"], event["etf_code"])
             )[-1]
-            score = 6 if issuer_count >= 3 else 4
-            if signal_type == "consensus_reduce_3d":
-                score = -score
             freshness, reason = _freshness_label(
                 date,
                 events,
@@ -343,7 +326,6 @@ def _consensus(date):
                 _signal(
                     date,
                     signal_type,
-                    score,
                     representative,
                     events,
                     freshness,
@@ -361,14 +343,12 @@ def _replace(date, signals):
             conn.executemany(
                 """
                 INSERT OR REPLACE INTO etf_manager_signals (
-                    date, signal_id, signal_type, signal_score,
-                    stock_code, stock_name, etf_codes, issuers, etf_count,
-                    issuer_count, explanation, evidence_json, confidence,
+                    date, signal_id, signal_type, stock_code, stock_name,
+                    etf_codes, issuers, evidence_json, confidence,
                     signal_freshness, freshness_reason
                 ) VALUES (
-                    :date, :signal_id, :signal_type, :signal_score,
-                    :stock_code, :stock_name, :etf_codes, :issuers, :etf_count,
-                    :issuer_count, :explanation, :evidence_json, :confidence,
+                    :date, :signal_id, :signal_type, :stock_code, :stock_name,
+                    :etf_codes, :issuers, :evidence_json, :confidence,
                     :signal_freshness, :freshness_reason
                 )
                 """,

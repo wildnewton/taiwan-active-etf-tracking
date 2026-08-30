@@ -106,6 +106,25 @@ PYTHONPATH=scripts python scripts/rebuild_derived_schema.py \
 
 After inspecting the returned backfill and smoke-report summary, run the normal nightly pipeline in try-run mode against that copy. Apply the same cutover to production only while cron is paused, then retain the generated backup until the next successful nightly run.
 
+### Signal assessment criteria
+
+Manager-signal visibility and ordering are controlled by the operational `assessment_criteria` table. Its runtime schema is deliberately limited to `criterion_key`, `enabled`, `weight`, `importance`, and `parameters_json`. `init_db()` inserts the default `minimum_issuer_consensus` row only when it does not already exist, so normal initialization and the derived-schema cutover preserve production customizations.
+
+The default criterion shows consensus signals supported by at least three issuers. Change its threshold, importance, weight, or enabled state directly in the operational database:
+
+```sql
+UPDATE assessment_criteria
+SET parameters_json = '{"min_issuer_count": 2}',
+    importance = 'critical',
+    weight = 9.5,
+    enabled = 1
+WHERE criterion_key = 'minimum_issuer_consensus';
+```
+
+Within the same freshness group, `importance` sorts before the sum of matched-criteria `weight`; weight is never persisted on signal rows or rendered as a score. With only the default criterion, changing its weight does not alter relative ordering because every matched signal receives the same contribution; weight becomes meaningful when multiple criteria can match different signals.
+
+Invalid or unavailable enabled criteria fail closed: no manager signals are promoted into the report, and the report includes a configuration warning. Adding a new criterion meaning still requires a corresponding evaluator in `scripts/signal_assessment.py`; the database stores operational parameters, not executable expressions.
+
 ## Run tests
 
 Full suite:
