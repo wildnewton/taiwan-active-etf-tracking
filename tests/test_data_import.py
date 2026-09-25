@@ -17,7 +17,7 @@ STOCKS = [
 ]
 
 
-def _write_00400a_workbook(path, *, include_weight=True):
+def _write_00400a_workbook(path, *, include_weight=True, stocks=STOCKS):
     workbook = Workbook()
     sheet = workbook.active
     headers = ["股票代號", "股票名稱", "股數"]
@@ -27,7 +27,7 @@ def _write_00400a_workbook(path, *, include_weight=True):
         sheet.cell(row=16, column=column, value=value)
 
     for row_index, (stock_code, stock_name, shares, weight) in enumerate(
-        STOCKS, start=17
+        stocks, start=17
     ):
         values = [stock_code, stock_name, shares]
         if include_weight:
@@ -184,3 +184,35 @@ def test_invalid_file_never_writes_snapshot(tmp_path):
 
     assert result["ok"] is False
     assert db.snapshot_exists(DATA_DATE, ETF_CODE) is False
+
+
+def test_stock_like_row_with_invalid_code_fails_closed(tmp_path):
+    source = tmp_path / "2026-09-15EA.xlsx"
+    stocks = [
+        *STOCKS,
+        ("23A0", "格式異常股票", 6000, "1%"),
+    ]
+    _write_00400a_workbook(source, stocks=stocks)
+
+    result = data_import.parse_file(ETF_CODE, source)
+
+    assert result == {
+        "ok": False,
+        "reason": "invalid_stock_row:22:stock_code",
+    }
+
+
+def test_nonempty_unparseable_shares_fails_closed(tmp_path):
+    source = tmp_path / "2026-09-15EA.xlsx"
+    stocks = [
+        *STOCKS,
+        ("2603", "長榮", "not-a-number", "1%"),
+    ]
+    _write_00400a_workbook(source, stocks=stocks)
+
+    result = data_import.parse_file(ETF_CODE, source)
+
+    assert result == {
+        "ok": False,
+        "reason": "invalid_stock_row:22:shares",
+    }
