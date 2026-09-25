@@ -1,16 +1,24 @@
+"""Unified scraper — decision tree for all data sources.
+
+Priority:
+  1. MoneyDJ static (fastest, no browser) — retries up to 10 attempts
+  2. MoneyDJ browser (Playwright fallback)
+  3. Official browser-based (Capital API, Nomura stealth, Mega/Uni-President Playwright)
+  4. Official static (Fubon, Taishin)
+  5. Fail
+"""
+
 import asyncio
 import sqlite3
 import time
 from datetime import date, datetime
 from inspect import isawaitable
-from pathlib import Path
 
 import db
 from config import get_etf_config
 from scrapers.moneydj import scrape_moneydj
 from scrapers.moneydj_browser import scrape_moneydj_browser
 from scrapers.official import scrape_official_static, scrape_official_with_browser
-from scrapers.data_importer import scrape_from_local_file, _DEFAULT_00400A_EXCEL_CONFIG, ExcelImportConfig # 導入新的 data_importer
 from snapshot_validation import MIN_TAIWAN_STOCK_ROWS, validate_snapshot_rows
 
 
@@ -80,47 +88,9 @@ def _require_target_date(target_date: date | None) -> date:
     return target_date
 
 
-def _get_local_excel_path(etf_code: str, target_date: date) -> Path:
-    """根據 ETF 代碼和日期生成預期的本地 Excel 檔案路徑。"""
-    # 這裡的邏輯需要與 data_importer.py 中的檔案命名慣例保持一致
-    # 假設 Excel 檔案名格式為 {date}EA.xlsx，且儲存在 data/ 目錄下
-    # 需要根據 etf_code 確定 EAA 部分，這可能需要 etf_universe 的資訊
-    # 為了簡化，先假設 00400A 對應 EA，未來從 etf_universe 讀取
-    if etf_code == "00400A":
-        suffix = "EA"
-    else:
-        suffix = ""
-        # 未來可以根據 etf_code 從 etf_universe 查詢或從 config 中獲取此後綴
-    
-    file_name = f"{target_date.strftime('%Y-%m-%d')}{suffix}.xlsx"
-    return Path(f"~/Documents/hermes-projects/taiwan-active-etf-tracking/data/{file_name}").expanduser()
-
-
-def _local_file_fallback(
-    etf_code: str,
-    target_date: date,
-    config: dict # 這裡應該是 etf_universe 的配置
-) -> dict:
-    """嘗試從本地 Excel 檔案匯入作為最終後備。"""
-    # 檢查 etf_universe 配置中是否啟用 'excel_local_file' 作為官方方法
-    if config.get("official_method") == 'excel_local_file':
-        local_excel_path = _get_local_excel_path(etf_code, target_date)
-        if local_excel_path.exists():
-            # 傳遞預設配置，或者根據 etf_code 載入特定配置
-            excel_config = _DEFAULT_00400A_EXCEL_CONFIG if etf_code == "00400A" else None # 需要更通用的方式獲取配置
-            if excel_config is None: # 如果沒有找到特定配置，則無法匯入
-                return FAILED_RESULT.copy()
-
-            print(f"嘗試從本地 Excel 檔案匯入: {local_excel_path}")
-            return scrape_from_local_file(etf_code, local_excel_path, target_date, config=excel_config)
-    return FAILED_RESULT.copy()
-
-
 def scrape_holdings(etf_code: str, target_date: date) -> dict:
     """Scrape holdings without browser using the caller-provided freshness target."""
     target_date = _require_target_date(target_date)
-    config = get_etf_config(etf_code)
-
     moneydj_result = _retry_moneydj(etf_code)
     if moneydj_result["ok"] is True:
         moneydj_result = _normalize_source_result(
@@ -139,15 +109,10 @@ def scrape_holdings(etf_code: str, target_date: date) -> dict:
     if official_result["ok"] is True:
         return official_result
 
-    # 新增本地檔案匯入作為最終後備
-    local_file_result = _local_file_fallback(etf_code, target_date, config)
-    if local_file_result["ok"] is True:
-        return local_file_result
-
     return FAILED_RESULT.copy()
 
 
-async def scrape_holdings_with_browser(
+def scrape_holdings_with_browser(
     etf_code: str,
     page,
     target_date: date,
@@ -179,8 +144,6 @@ async def scrape_holdings_with_browser_async(
     avoids nesting asyncio.run inside an already-running event loop.
     """
     target_date = _require_target_date(target_date)
-    config = get_etf_config(etf_code)
-
     # 1. MoneyDJ static (fastest) — synchronous request work runs off-loop.
     moneydj_result = await _retry_moneydj_async(etf_code)
     if moneydj_result["ok"] is True:
@@ -227,11 +190,6 @@ async def scrape_holdings_with_browser_async(
     official_result = await _official_fallback_with_browser(etf_code, page, target_date=target_date)
     if official_result["ok"] is True:
         return official_result
-    
-    # 新增本地檔案匯入作為最終後備
-    local_file_result = _local_file_fallback(etf_code, target_date, config)
-    if local_file_result["ok"] is True:
-        return local_file_result
 
     return FAILED_RESULT.copy()
 
@@ -242,7 +200,7 @@ async def _official_fallback_with_browser(
     target_date: date | None = None,
 ) -> dict:
     config = get_etf_config(etf_code)
-    if config["official_method"] in ("api", "stealth_api", "playwright", "browser", "excel_local_file"):
+    if config["official_method"] in ("api", "stealth_api", "playwright", "browser"):
         if config.get("issuer") in {"JPMorgan", "Allianz", "Mega"}:
             official_browser = await scrape_official_with_browser(
                 etf_code,
@@ -542,13 +500,21 @@ def _apply_min_weight_gate(result: dict, threshold: float = _MIN_WEIGHT_THRESHOL
     return normalized
 
 
-def _run_async(awaitable):
-    """Run an awaitable, handling nested event loops if necessary."""
+def _run_async(coro) -> dict:
+    """Run an async coroutine from sync code.
+
+    This helper intentionally refuses to run inside an active event loop. In that
+    case callers must use the native async API instead of nesting event loops.
+    """
+    if not isawaitable(coro):
+        return coro
+
     try:
-        return asyncio.run(awaitable)
-    except RuntimeError as e:
-        if "cannot run an event loop while another event loop is running" in str(e):
-            # If there's an existing loop, run the awaitable on it
-            loop = asyncio.get_event_loop()
-            return loop.run_until_complete(awaitable)
-        raise
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)  # type: ignore[arg-type]
+
+    raise RuntimeError(
+        "scrape_holdings_with_browser cannot run an async browser scraper "
+        "inside an active event loop; use scrape_holdings_with_browser_async instead"
+    )
