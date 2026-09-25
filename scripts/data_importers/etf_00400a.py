@@ -69,11 +69,25 @@ def parse_00400a_file(file_path: Path) -> dict:
             sheet.iter_rows(min_row=_STOCK_HEADER_ROW + 1),
             start=_STOCK_HEADER_ROW + 1,
         ):
-            code = _stock_code(_cell_value(cells, columns["股票代號"]))
+            raw_code = _cell_value(cells, columns["股票代號"])
+            raw_name = _cell_value(cells, columns["股票名稱"])
+            raw_shares = _cell_value(cells, columns["股數"])
+            raw_weight = _cell_value(cells, columns["持股權重"])
+
+            code = _stock_code(raw_code)
             if code is None:
+                if (
+                    _has_value(raw_code)
+                    and _has_value(raw_name)
+                    and (_has_value(raw_shares) or _has_value(raw_weight))
+                ):
+                    return {
+                        "ok": False,
+                        "reason": f"invalid_stock_row:{excel_row}:stock_code",
+                    }
                 continue
 
-            name = str(_cell_value(cells, columns["股票名稱"]) or "").strip()
+            name = str(raw_name or "").strip()
             if not name:
                 return {
                     "ok": False,
@@ -88,7 +102,13 @@ def parse_00400a_file(file_path: Path) -> dict:
                     "reason": f"invalid_stock_row:{excel_row}:weight_pct",
                 }
 
-            shares = _shares(_cell_value(cells, columns["股數"]))
+            shares = _shares(raw_shares)
+            if _has_value(raw_shares) and shares is None:
+                return {
+                    "ok": False,
+                    "reason": f"invalid_stock_row:{excel_row}:shares",
+                }
+
             stock_rows.append(
                 {
                     "date": data_date.isoformat(),
@@ -144,6 +164,10 @@ def _cell(cells, index):
 def _cell_value(cells, index):
     cell = _cell(cells, index)
     return cell.value if cell is not None else None
+
+
+def _has_value(value) -> bool:
+    return value is not None and str(value).strip() != ""
 
 
 def _stock_code(value) -> str | None:
